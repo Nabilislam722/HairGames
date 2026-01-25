@@ -53,7 +53,7 @@ export default function Home() {
             className="font-display text-5xl md:text-7xl font-bold tracking-tight text-white text-glow"
           >
             PLAY. WIN. <br />
-            <span className="text-transparent bg-clip-text from-secondary to-primary">
+            <span className="text-primary bg-clip-text from-secondary to-primary">
               SURPRISE
             </span>
           </motion.h1>

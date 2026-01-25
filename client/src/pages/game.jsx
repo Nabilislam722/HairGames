@@ -12,7 +12,13 @@ import "../index.css"
 import { useAccount } from 'wagmi';
 
 
+
+
 const GAME_COST_ETH = 0.000007;
+
+
+
+
 
 export default function Game() {
   const [, params] = useRoute("/game/:id");
@@ -111,10 +117,10 @@ export default function Game() {
     {
       hint = "Correct";
       setGameState("won");
-      const res = await fetch("https://packed-metro-hiv-medications.trycloudflare.com/api/points/add", {
+      const res = await fetch("http://localhost:5000/api/points/add", {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "application/json"
         },
         body: JSON.stringify({
           wallet: address,
@@ -150,7 +156,7 @@ export default function Game() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
           <Button variant="ghost" onClick={() => setLocation("/dashboard")} className="text-muted-foreground hover:text-white">
-            <ArrowLeft className="mr-2 h-4 w-4" /> Back to Dashboard
+            <ArrowLeft className="mr-2 h-4 w-4 cursor-pointer" /> Back to Dashboard
           </Button>
           <h1 className="text-2xl font-display font-bold">Find The Number</h1>
         </div>
