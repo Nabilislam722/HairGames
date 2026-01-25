@@ -5,9 +5,10 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Badge } from "@/components/ui/badge";
 import { Binary, BrainCircuit, Search, Lock } from "lucide-react";
 import { GAME_COST_ETH } from "@/lib/web3";
-import { useBalance, useConnect, useAccount, useDisconnect } from "wagmi";
+import { useBalance, useConnect, useAccount } from "wagmi";
 import { injected } from "wagmi/connectors";
 import "../index.css"
+import { useState, useEffect } from "react";
 
 
 
@@ -20,6 +21,18 @@ export default function Dashboard() {
   const { data: ethBalanceData } = useBalance({
     address,
   });
+  const [points, setPoints] = useState(null);
+
+  useEffect(() => {
+    if (!address) return;
+
+    fetch(
+      `http://localhost:5000/api/points/get?wallet=${address}`
+    )
+      .then(res => res.json())
+      .then(data => setPoints(data.points))
+      .catch(console.error);
+  }, [address]);
 
 
   const games = [
@@ -77,7 +90,7 @@ export default function Dashboard() {
     <div className="flex flex-col gap-8">
       {/* Stats Bar */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        
+
         {/*ETH Balance card*/}
         <Card className="bg-card border-white/10">
           <CardHeader className="pb-2">
@@ -100,15 +113,17 @@ export default function Dashboard() {
             <p className="text-xs text-muted-foreground mt-1">Best Score: -</p>
           </CardContent>
         </Card>
-        
+
         {/*Points card*/}
         <Card className="bg-card border-white/10">
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Points</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold font-mono text-white">0</div>
-            <p className="text-xs text-muted-foreground mt-1">Best Score: -</p>
+            <div className="text-2xl font-bold font-mono text-white">
+              {points ?? 0}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">Best Score: 100</p>
           </CardContent>
         </Card>
       </div>
@@ -133,16 +148,19 @@ export default function Dashboard() {
               </div>
 
               <CardHeader>
+
                 <div className="flex justify-between items-start">
-                  <CardTitle className="text-xl font-bold">{game.title}</CardTitle>
+                  <CardTitle className={`text-xl font-bold ${game.status !== "active" ? "blur" : ""}`}>
+                    {game.title}
+                  </CardTitle>
                   <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
                     {game.difficulty}
                   </Badge>
                 </div>
-                <CardDescription className="line-clamp-2 h-10">
+                <CardDescription className={`line-clamp-2 h-10 ${game.status !== "active" ? "blur" : ""}`}>
                   {game.description}
                 </CardDescription>
-               
+
               </CardHeader>
 
               <CardContent>
