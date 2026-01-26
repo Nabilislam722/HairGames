@@ -1,4 +1,3 @@
-import React from "react";
 import { useLocation } from "wouter";
 import { useWeb3 } from "@/lib/web3";
 import { Button } from "@/components/ui/button";
@@ -9,20 +8,29 @@ import "../index.css"
 
 export default function Home() {
 
-   const { isConnected } = useWeb3();
-   const [, setLocation] = useLocation();
+  const { isConnected } = useWeb3();
+  const [, setLocation] = useLocation();
 
   const handlePlayNow = () => {
     if (!isConnected) {
-      // optionally open wallet modal here
+      // open wallet Maybe in the Future
       return;
     }
     setLocation("/dashboard");
   };
 
 
+
   return (
     <div className="flex flex-col gap-16">
+      <video
+        autoPlay
+        muted
+        className="absolute inset-0 w-full h-full object-cover z-100 pointer-events-none"
+        preload="auto"
+      >
+        <source src="/intro.webm" type="video/webm" />
+      </video>
       {/* Hero Section */}
       <section className="relative py-20 md:py-32 overflow-hidden rounded-3xl border border-white/10">
         {/* Background Image with Overlay */}
@@ -119,7 +127,18 @@ export default function Home() {
         <div className="text-center mb-16">
           <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">Why Play on Hemi?</h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
-           Fees collected from this will be for buying back $HAIR
+            Hemi let's you enjoy fully on-chain games where every move is transparent and verifiable.
+            A small interaction fee is required to play the games, which helps us cover network costs, development, and long-term sustainability of the platform.
+            A portion of the fees will be used for buying back $HAIR token, strengthening the project over time.
+            <span className="font-bold">There are no guarantees of profit or return</span>
+          </p>
+        </div>
+
+        <div className="text-center mb-16">
+          <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">What is HP?</h2>
+          <p className="text-muted-foreground max-w-2xl mx-auto">
+            Hair Point is a non-financial point system used for tracking participation.
+            No value. No promises. You may need HP in the future to access features, participate in events, or qualify for community rewards.
           </p>
         </div>
 
@@ -132,12 +151,12 @@ export default function Home() {
           <div className="p-8 rounded-3xl  from-white/5 to-transparent border border-white/10 hover:border-accent/50 transition-colors">
             <Coins className="h-10 w-10 text-accent mb-6" />
             <h3 className="text-xl font-bold mb-3">$HAIR Token Utility</h3>
-            <p className="text-muted-foreground">Holders get exclusive access to high-stakes rooms and revenue share rewards.</p>
+            <p className="text-muted-foreground">Coming Soon!!</p>
           </div>
           <div className="p-8 rounded-3xl  from-white/5 to-transparent border border-white/10 hover:border-primary/50 transition-colors">
             <Zap className="h-10 w-10 text-primary mb-6" />
             <h3 className="text-xl font-bold mb-3">Instant Settlement</h3>
-            <p className="text-muted-foreground">Points are sent directly to your wallet immediately after every game.</p>
+            <p className="text-muted-foreground">Points are adjusted to your wallet immediately after every game.</p>
           </div>
         </div>
       </section>

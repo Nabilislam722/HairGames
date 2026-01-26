@@ -3,7 +3,7 @@ import mongoose from "mongoose";
 import Leaderboard from "./models/Leaderboard.js";
 import cors from "cors"
 
-
+const API_KEY = "NoCheater";
 const app = express();
 app.use(cors())
 app.use(express.json());
@@ -13,6 +13,11 @@ mongoose.connect("mongodb://localhost:27017/Test")
     .catch(err => console.error(err));
 
 app.post("/api/points/add", async (req, res) => {
+  const key = req.headers["x-api-key"];
+
+  if (key !== API_KEY) {
+    return res.status(403).json({ error: "Unauthorized" });
+  }
 
   const { wallet, points } = req.body;
 
