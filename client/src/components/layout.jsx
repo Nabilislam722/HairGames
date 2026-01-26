@@ -118,7 +118,7 @@ export function Layout({ children }) {
             <span className="font-display font-bold text-sm text-muted-foreground">HEMIGAMES</span>
           </div>
           <div className="">
-            <a href="https://discord.gg/YOUR_INVITE" target="_blank" rel="noopener noreferrer">
+            <a href="https://discord.gg/" target="_blank" rel="noopener noreferrer">
               <div className="w-6 h-6 bg-gray-400 mask mask-contain mask-center mask-no-repeat hover:bg-blue-700 transition-colors duration-300"
                 style={{ maskImage: "url('/discord.svg')", WebkitMaskImage: "url('/discord.svg')" }}
               />

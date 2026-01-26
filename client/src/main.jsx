@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App.jsx";
 import { WagmiProvider } from "wagmi";
-import { RainbowKitProvider, getDefaultConfig } from "@rainbow-me/rainbowkit";
+import { RainbowKitProvider, getDefaultConfig, darkTheme } from "@rainbow-me/rainbowkit";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "./lib/queryClient";
 import { hemi } from "./lib/hemi";
@@ -23,7 +23,14 @@ const config = getDefaultConfig({
 ReactDOM.createRoot(document.getElementById("root")).render(
   <WagmiProvider config={config}>
     <QueryClientProvider client={queryClient}>
-      <RainbowKitProvider>
+      <RainbowKitProvider
+        theme={darkTheme({
+          accentColor: '#f97316',
+          accentColorForeground: 'white',
+          borderRadius: 'large',
+          fontStack: 'rounded',
+          overlayBlur: 'small',
+        })}>
         <Web3Provider>
           <App />
         </Web3Provider>
