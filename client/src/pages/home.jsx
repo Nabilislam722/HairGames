@@ -5,32 +5,17 @@ import { ArrowRight, Zap, Shield, Coins, Trophy } from "lucide-react";
 import { motion } from "framer-motion";
 import BackgroundImg from '../assets/bg.png';
 import "../index.css"
+import IntroVideo from "../components/ui/introvideo";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 export default function Home() {
 
   const { isConnected } = useWeb3();
   const [, setLocation] = useLocation();
 
-  const handlePlayNow = () => {
-    if (!isConnected) {
-      // open wallet Maybe in the Future
-      return;
-    }
-    setLocation("/dashboard");
-  };
-
-
-
   return (
     <div className="flex flex-col gap-16">
-      <video
-        autoPlay
-        muted
-        className="absolute inset-0 w-full h-full object-cover z-100 pointer-events-none"
-        preload="auto"
-      >
-        <source src="/intro.webm" type="video/webm" />
-      </video>
+      <IntroVideo />
       {/* Hero Section */}
       <section className="relative py-20 md:py-32 overflow-hidden rounded-3xl border border-white/10">
         {/* Background Image with Overlay */}
@@ -83,14 +68,24 @@ export default function Home() {
             transition={{ duration: 0.5, delay: 0.3 }}
             className="flex flex-col sm:flex-row gap-4 mt-4"
           >
-            <Button
-              size="lg"
-              className="text-lg px-8 py-6 bg-orange-600 hover:bg-orange-500 shadow-[0_0_20px_#f54f07] border-0 cursor-pointer"
-              onClick={handlePlayNow}
-            >
-              {isConnected ? "Go to Dashboard" : "Connect Wallet to Play"}
-              <ArrowRight className="ml-2 h-5 w-5" />
-            </Button>
+            <ConnectButton.Custom>
+              {({ openConnectModal }) => (
+                <Button
+                  size="lg"
+                  className="text-lg px-8 py-6 bg-orange-600 hover:bg-orange-500 shadow-[0_0_20px_#f54f07] border-0 cursor-pointer"
+                  onClick={() => {
+                    if (!isConnected) {
+                      openConnectModal()
+                    }
+                    setLocation("/dashboard");
+                  }}
+                >
+                  {isConnected ? "Go to Dashboard" : "Connect Wallet to Play"}
+
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Button>
+              )}
+            </ConnectButton.Custom>
             <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-white/10 hover:bg-white/5 cursor-pointer">
               Learn More
             </Button>

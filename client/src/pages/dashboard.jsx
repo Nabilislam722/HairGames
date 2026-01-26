@@ -9,14 +9,12 @@ import { useBalance, useConnect, useAccount } from "wagmi";
 import { injected } from "wagmi/connectors";
 import "../index.css"
 import { useState, useEffect } from "react";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 
 
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
-  const { connect } = useConnect({
-    connector: injected(),
-  });
 
   const { data: ethBalanceData } = useBalance({
     address,
@@ -78,9 +76,17 @@ export default function Dashboard() {
         <p className="text-muted-foreground max-w-md">
           You need to connect your wallet to access the dashboard and play games on the Hemi Network.
         </p>
-        <Button size="lg" onClick={() => connect()} className="mt-4">
-          Connect Wallet
-        </Button>
+        <ConnectButton.Custom>
+          {({ openConnectModal }) => (
+            <Button
+              size="lg"
+              onClick={openConnectModal}
+              className="mt-4 hover:scale-115 transition-transform duration-200 cursor-pointer"
+            >
+              Connect Wallet
+            </Button>
+          )}
+        </ConnectButton.Custom>
 
       </div>
     );
