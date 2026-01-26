@@ -117,6 +117,9 @@ export function Layout({ children }) {
             </div>
             <span className="font-display font-bold text-sm text-muted-foreground">HEMIGAMES</span>
           </div>
+          <div>
+            
+          </div>
           <p className="text-xs text-muted-foreground text-center md:text-right">
             Built on Hemi Network. Play responsibly. <br />
             $HAIR Contract: 0x5B77...4705

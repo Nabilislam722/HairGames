@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Trophy, TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { Trophy, Minus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAccount } from "wagmi";
 
