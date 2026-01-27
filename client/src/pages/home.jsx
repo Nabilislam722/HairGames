@@ -3,7 +3,7 @@ import { useWeb3 } from "@/lib/web3";
 import { Button } from "@/components/ui/button";
 import { ArrowRight, Zap, Shield, Coins, Trophy } from "lucide-react";
 import { motion } from "framer-motion";
-import BackgroundImg from '../assets/bg.png';
+import BackgroundImg from '../assets/bg.jpg';
 import "../index.css"
 import IntroVideo from "../components/ui/introvideo";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
@@ -23,7 +23,7 @@ export default function Home() {
           <img
             src={BackgroundImg}
             alt="Cyberpunk Background"
-            className="w-full h-full object-cover opacity-40"
+            className="w-full h-full object-cover opacity-40 blur-[6px]"
           />
           <div className="absolute inset-0  from-background via-background/80 to-transparent" />
         </div>
