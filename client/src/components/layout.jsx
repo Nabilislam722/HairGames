@@ -118,10 +118,15 @@ export function Layout({ children }) {
             </div>
             <span className="font-display font-bold text-sm text-muted-foreground">HEMIGAMES</span>
           </div>
-          <div className="">
+          <div className="flex gap-7">
             <a href="https://discord.gg/k2W7g5xR" target="_blank" rel="noopener noreferrer">
               <div className="w-6 h-6 bg-gray-400 mask mask-contain mask-center mask-no-repeat hover:bg-blue-700 transition-colors duration-300"
                 style={{ maskImage: "url('/discord.svg')", WebkitMaskImage: "url('/discord.svg')" }}
+              />
+            </a>
+            <a href="https://explorer.hemi.xyz/address/0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5?tab=contract">
+              <div className="w-6 h-6 bg-gray-400 mask mask-contain mask-center mask-no-repeat hover:bg-teal-700 transition-colors duration-300"
+                style={{ maskImage: "url('/expo.svg')", WebkitMaskImage: "url('/expo.svg')" }}
               />
             </a>
           </div>

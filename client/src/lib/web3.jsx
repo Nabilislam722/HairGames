@@ -3,7 +3,7 @@ import { useAccount, useBalance, useWriteContract } from "wagmi";
 import { parseEther } from "viem";
 
 export const GAME_CONTRACT = "0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5";
-export const GAME_COST_ETH = "0.0000007";
+export const GAME_COST_ETH = "0.0000012";
 const GAME_ABI = [
   { name: "playGame", type: "function", stateMutability: "payable", inputs: [] },
   { name: "submitGuess", type: "function", stateMutability: "payable", inputs: [{ name: "number", type: "uint16" }] },

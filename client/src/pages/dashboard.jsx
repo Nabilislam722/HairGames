@@ -25,7 +25,7 @@ export default function Dashboard() {
     if (!address) return;
 
     fetch(
-      `http://localhost:5000/api/points/get?wallet=${address}`
+      `https://contacting-shadows-noticed-estates.trycloudflare.com/api/points/get?wallet=${address}`
     )
       .then(res => res.json())
       .then(data => setPoints(data.points))
