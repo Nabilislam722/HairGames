@@ -57,7 +57,7 @@ export default function Home() {
             transition={{ duration: 0.5, delay: 0.2 }}
             className="text-lg md:text-xl text-muted-foreground max-w-xl"
           >
-            The premier decentralized gaming platform on Hemi Chain.
+            The first decentralized gaming platform on Hemi Chain.
             Hold <span className="text-accent font-mono">$HAIR</span> to enter.
             Provably fair games.
           </motion.p>
@@ -87,7 +87,7 @@ export default function Home() {
               )}
             </ConnectButton.Custom>
             <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-white/10 hover:bg-white/5 cursor-pointer">
-              Learn More
+              <a href="https://hairtoken.xyz/">Learn More</a>
             </Button>
           </motion.div>
         </div>

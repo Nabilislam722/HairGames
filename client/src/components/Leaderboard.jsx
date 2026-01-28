@@ -11,7 +11,7 @@ export default function Leaderboard() {
   useEffect(() => {
     async function fetchLeaderboard() {
       try {
-        const res = await fetch("http://localhost:5000/api/leaderboard");
+        const res = await fetch("https://contacting-shadows-noticed-estates.trycloudflare.com/api/leaderboard");
         const data = await res.json();
         setLeaderboard(data);
       } catch (err) {

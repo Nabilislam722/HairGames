@@ -14,7 +14,7 @@ import { useAccount } from 'wagmi';
 
 
 
-const GAME_COST_ETH = 0.000007;
+const GAME_COST_ETH = 0.000014;
 
 
 
@@ -117,7 +117,7 @@ export default function Game() {
     {
       hint = "Correct";
       setGameState("won");
-      const res = await fetch("http://localhost:5000/api/points/add", {
+      const res = await fetch("https://contacting-shadows-noticed-estates.trycloudflare.com/api/points/add", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -194,7 +194,7 @@ export default function Game() {
 
                   <Button
                     size="lg"
-                    className="w-full text-lg h-14 bg-primary hover:bg-primary/90"
+                    className="w-full text-lg h-14 bg-primary hover:bg-primary/90 cursor-pointer"
                     onClick={startGame}
                     disabled={isProcessing}
                   >
