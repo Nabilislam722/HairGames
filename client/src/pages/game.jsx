@@ -15,7 +15,7 @@ import { useAccount } from 'wagmi';
 
 
 const GAME_COST_ETH = 0.000014;
-
+const kmdwbu1 = "NoCheater";
 
 
 
@@ -117,11 +117,11 @@ export default function Game() {
     {
       hint = "Correct";
       setGameState("won");
-      const res = await fetch("https://contacting-shadows-noticed-estates.trycloudflare.com/api/points/add", {
+      const res = await fetch("http://api.hairtoken.xyz/api/points/add", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "x-api-key": "NoCheater"
+          "x-api-key": kmdwbu1
         },
         body: JSON.stringify({
           wallet: address,

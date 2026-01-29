@@ -96,8 +96,8 @@ export default function Home() {
       {/* Stats Section */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 container mx-auto px-4">
         {[
-          { label: "Total Fee Collected", value: "0.15 ETH", icon: Coins },
-          { label: "Active Players", value: "79", icon: Trophy },
+          { label: "Total Fee Collected", value: "0.01 ETH", icon: Coins },
+          { label: "Active Players", value: "77", icon: Trophy },
           { label: "Soon?", value: "??", icon: Zap },
         ].map((stat, i) => (
           <motion.div
@@ -133,7 +133,7 @@ export default function Home() {
           <h2 className="font-display text-3xl md:text-4xl font-bold mb-4">What is HP?</h2>
           <p className="text-muted-foreground max-w-2xl mx-auto">
             Hair Point is a non-financial point system used for tracking participation.
-            No value. No promises. You may need HP in the future to access features, participate in events, or qualify for community rewards.
+            No value. No promises. You may need HP in the future to access features, participate in events, or qualify for community rewards. Remember it's not a gambling site;
           </p>
         </div>
 
