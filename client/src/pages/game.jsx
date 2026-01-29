@@ -65,7 +65,7 @@ export default function Game() {
         title: "Game Started",
         description: "Find the 4-digit number. Good luck!",
       });
-      console.log("Debug - Target Number:", newTarget); // For testing
+     
     }
 
     catch (e) {
