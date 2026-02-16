@@ -105,8 +105,10 @@ export function Layout({ children }) {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 container mx-auto px-4 py-8 md:py-12">
-        {children}
+      <main className="flex-1 w-full">
+        <div className="max-w-6xl mx-auto px-4 py-8 md:py-12">
+          {children}
+        </div>
       </main>
 
       {/* Footer */}
@@ -117,6 +119,7 @@ export function Layout({ children }) {
               <img src="/logo.png" alt="logo" className="rounded" />
             </div>
             <span className="font-display font-bold text-sm text-muted-foreground">HEMIGAMES</span>
+
           </div>
           <div className="flex gap-7">
             <a href="https://discord.gg/k2W7g5xR" target="_blank" rel="noopener noreferrer">
@@ -133,6 +136,7 @@ export function Layout({ children }) {
           <p className="text-xs text-muted-foreground text-center md:text-right">
             Built on Hemi Network. Play responsibly. <br />
             $HAIR Contract: 0x5B77...4705
+            <span className="pl-3.5">©2026 Hair. All rights reserved.</span>
           </p>
         </div>
       </footer>
