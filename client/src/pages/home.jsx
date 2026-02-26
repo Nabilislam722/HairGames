@@ -71,18 +71,21 @@ export default function Home() {
             <ConnectButton.Custom>
               {({ openConnectModal }) => (
                 <Button
-                  size="lg"
-                  className="text-lg px-8 py-6 bg-orange-600 hover:bg-orange-500 shadow-[0_0_20px_#f54f07] border-0 cursor-pointer"
+                  className="group relative box-border z-30 inline-flex items-center justify-center w-auto px-8 py-6 overflow-hidden font-bold text-white transition-all duration-300 bg-orange-600 rounded-md cursor-pointer ring-offset-2 ring-orange-300 ring-offset-orange-200 hover:ring-offset-orange-500 ease focus:outline-none border-0 shadow-[0_0_20px_#f54f07]"
                   onClick={() => {
                     if (!isConnected) {
-                      openConnectModal()
+                      openConnectModal();
+                    } else {
+                      setLocation("/dashboard");
                     }
-                    setLocation("/dashboard");
                   }}
                 >
-                  {isConnected ? "Go to Dashboard" : "Connect Wallet to Play"}
-
-                  <ArrowRight className="ml-2 h-5 w-5" />
+  
+                  <span className="absolute top-0 left-14 w-60 h-16 -mt-1 -ml-12 justify-center transition-all duration-300 ease-out transform -rotate-45 -translate-x-1 bg-white opacity-60 group-hover:translate-x-[-2rem]"></span>
+                  <span className="relative z-20 flex items-center text-lg">
+                    {isConnected ? "Go to Dashboard" : "Connect Wallet to Play"}
+                    <ArrowRight className="ml-2 h-5 w-5 transition-transform group-hover:translate-x-1" />
+                  </span>
                 </Button>
               )}
             </ConnectButton.Custom>

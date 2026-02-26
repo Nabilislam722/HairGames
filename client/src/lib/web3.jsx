@@ -1,6 +1,7 @@
 import { createContext, useContext } from "react";
-import { useAccount, useBalance, useWriteContract } from "wagmi";
+import { useAccount, useBalance, useWriteContract, useConfig } from "wagmi";
 import { parseEther } from "viem";
+import { waitForTransactionReceipt } from "@wagmi/core";
 
 export const GAME_CONTRACT = "0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5";
 export const GAME_COST_ETH = "0.0000012";
@@ -13,11 +14,8 @@ const Web3Context = createContext();
 
 export function Web3Provider({ children }) {
   const { address, isConnected } = useAccount();
-
-  const { data: ethBalance } = useBalance({
-    address,
-  });
-
+  const config = useConfig(); 
+  const { data: ethBalance } = useBalance({ address });
   const { writeContractAsync } = useWriteContract();
 
   async function playGame() {
@@ -30,13 +28,20 @@ export function Web3Provider({ children }) {
   }
 
   async function submitGuess(number) {
-    return writeContractAsync({
+    const hash = await writeContractAsync({
       address: GAME_CONTRACT,
       abi: GAME_ABI,
       functionName: "submitGuess",
       args: [number],
       value: parseEther(GAME_COST_ETH),
     });
+
+    const receipt = await waitForTransactionReceipt(config, {
+      hash,
+      confirmations: 1,
+    });
+
+    return receipt;
   }
 
   return (

@@ -6,10 +6,9 @@ import { useAccount } from "wagmi";
 import { useWeb3 } from "@/lib/web3";
 import { toast } from "../hooks/use-toast";
 
-const GRID_SIZE = 25;
-const GRID_COLS = 5;
-const MAX_ROUNDS = 19;
-const kmdwbu1 = "NoCheater";
+const GRID_SIZE = 16;
+const GRID_COLS = 4;
+const MAX_ROUNDS = 5;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -47,51 +46,39 @@ export default function PatternMemoryGame() {
   };
 
   const handleStartGame = async () => {
-    let txHash;
-
+    setRound(1);
+    
     try {
       setIsProcessing(true);
+      const receipt = await submitGuess(100);
 
-      const tx = await submitGuess(100);
-      if (!tx) throw new Error("Transaction not sent");
-
-      txHash = tx;
-    } catch (err) {
-      toast({
-        title: "Transaction Failed",
-        description: err?.shortMessage || err?.message,
-        variant: "destructive",
-      });
-      setIsProcessing(false);
-      return;
+      if (receipt.status === "success") {
+        await fetch("https://api.hairtoken.xyz/api/points/add", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            wallet: address,
+            txHash: receipt.transactionHash,
+          }),
+        });
+        toast({ title: "Success!", description: "Points added!" });
+      }
     }
 
-    try {
-      await fetch("https://api.hairtoken.xyz/api/points/add", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": kmdwbu1,
-        },
-        body: JSON.stringify({
-          wallet: address,
-          points: 100,
-          txHash,
-        }),
-      });
-    } catch (err) {
+    catch (err) {
+
       toast({
-        title: "Backend Error",
-        description: err.message,
-        variant: "destructive",
+        title: "Error",
+        description: err.shortMessage || "User rejected or Transaction failed",
+        variant: "destructive"
       });
-      setIsProcessing(false);
-      return;
     }
 
-    setIsProcessing(false);
-    setRound(1);
-    startGame();
+    finally {
+      setIsProcessing(false);
+      startGame();
+    }
+
   };
 
 
@@ -230,9 +217,12 @@ export default function PatternMemoryGame() {
               onClick={handleStartGame}
               size="lg"
               whileHover={{ scale: 1.05 }}
-              className="rounded-xl"
+              className="rounded-xl hover:bg-orange-300 cursor-pointer transition-colors duration-500 font-bold"
             >
-              Start Game
+              {failed || showPoints ? (
+                 "Play Again"
+              ) : ("Start Game")}
+             
             </Button>
 
 

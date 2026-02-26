@@ -92,7 +92,8 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="flex flex-col gap-8">
+    
+    <div className="flex flex-col gap-10">
       {/* Stats Bar */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
 
@@ -132,7 +133,7 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-
+      
       {/* Games Grid */}
       <div className="flex flex-col gap-6">
         <h2 className="text-2xl font-display font-bold text-white flex items-center gap-2">

@@ -1,5 +1,6 @@
 import { defineChain } from 'viem';
 
+
 export const hemi = defineChain({
   id: 0xa867,
   name: "Hemi Network",
