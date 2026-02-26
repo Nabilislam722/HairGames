@@ -34,4 +34,5 @@ Test and restart nginx using following commands
 ```sudo nginx -t```
 Now restart using:
 
+
 ```sudo systemctl restart nginx```
