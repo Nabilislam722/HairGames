@@ -91,7 +91,7 @@ export function Layout({ children }) {
               hoveredIndex={hoveredIndex}
               setHoveredIndex={setHoveredIndex}
             >
-              Games
+              Dashboard
             </NavLink>
 
             <NavLink

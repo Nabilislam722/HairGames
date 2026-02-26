@@ -1,14 +1,15 @@
 import React, { useEffect, useState } from "react";
-import { motion } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { useAccount } from "wagmi";
 import { useWeb3 } from "@/lib/web3";
 import { toast } from "../hooks/use-toast";
+import { Trophy, Zap, Target, RotateCcw, Play } from "lucide-react";
+import { motion, AnimatePresence } from "framer-motion";
 
-const GRID_SIZE = 16;
-const GRID_COLS = 4;
-const MAX_ROUNDS = 5;
+const GRID_SIZE = 25;
+const GRID_COLS = 5;
+const MAX_ROUNDS = 10;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -47,13 +48,13 @@ export default function PatternMemoryGame() {
 
   const handleStartGame = async () => {
     setRound(1);
-    
+    setIsProcessing(true);
+
     try {
-      setIsProcessing(true);
       const receipt = await submitGuess(100);
 
       if (receipt.status === "success") {
-        await fetch("https://api.hairtoken.xyz/api/points/add", {
+        await fetch("http://127.0.0.1:5000/api/points/add", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -62,6 +63,8 @@ export default function PatternMemoryGame() {
           }),
         });
         toast({ title: "Success!", description: "Points added!" });
+
+         startGame();
       }
     }
 
@@ -76,7 +79,7 @@ export default function PatternMemoryGame() {
 
     finally {
       setIsProcessing(false);
-      startGame();
+     
     }
 
   };
@@ -143,91 +146,121 @@ export default function PatternMemoryGame() {
   };
 
   return (
-    <div className="w-full min-h-screen flex flex-col items-center justify-center">
-      <Card className="border-white/10 bg-black w-full h-[70vh] rounded-3xl">
-        <CardContent className="p-8 h-full flex flex-col justify-between">
-          <div className="flex items-center h-[90%] justify-center overflow-hidden">
-            <div
-              className="grid w-full gap-3 max-w-[420px]"
-              style={{
-                gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)`,
-              }}
-            >
-              {Array.from({ length: GRID_SIZE }).map((_, i) => (
-                <motion.div
-                  key={i}
-                  onClick={() => handleClick(i)}
-                  whileTap={{ scale: 0.92 }}
-                  whileHover={{ scale: 1.05 }}
-                  transition={{ duration: 0.25 }}
-                  className={`relative aspect-square rounded-xl cursor-pointer
-          backdrop-blur-xl
-          border border-white/20
-          overflow-hidden
-          transition-all duration-300 ease-out
-          hover:bg-amber-600
+    <div className="w-full min-h-[80vh] flex flex-col items-center justify-center p-4">
+      {/* Main Game Container */}
+      <Card className="relative overflow-hidden border-white/5 bg-slate-950/50 backdrop-blur-2xl w-full max-w-2xl rounded-[2rem] shadow-2xl">
 
-          ${activeSet.has(i) || selectedSet.has(i)
-                      ? `
-              bg-indigo-500
-              border-indigo-800
-              shadow-[ 
-                0_0_25px_rgba(255,165,0,0.9),
-                0_0_60px_rgba(255,165,0,0.45),
-                inset_0_0_20px_rgba(255,200,120,0.35)
-              ]
-            `
-                      : "bg-white/10 shadow-[0_10px_25px_rgba(0,0,0,0.5)]"
-                    }
+        {/* Decorative Background Elements */}
+        <div className="absolute -top-24 -right-24 w-48 h-48 bg-orange-500/10 blur-[100px] rounded-full" />
+        <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-indigo-500/10 blur-[100px] rounded-full" />
 
-          ${gameState === "showing" ? "pointer-events-none" : ""}
-        `}
-                >
-                  {(activeSet.has(i) || selectedSet.has(i)) && (
-                    <div className="absolute inset-0 rounded-xl bg-indigo-400/30 blur-xl" />
-                  )}
-                </motion.div>
-              ))}
+        <CardContent className="p-8 md:p-12 flex flex-col items-center gap-8">
+
+          {/* TOP HUD: Stats */}
+          <div className="w-full grid grid-cols-2 gap-4">
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-4 transition-all hover:bg-white/10">
+              <div className="p-2 rounded-lg bg-purple-500/20 text-purple-400">
+                <Target size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Progress</p>
+                <p className="text-lg font-mono font-bold text-white">Round {round}<span className="text-white/30 text-sm">/{MAX_ROUNDS}</span></p>
+              </div>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-4 transition-all hover:bg-white/10">
+              <div className="p-2 rounded-lg bg-sky-500/20 text-sky-400">
+                <Zap size={20} />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Accuracy</p>
+                <p className="text-lg font-mono font-bold text-white">{correctCount}<span className="text-white/30 text-sm">/{pattern.length || 0}</span></p>
+              </div>
             </div>
           </div>
 
-          {/* STATUS */}
-          <div className="text-sm font-mono text-center">
-            <p className="text-purple-400 font-mono">
-              Round {round} / {MAX_ROUNDS}
-            </p>
-            <p className="text-sky-400">
-              Correct: {correctCount} / {pattern.length || 0}
-            </p>
-
-            {failed && (
-              <p className="text-red-500 animate-pulse">
-                Failed ❌
-              </p>
-            )}
-
-            {showPoints && (
-              <p className="text-yellow-400 text-lg font-bold animate-bounce">
-                +100 Points Awarded 🏆
-              </p>
-            )}
-
-            {/* Game Button */}
-            <Button
-              onClick={handleStartGame}
-              size="lg"
-              whileHover={{ scale: 1.05 }}
-              className="rounded-xl hover:bg-orange-300 cursor-pointer transition-colors duration-500 font-bold"
+          {/* THE CORE: Cyber Grid */}
+          <div className="relative p-2 rounded-[2.5rem] bg-gradient-to-b from-white/10 to-transparent border border-white/10 shadow-inner">
+            <div
+              className="grid gap-3 p-4"
+              style={{ gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)` }}
             >
-              {failed || showPoints ? (
-                 "Play Again"
-              ) : ("Start Game")}
-             
-            </Button>
+              {Array.from({ length: GRID_SIZE }).map((_, i) => {
+                const isRevealed = activeSet.has(i) || selectedSet.has(i);
 
+                return (
+                  <motion.div
+                    key={i}
+                    onClick={() => handleClick(i)}
+                    whileTap={{ scale: 0.9 }}
+                    whileHover={gameState !== "showing" ? { scale: 1.05, y: -2 } : {}}
+                    className={`
+                    relative w-16 h-16 md:w-20 md:h-20 rounded-2xl cursor-pointer
+                    transition-all duration-500 overflow-hidden group
+                    ${gameState === "showing" ? "pointer-events-none" : "pointer-events-auto"}
+                    ${isRevealed
+                        ? "bg-orange-500 shadow-[0_0_30px_rgba(249,115,22,0.4)] border-orange-400/50"
+                        : "bg-white/5 border border-white/10 hover:border-white/30"}
+                  `}
+                  >
+                    {/* Internal Shimmer for revealed tiles */}
+                    <AnimatePresence>
+                      {isRevealed && (
+                        <motion.div
+                          initial={{ opacity: 0 }}
+                          animate={{ opacity: 1 }}
+                          className="absolute inset-0 bg-gradient-to-tr from-orange-600 via-orange-400 to-white/40 opacity-50"
+                        />
+                      )}
+                    </AnimatePresence>
 
+                    {/* Subtle Grid Pattern inside tile */}
+                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent" />
+                  </motion.div>
+                );
+              })}
+            </div>
           </div>
 
+          {/* FOOTER: Controls & Feedback */}
+          <div className="flex flex-col items-center gap-6 w-full">
+            <AnimatePresence mode="wait">
+              {failed ? (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                  className="flex items-center gap-2 text-red-400 bg-red-400/10 px-6 py-2 rounded-full border border-red-400/20 font-bold"
+                >
+                  <RotateCcw size={16} className="animate-spin-slow" /> Sequence Failed
+                </motion.div>
+              ) : showPoints ? (
+                <motion.div
+                  initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+                  className="flex items-center gap-3 text-emerald-400 bg-emerald-400/10 px-6 py-3 rounded-full border border-emerald-400/20 shadow-[0_0_20px_rgba(52,211,153,0.2)]"
+                >
+                  <Trophy size={20} className="animate-bounce" />
+                  <span className="font-bold tracking-tight">+100 Points Awarded</span>
+                </motion.div>
+              ) : (
+                <div className="h-10" /> // Spacer to prevent layout shift
+              )}
+            </AnimatePresence>
+
+            <Button
+              onClick={handleStartGame}
+              disabled={isProcessing}
+              className={`
+              group relative h-16 w-full max-w-xs rounded-2xl font-display text-lg font-bold transition-all duration-300 cursor-pointer
+              ${failed || showPoints
+                  ? "bg-white text-black hover:bg-orange-500 hover:text-white"
+                  : "bg-orange-600 text-white hover:bg-orange-500 shadow-[0_0_20px_rgba(234,88,12,0.3)]"}
+            `}
+            >
+              <span className="flex items-center justify-center gap-2">
+                {failed || showPoints ? <RotateCcw size={20} /> : <Play size={20} />}
+                {isProcessing ? "Processing..." : (failed || showPoints ? "Try Again" : "Start Game")}
+              </span>
+            </Button>
+          </div>
         </CardContent>
       </Card>
     </div>
