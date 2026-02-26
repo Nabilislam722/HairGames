@@ -8,11 +8,11 @@ import { queryClient } from "./lib/queryClient";
 import { hemi } from "./lib/hemi";
 import { http } from "wagmi";
 import { Web3Provider } from "./lib/web3";
-
 import "@rainbow-me/rainbowkit/styles.css";
 
+
 const config = getDefaultConfig({
-  appName: "Hemi App",
+  appName: "HairGames",
   projectId: "656b7d9e9b85101192392ace313ecef8",
   chains: [hemi],
   transports: {

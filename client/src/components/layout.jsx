@@ -1,42 +1,52 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
-import { Wallet, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount, useDisconnect } from 'wagmi';
 import "../index.css"
+import { motion, AnimatePresence } from "framer-motion";
 
 
-const truncateMiddle = (text, startChars, endChars, separator = "...") => {
-  if (!text) return "";
-
-
-  if (text.length <= startChars + endChars) {
-    return text;
-  }
+const NavLink = ({ href, index, hoveredIndex, setHoveredIndex, children }) => {
+  const [location] = useLocation();
+  const isActive = location === href;
+  const showBackground = (hoveredIndex === index) || (isActive && hoveredIndex === null);
 
   return (
-    text.slice(0, startChars) +
-    separator +
-    text.slice(-endChars)
+    <Link
+      href={href}
+      onMouseEnter={() => setHoveredIndex(index)}
+      onMouseLeave={() => setHoveredIndex(null)}
+      className={`relative px-4 py-2 text-sm font-medium transition-all duration-300 
+        ${isActive 
+          ? "text-white drop-shadow-[0_0_8px_rgba(249,115,22,0.8)]" 
+          : "text-slate-400 hover:text-white"
+        }`}
+    >
+      <AnimatePresence>
+        {showBackground && (
+          <motion.span
+            layoutId="nav-pill"
+            className="absolute inset-0 bg-orange-500/10 rounded-lg -z-10 border border-orange-500/20"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ type: "spring", bounce: 0.2, duration: 0.4 }}
+          />
+        )}
+      </AnimatePresence>
+
+      <span className="relative z-10">{children}</span>
+    </Link>
   );
 };
-export function Layout({ children }) {
-  const { address, isConnected } = useAccount();
-  const { disconnect } = useDisconnect();
 
-  const [location] = useLocation();
+export function Layout({ children }) {
+
+  const [hoveredIndex, setHoveredIndex] = useState(null);
   const [isOpen, setIsOpen] = React.useState(false);
 
-  const NavLink = ({ href, children }) => {
-    const isActive = location === href;
-    return (
-      <Link href={href} className={`text-sm font-medium transition-colors hover:text-primary ${isActive ? "text-primary" : "text-muted-foreground"}`}>
-        {children}
-      </Link>
-    );
-  };
 
   return (
     <div className="min-h-screen flex flex-col bg-background font-sans overflow-x-hidden">
@@ -44,34 +54,60 @@ export function Layout({ children }) {
       <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-background/80 backdrop-blur flex justify-center">
         <div className="container flex h-16 items-center justify-between px-4 md:px-8">
           <div className="flex items-center gap-2">
-            <Link href="/" className="flex items-center gap-2">
-              <div className="size-8 rounded from-primary to-secondary flex items-center justify-center">
-                {/*Here LOGO*/}
-                <img src="/logo.png" alt="logo" className="rounded" />
+            <Link href="/" className="group flex items-center gap-2 hover:text-primary">
+              {/* Logo Icon */}
+              <div className="size-8">
+                <img src="/logo.png" alt="logo" className="rounded transition-transform duration-500" />
               </div>
-              <span className="font-display font-bold text-xl tracking-wider text-white">
-                Hair<span className="text-primary">GAMES</span>
+
+              <span className="font-display font-bold text-xl tracking-wider text-whitetransition-colors duration-300">
+                Hair
+                <span className="relative inline-block ml-1">
+                  <span className="text-primary">GAMES</span>
+                  <span
+                    className="absolute inset-0 text-white transition-all duration-500 ease-in-out [clip-path:inset(0_100%_0_0)] group-hover:[clip-path:inset(0_0_0_0)]"
+                    aria-hidden="true">
+                    GAMES
+                  </span>
+                </span>
               </span>
             </Link>
           </div>
 
           {/* Desktop Nav */}
-          <nav className="hidden md:flex items-center gap-12 font-display ">
-            <NavLink href="/">Home</NavLink>
-            <NavLink href="/dashboard">Games</NavLink>
-            <NavLink href="/leaderboard">Leaderboard</NavLink>
+          <nav className="hidden md:flex items-center gap-4 font-display relative">
+            <NavLink
+              href="/"
+              index={0}
+              hoveredIndex={hoveredIndex}
+              setHoveredIndex={setHoveredIndex}
+            >
+              Home
+            </NavLink>
+
+            <NavLink
+              href="/dashboard"
+              index={1}
+              hoveredIndex={hoveredIndex}
+              setHoveredIndex={setHoveredIndex}
+            >
+              Games
+            </NavLink>
+
+            <NavLink
+              href="/leaderboard"
+              index={2}
+              hoveredIndex={hoveredIndex}
+              setHoveredIndex={setHoveredIndex}
+            >
+              Leaderboard
+            </NavLink>
           </nav>
 
           {/* Wallet Connection */}
           <div className="hidden md:flex items-center gap-4">
-            {isConnected ? (
-              <Button variant="outline" onClick={() => disconnect()}>
-                <Wallet className="mr-2 h-4 w-4" />
-                {truncateMiddle(address, 5, 4)}
-              </Button>
-            ) : (
-              <ConnectButton />
-            )}
+
+            <ConnectButton chainStatus="Hemi" />
 
           </div>
 
