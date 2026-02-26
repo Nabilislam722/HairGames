@@ -2,7 +2,7 @@
 
 Step - 1:
 ```
-ssh -L 27017:127.0.0.1:27017 root@72.62.235.143
+ssh -L 27017:127.0.0.1:27017 root@ip
 ```
 Then Type the password of the VPS (DON'T SHARE WITH ANYONE)
 This Creates a SSH connection with the VPS on your local computer port 27017

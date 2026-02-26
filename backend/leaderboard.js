@@ -12,11 +12,10 @@ const smart_contract = "0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5";
 const app = express();
 
 app.use(cors({
-  origin: 'https://game.hairtoken.xyz',
+  origin: "https://game.hairtoken.xyz",
   methods: ['GET', 'POST'],
   credentials: true
 }));
-
 
 app.use(express.json());
 
@@ -78,19 +77,64 @@ app.get("/api/leaderboard", async (req, res) => {
 });
 
 app.get("/api/points/get", async (req, res) => {
-
+ 
   const { wallet } = req.query;
-
   if (!wallet) {
-    return res.status(400).json({ error: "Wallet address required" });
+
+    
+    return res.status(400).json({ error: "Wallet required" });
   }
 
-  const user = await Leaderboard.findOne({ wallet });
-  if (!user) {
-    return res.json({ wallet, points: 0 });
+  const user = await Leaderboard.findOne({ wallet: wallet.toLowerCase() });
+  
+  res.json({ 
+    wallet: wallet.toLowerCase(), 
+    points: user ? user.points : 0, 
+    tasks: user ? user.completedTasks : [] 
+  });
+});
+
+app.post("/api/points/claim", async (req, res) => {
+  const { wallet, task } = req.body;
+  const walletLower = wallet?.toLowerCase();
+
+  if (!walletLower || task !== 'twitter_follow') {
+    return res.status(400).json({ error: "Invalid claim request" });
   }
 
-  res.json({ wallet: user.wallet, points: user.points });
+  try {
+    let user = await Leaderboard.findOne({ wallet: walletLower });
+    if (user && user.completedTasks && user.completedTasks.includes(task)) {
+      return res.status(400).json({ 
+        error: "Task already completed",
+        alreadyDone: true 
+      });
+    }
+
+    const updatedUser = await Leaderboard.findOneAndUpdate(
+      { wallet: walletLower, completedTasks: { $ne: task } },
+      { 
+        $inc: { points: 100 }, 
+        $addToSet: { completedTasks: task },
+        $set: { updatedAt: new Date() }
+      },
+      { upsert: true, new: true }
+    );
+
+    if (!updatedUser) {
+        return res.status(400).json({ error: "Task already processed" });
+    }
+
+    res.json({ 
+      success: true, 
+      newTotal: updatedUser.points,
+      tasks: updatedUser.completedTasks 
+    });
+
+  } catch (err) {
+    console.error("Claim Error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
 });
 
 app.listen(5000, () => console.log("Server running on 5000"));
