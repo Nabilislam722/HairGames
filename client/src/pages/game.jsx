@@ -54,7 +54,7 @@ export default function PatternMemoryGame() {
       const receipt = await submitGuess(100);
 
       if (receipt.status === "success") {
-        await fetch("http://127.0.0.1:5000/api/points/add", {
+        await fetch("https://api.hairtoken.xyz/api/points/add", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -223,7 +223,7 @@ export default function PatternMemoryGame() {
           </div>
 
           {/* FOOTER: Controls & Feedback */}
-          <div className="flex flex-col items-center gap-6 w-full">
+          <div className="flex flex-col items-center gap-1 w-full">
             <AnimatePresence mode="wait">
               {failed ? (
                 <motion.div

@@ -21,7 +21,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!address) return;
 
-    fetch(`http://127.0.0.1:5000/api/points/get?wallet=${address}`)
+    fetch(`https://api.hairtoken.xyz/api/points/get?wallet=${address}`)
       .then(res => res.json())
       .then(data => {
         setPoints(data.points);
@@ -45,7 +45,7 @@ export default function Dashboard() {
     setTwitterStep("verifying");
 
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/points/claim`, {
+      const response = await fetch(`https://api.hairtoken.xyz/api/points/claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -87,16 +87,6 @@ export default function Dashboard() {
       difficulty: "Logic"
     },
     {
-      id: "binary-puzzle",
-      title: "Binary Breaker",
-      description: "Decode the binary sequence before time runs out.",
-      entryFee: `${GAME_COST_ETH} ETH (~$0.02)`,
-      image: "bg-gradient-to-br from-emerald-600 to-teal-600",
-      icon: Binary,
-      status: "coming-soon",
-      difficulty: "Speed"
-    },
-    {
       id: "pattern-match",
       title: "Memory Match",
       description: "Memorize and match complex neural patterns.",
@@ -105,6 +95,16 @@ export default function Dashboard() {
       icon: BrainCircuit,
       status: "active",
       difficulty: "Memory"
+    },
+    {
+      id: "binary-puzzle",
+      title: "Binary Breaker",
+      description: "Decode the binary sequence before time runs out.",
+      entryFee: `${GAME_COST_ETH} ETH (~$0.02)`,
+      image: "bg-gradient-to-br from-emerald-600 to-teal-600",
+      icon: Binary,
+      status: "coming-soon",
+      difficulty: "Speed"
     }
   ];
 
