@@ -223,7 +223,7 @@ export default function PatternMemoryGame() {
           </div>
 
           {/* FOOTER: Controls & Feedback */}
-          <div className="flex flex-col items-center gap-6 w-full">
+          <div className="flex flex-col items-center gap-1 w-full">
             <AnimatePresence mode="wait">
               {failed ? (
                 <motion.div

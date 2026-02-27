@@ -4,7 +4,7 @@ import { parseEther } from "viem";
 import { waitForTransactionReceipt } from "@wagmi/core";
 
 export const GAME_CONTRACT = "0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5";
-export const GAME_COST_ETH = "0.0000012";
+export const GAME_COST_ETH = "0.000022";
 const GAME_ABI = [
   { name: "playGame", type: "function", stateMutability: "payable", inputs: [] },
   { name: "submitGuess", type: "function", stateMutability: "payable", inputs: [{ name: "number", type: "uint16" }] },
