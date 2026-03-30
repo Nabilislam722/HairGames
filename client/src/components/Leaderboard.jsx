@@ -11,7 +11,7 @@ export default function Leaderboard() {
   useEffect(() => {
     async function fetchLeaderboard() {
       try {
-        const res = await fetch("https://api.hairtoken.xyz/api/leaderboard");
+        const res = await fetch("http://127.0.0.1:5000/api/leaderboard");
         const data = await res.json();
         setLeaderboard(data);
       } catch (err) {
