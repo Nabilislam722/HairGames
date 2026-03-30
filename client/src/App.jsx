@@ -4,7 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { Layout } from "@/components/layout";
 import Home from "@/pages/home";
 import Dashboard from "@/pages/dashboard";
-import Game from "@/pages/game";
+import Game from "@/pages/Game";
 import NotFound from "@/pages/not-found";
 import Leaderboard from "./components/Leaderboard";
 

@@ -14,7 +14,7 @@ export default function Home() {
   const [, setLocation] = useLocation();
 
   return (
-    <div className="flex flex-col gap-16">
+    <div className="flex flex-col gap-16 ">
       <IntroVideo />
       {/* Hero Section */}
       <section className="relative py-20 md:py-32 overflow-hidden rounded-3xl border border-white/10">
@@ -92,6 +92,7 @@ export default function Home() {
             <Button size="lg" variant="outline" className="text-lg px-8 py-6 border-white/10 hover:bg-white/5 cursor-pointer">
               <a href="https://hairtoken.xyz/">Learn More</a>
             </Button>
+
           </motion.div>
         </div>
       </section>

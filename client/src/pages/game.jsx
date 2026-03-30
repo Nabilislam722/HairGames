@@ -1,268 +1,479 @@
-import React, { useEffect, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
-import { useAccount } from "wagmi";
-import { useWeb3 } from "@/lib/web3";
-import { toast } from "../hooks/use-toast";
-import { Trophy, Zap, Target, RotateCcw, Play } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
+import { useEffect, useRef, useState, useCallback } from 'react';
+import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../game/constants';
+import { createInitialState, startGame, tick } from '../game/engine';
+import LevelSelect from './Levelselect';
+import playerSrc     from '../assets/player.png';
+import playerLeftSrc from '../assets/player_left.png';
+import playerRightSrc from '../assets/player_right.png';
+import enemy1Src     from '../assets/enemy1.png';
+import enemy2Src     from '../assets/enemy2.png';
+import bossSrc       from '../assets/boss.png';
+import boss2Src      from '../assets/boss2.png';   // ← new boss for level 2+
+import bulletSrc     from '../assets/bullet.png';
+import bgSrc         from '../assets/bg_stars.png';
+import bg2Src        from '../assets/bg2.png';
 
-const GRID_SIZE = 25;
-const GRID_COLS = 5;
-const MAX_ROUNDS = 10;
+import {
+  updateBgScroll, drawBackground, drawPlayer, drawEnemy, drawBullet,
+  drawEnemyBullet, drawParticle, drawPowerUp, drawHUD, drawAsteroidWarning,
+  drawAsteroidHUD, drawBossWarning, drawWaveClear, drawLevelWarp,
+  drawMenu, drawGameOver, drawVictory,
+} from '../game/renderer';
+import { drawAsteroid } from '../game/asteroids';
 
-const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 
-export default function PatternMemoryGame() {
-  const [gameState, setGameState] = useState("idle");
-  const [pattern, setPattern] = useState([]);
-  const [activeSet, setActiveSet] = useState(new Set());
-  const [selectedSet, setSelectedSet] = useState(new Set());
-  const [correctCount, setCorrectCount] = useState(0);
-  const [failed, setFailed] = useState(false);
-  const [round, setRound] = useState(1);
-  const [showPoints, setShowPoints] = useState(false);
-  const [isProcessing, setIsProcessing] = useState(false);
+function loadImage(src) {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload  = () => resolve(img);
+    img.onerror = () => resolve(img);
+    img.src = src;
+  });
+}
 
-  const { isConnected, submitGuess } = useWeb3();
-  const { address } = useAccount();
-
-  const generatePattern = (length) => {
-    const set = new Set();
-    while (set.size < length) {
-      set.add(Math.floor(Math.random() * GRID_SIZE));
+function saveCompletedLevel(level) {
+  try {
+    const existing = JSON.parse(localStorage.getItem('voidStrikerCompletedLevels') ?? '[]');
+    if (!existing.includes(level)) {
+      existing.push(level);
+      localStorage.setItem('voidStrikerCompletedLevels', JSON.stringify(existing));
     }
-    return Array.from(set);
-  };
+  } catch {}
+}
 
-  const getPatternSize = (r) => (r === 1 ? 4 : r === 2 ? 6 : 8);
+// ─── Level Complete Overlay ───────────────────────────────────────────────────
 
-  const showPattern = async (pat) => {
-    setGameState("showing");
-    setSelectedSet(new Set());
-    setActiveSet(new Set(pat));
-    await sleep(1200);
-    setActiveSet(new Set());
-    setGameState("input");
-  };
+const CONFETTI_ITEMS = Array.from({ length: 60 }, (_, i) => ({
+  left:   (i * 137.5) % 100,
+  delay:  (i * 0.13) % 2,
+  dur:    1.5 + (i % 5) * 0.4,
+  color:  ['#00ccff','#ffdd00','#ff44ff','#44ff88','#ff6600'][i % 5],
+  size:   4 + (i % 4) * 3,
+}));
 
-  const handleStartGame = async () => {
-    setRound(1);
-    setIsProcessing(true);
-
-    try {
-      const receipt = await submitGuess(100);
-
-      if (receipt.status === "success") {
-        await fetch("https://api.hairtoken.xyz/api/points/add", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            wallet: address,
-            txHash: receipt.transactionHash,
-          }),
-        });
-        toast({ title: "Success!", description: "Points added!" });
-
-         startGame();
-      }
-    }
-
-    catch (err) {
-
-      toast({
-        title: "Error",
-        description: err.shortMessage || "User rejected or Transaction failed",
-        variant: "destructive"
-      });
-    }
-
-    finally {
-      setIsProcessing(false);
-     
-    }
-
-  };
-
-
-  const startGame = async () => {
-    setCorrectCount(0);
-    setSelectedSet(new Set());
-    setActiveSet(new Set());
-    setFailed(false);
-
-    const size = getPatternSize(round);
-    const newPattern = generatePattern(size);
-    setPattern(newPattern);
-    await showPattern(newPattern);
-  };
-
-  useEffect(() => {
-    if (round > 1 && round <= MAX_ROUNDS) {
-      startGame();
-    }
-  }, [round]);
-
-
-  const handleClick = async (index) => {
-    if (gameState !== "input") return;
-    if (selectedSet.has(index)) return;
-
-    const nextSelected = new Set(selectedSet);
-    nextSelected.add(index);
-    setSelectedSet(nextSelected);
-
-    // handle wrong
-    if (!pattern.includes(index)) {
-      setFailed(true);
-      setRound(1);
-      setGameState("idle");
-      return;
-    }
-
-    // correct
-    setCorrectCount((c) => c + 1);
-    if (nextSelected.size !== pattern.length) return;
-
-    // round completed
-    if (round < MAX_ROUNDS) {
-      setTimeout(() => {
-        setRound((r) => r + 1);
-        setCorrectCount(0);
-        setShowPoints(false);
-      }, 1200);
-      return;
-    }
-
-    if (!isConnected || !address) {
-      toast({ title: "Wallet not connected", variant: "destructive" });
-      return;
-    }
-
-    setGameState("finished");
-    setShowPoints(true);
-
-
-  };
+function LevelCompleteOverlay({ level, score, onContinue }) {
+  const [visible, setVisible] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setVisible(true), 80); return () => clearTimeout(t); }, []);
 
   return (
-    <div className="w-full min-h-[80vh] flex flex-col items-center justify-center p-4">
-      {/* Main Game Container */}
-      <Card className="relative overflow-hidden border-white/5 bg-slate-950/50 backdrop-blur-2xl w-full max-w-2xl rounded-[2rem] shadow-2xl">
+    <div style={{
+      position: 'absolute', inset: 0, zIndex: 100,
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      background: 'rgba(0,5,20,0.88)',
+      fontFamily: "'Courier New', monospace",
+      transition: 'opacity 0.4s',
+      opacity: visible ? 1 : 0,
+    }}>
+      <style>{`
+        @keyframes confettiFall {
+          0%   { transform: translateY(-20px) rotate(0deg);   opacity: 1; }
+          100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
+        }
+        @keyframes scaleIn {
+          from { transform: scale(0.4); opacity: 0; }
+          to   { transform: scale(1);   opacity: 1; }
+        }
+        @keyframes starPop {
+          0%   { transform: scale(0) rotate(-30deg); opacity:0; }
+          60%  { transform: scale(1.3) rotate(10deg); opacity:1; }
+          100% { transform: scale(1) rotate(0deg); opacity:1; }
+        }
+        @keyframes shimmer {
+          0%,100% { text-shadow: 0 0 20px #ffdd00, 0 0 40px #ff8800; }
+          50%      { text-shadow: 0 0 40px #ffdd00, 0 0 80px #ff8800, 0 0 120px #ffaa00; }
+        }
+        @keyframes btnPulse {
+          0%,100% { box-shadow: 0 0 12px #00ccff88; }
+          50%      { box-shadow: 0 0 28px #00ccffcc, 0 0 50px #00ccff44; }
+        }
+      `}</style>
 
-        {/* Decorative Background Elements */}
-        <div className="absolute -top-24 -right-24 w-48 h-48 bg-orange-500/10 blur-[100px] rounded-full" />
-        <div className="absolute -bottom-24 -left-24 w-48 h-48 bg-indigo-500/10 blur-[100px] rounded-full" />
+      {/* Confetti */}
+      {CONFETTI_ITEMS.map((c, i) => (
+        <div key={i} style={{
+          position: 'absolute', top: 0,
+          left: `${c.left}%`,
+          width: c.size, height: c.size,
+          background: c.color,
+          borderRadius: i % 3 === 0 ? '50%' : 2,
+          animation: `confettiFall ${c.dur}s ${c.delay}s ease-in infinite`,
+          pointerEvents: 'none',
+        }} />
+      ))}
 
-        <CardContent className="p-8 md:p-12 flex flex-col items-center gap-8">
+      {/* Card */}
+      <div style={{
+        background: 'linear-gradient(160deg, #001428 0%, #000d22 100%)',
+        border: '2px solid #00ccff66',
+        borderRadius: 20,
+        padding: '48px 56px',
+        textAlign: 'center',
+        animation: 'scaleIn 0.4s cubic-bezier(.2,.8,.3,1) forwards',
+        boxShadow: '0 20px 80px #00000088, inset 0 0 40px #00ccff08',
+        minWidth: 380,
+      }}>
+        {/* Badge */}
+        <div style={{
+          display: 'inline-block',
+          background: 'linear-gradient(135deg, #00aaff, #0044ff)',
+          color: '#ffffff', fontSize: 10, fontWeight: 'bold',
+          letterSpacing: 3, padding: '4px 16px', borderRadius: 20,
+          marginBottom: 20,
+        }}>LEVEL {level} COMPLETE</div>
 
-          {/* TOP HUD: Stats */}
-          <div className="w-full grid grid-cols-2 gap-4">
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-4 transition-all hover:bg-white/10">
-              <div className="p-2 rounded-lg bg-purple-500/20 text-purple-400">
-                <Target size={20} />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Progress</p>
-                <p className="text-lg font-mono font-bold text-white">Round {round}<span className="text-white/30 text-sm">/{MAX_ROUNDS}</span></p>
-              </div>
-            </div>
+        {/* Title */}
+        <div style={{
+          color: '#ffdd00', fontSize: 40, fontWeight: 'bold',
+          letterSpacing: 4, marginBottom: 8,
+          animation: 'shimmer 2s ease-in-out infinite',
+        }}>VICTORY!</div>
 
-            <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex items-center gap-4 transition-all hover:bg-white/10">
-              <div className="p-2 rounded-lg bg-sky-500/20 text-sky-400">
-                <Zap size={20} />
-              </div>
-              <div>
-                <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-bold">Accuracy</p>
-                <p className="text-lg font-mono font-bold text-white">{correctCount}<span className="text-white/30 text-sm">/{pattern.length || 0}</span></p>
-              </div>
-            </div>
-          </div>
+        {/* Stars */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 28 }}>
+          {[0, 1, 2].map(i => (
+            <span key={i} style={{
+              fontSize: 36,
+              animation: `starPop 0.5s ${0.3 + i * 0.15}s cubic-bezier(.2,.8,.3,1) both`,
+              filter: 'drop-shadow(0 0 8px #ffdd00)',
+            }}>⭐</span>
+          ))}
+        </div>
 
-          {/* THE CORE: Cyber Grid */}
-          <div className="relative p-2 rounded-[2.5rem] bg-gradient-to-b from-white/10 to-transparent border border-white/10 shadow-inner">
-            <div
-              className="grid gap-3 p-4"
-              style={{ gridTemplateColumns: `repeat(${GRID_COLS}, 1fr)` }}
-            >
-              {Array.from({ length: GRID_SIZE }).map((_, i) => {
-                const isRevealed = activeSet.has(i) || selectedSet.has(i);
+        {/* Score */}
+        <div style={{ color: '#aabbcc', fontSize: 13, letterSpacing: 2, marginBottom: 6 }}>
+          SCORE EARNED
+        </div>
+        <div style={{
+          color: '#ffffff', fontSize: 28, fontWeight: 'bold',
+          letterSpacing: 2, marginBottom: 32,
+        }}>
+          {score.toLocaleString()}
+        </div>
 
-                return (
-                  <motion.div
-                    key={i}
-                    onClick={() => handleClick(i)}
-                    whileTap={{ scale: 0.9 }}
-                    whileHover={gameState !== "showing" ? { scale: 1.05, y: -2 } : {}}
-                    className={`
-                    relative w-16 h-16 md:w-20 md:h-20 rounded-2xl cursor-pointer
-                    transition-all duration-500 overflow-hidden group
-                    ${gameState === "showing" ? "pointer-events-none" : "pointer-events-auto"}
-                    ${isRevealed
-                        ? "bg-orange-500 shadow-[0_0_30px_rgba(249,115,22,0.4)] border-orange-400/50"
-                        : "bg-white/5 border border-white/10 hover:border-white/30"}
-                  `}
-                  >
-                    {/* Internal Shimmer for revealed tiles */}
-                    <AnimatePresence>
-                      {isRevealed && (
-                        <motion.div
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className="absolute inset-0 bg-gradient-to-tr from-orange-600 via-orange-400 to-white/40 opacity-50"
-                        />
-                      )}
-                    </AnimatePresence>
+        {/* Continue button */}
+        <button
+          onClick={onContinue}
+          style={{
+            background: 'transparent',
+            border: '2px solid #00ccff',
+            color: '#00ccff',
+            fontFamily: "'Courier New', monospace",
+            fontSize: 14, fontWeight: 'bold',
+            letterSpacing: 4, padding: '14px 36px',
+            borderRadius: 8, cursor: 'pointer',
+            animation: 'btnPulse 2s ease-in-out infinite',
+            transition: 'background 0.2s, color 0.2s',
+          }}
+          onMouseEnter={e => { e.target.style.background = '#00ccff'; e.target.style.color = '#000011'; }}
+          onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = '#00ccff'; }}
+        >
+          ▶ RETURN TO MAP
+        </button>
+      </div>
+    </div>
+  );
+}
 
-                    {/* Subtle Grid Pattern inside tile */}
-                    <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_center,_var(--tw-gradient-stops))] from-white via-transparent to-transparent" />
-                  </motion.div>
-                );
-              })}
-            </div>
-          </div>
+// ─── Main wrapper — controls which screen is visible ─────────────────────────
 
-          {/* FOOTER: Controls & Feedback */}
-          <div className="flex flex-col items-center gap-1 w-full">
-            <AnimatePresence mode="wait">
-              {failed ? (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
-                  className="flex items-center gap-2 text-red-400 bg-red-400/10 px-6 py-2 rounded-full border border-red-400/20 font-bold"
-                >
-                  <RotateCcw size={16} className="animate-spin-slow" /> Sequence Failed
-                </motion.div>
-              ) : showPoints ? (
-                <motion.div
-                  initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
-                  className="flex items-center gap-3 text-emerald-400 bg-emerald-400/10 px-6 py-3 rounded-full border border-emerald-400/20 shadow-[0_0_20px_rgba(52,211,153,0.2)]"
-                >
-                  <Trophy size={20} className="animate-bounce" />
-                  <span className="font-bold tracking-tight">+100 Points Awarded</span>
-                </motion.div>
-              ) : (
-                <div className="h-10" /> // Spacer to prevent layout shift
-              )}
-            </AnimatePresence>
+export default function GameWrapper() {
+  const [screen,     setScreen]     = useState('levelSelect'); // 'levelSelect' | 'game'
+  const [startLevel, setStartLevel] = useState(1);
 
-            <Button
-              onClick={handleStartGame}
-              disabled={isProcessing}
-              className={`
-              group relative h-16 w-full max-w-xs rounded-2xl font-display text-lg font-bold transition-all duration-300 cursor-pointer
-              ${failed || showPoints
-                  ? "bg-white text-black hover:bg-orange-500 hover:text-white"
-                  : "bg-orange-600 text-white hover:bg-orange-500 shadow-[0_0_20px_rgba(234,88,12,0.3)]"}
-            `}
-            >
-              <span className="flex items-center justify-center gap-2">
-                {failed || showPoints ? <RotateCcw size={20} /> : <Play size={20} />}
-                {isProcessing ? "Processing..." : (failed || showPoints ? "Try Again" : "Start Game")}
-              </span>
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
+  const handleSelectLevel = (level) => {
+    setStartLevel(level);
+    setScreen('game');
+  };
+
+  const handleBackToMap = () => {
+    setScreen('levelSelect');
+  };
+
+  if (screen === 'levelSelect') {
+    return <LevelSelect onSelectLevel={handleSelectLevel} />;
+  }
+
+  return (
+    <GameCanvas
+      key={startLevel}              // remount canvas when level changes
+      startLevel={startLevel}
+      onBackToMap={handleBackToMap}
+    />
+  );
+}
+
+// ─── Canvas game ─────────────────────────────────────────────────────────────
+
+function GameCanvas({ startLevel, onBackToMap }) {
+  const canvasRef      = useRef(null);
+  const stateRef       = useRef(createInitialState());
+  const inputRef       = useRef({
+    left: false, right: false, up: false, down: false,
+    fire: false, switchWeapon: false, bomb: false,
+  });
+  const assetsRef      = useRef(null);
+  const tickRef        = useRef(0);
+  const lastTimeRef    = useRef(0);
+  const rafRef         = useRef(0);
+  const bombCoolRef    = useRef(false);
+  const startLevelRef  = useRef(startLevel);
+  const [loaded, setLoaded]                       = useState(false);
+  const [showLevelComplete, setShowLevelComplete] = useState(false);
+  const [completedLevel,    setCompletedLevel]    = useState(null);
+  const [completedScore,    setCompletedScore]    = useState(0);
+
+  // Load assets
+  useEffect(() => {
+    Promise.all([
+      loadImage(playerSrc),
+      loadImage(playerLeftSrc),
+      loadImage(playerRightSrc),
+      loadImage(enemy1Src),
+      loadImage(enemy2Src),
+      loadImage(bossSrc),
+      loadImage(boss2Src),
+      loadImage(bulletSrc),
+      loadImage(bgSrc),
+      loadImage(bg2Src),
+    ]).then(([player, playerLeft, playerRight, enemy1, enemy2, boss, boss2, bullet, bg, bg2]) => {
+      assetsRef.current = { player, playerLeft, playerRight, enemy1, enemy2, boss, boss2, bullet, bg, bg2 };
+      setLoaded(true);
+    });
+  }, []);
+
+  const startOrRestartGame = useCallback(() => {
+    stateRef.current = startGame(stateRef.current, startLevelRef.current);
+    setShowLevelComplete(false);
+  }, []);
+
+  // Input handling
+  useEffect(() => {
+    const keyMap = {
+      ArrowLeft: 'left',  a: 'left',  A: 'left',
+      ArrowRight: 'right', d: 'right', D: 'right',
+      ArrowUp:   'up',    w: 'up',    W: 'up',
+      ArrowDown: 'down',  s: 'down',  S: 'down',
+      ' ': 'fire',
+    };
+
+    const onKeyDown = (e) => {
+      const phase = stateRef.current.phase;
+      if (e.key === 'Enter') {
+        if (phase === 'menu' || phase === 'gameOver' || phase === 'victory') startOrRestartGame();
+        return;
+      }
+      if (e.key === 'Escape') { onBackToMap(); return; }
+      if (e.key === 'b' || e.key === 'B') {
+        if (!bombCoolRef.current) {
+          inputRef.current.bomb = true;
+          bombCoolRef.current   = true;
+          setTimeout(() => { inputRef.current.bomb = false; bombCoolRef.current = false; }, 300);
+        }
+        return;
+      }
+      const mapped = keyMap[e.key];
+      if (mapped) { e.preventDefault(); inputRef.current[mapped] = true; }
+    };
+
+    const onKeyUp = (e) => {
+      const mapped = keyMap[e.key];
+      if (mapped) inputRef.current[mapped] = false;
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    window.addEventListener('keyup',   onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup',   onKeyUp);
+    };
+  }, [startOrRestartGame, onBackToMap]);
+
+  // Start game at the chosen level once assets are loaded
+  useEffect(() => {
+    if (!loaded) return;
+    startOrRestartGame();
+  }, [loaded]);   // only on first load
+
+  // Game loop
+  useEffect(() => {
+    if (!loaded) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+
+    const loop = (time) => {
+      const dt = Math.min(lastTimeRef.current ? time - lastTimeRef.current : 16, 50);
+      lastTimeRef.current = time;
+      tickRef.current += 1;
+
+      const state = stateRef.current;
+      const input = inputRef.current;
+
+      const inactive = ['menu','gameOver','victory','levelComplete'];
+      if (!inactive.includes(state.phase)) {
+        stateRef.current = tick(state, input, dt);
+        input.switchWeapon = false;
+        input.bomb = false;
+      }
+
+      const s      = stateRef.current;
+      const assets = assetsRef.current;
+      const t      = tickRef.current;
+
+      // ── Detect level complete (boss killed) ──────────────────
+      if (s.phase === 'levelComplete' && !showLevelComplete) {
+        saveCompletedLevel(s.level);
+        setCompletedLevel(s.level);
+        setCompletedScore(s.score);
+        setShowLevelComplete(true);
+      }
+
+      // ── Swap player sprite by direction ─────────────────────
+      const basePlayer = assets.player;
+      if (input.left && !input.right)       assets.player = assets.playerLeft;
+      else if (input.right && !input.left)  assets.player = assets.playerRight;
+
+      // ── Swap boss sprite by level ────────────────────────────
+      const baseBoss = assets.boss;
+      if (s.level >= 2) assets.boss = assets.boss2;
+
+      updateBgScroll(dt);
+      ctx.save();
+      if (s.screenShake > 0) {
+        ctx.translate(
+          (Math.random() - 0.5) * s.screenShake,
+          (Math.random() - 0.5) * s.screenShake,
+        );
+      }
+
+      drawBackground(ctx, assets);
+
+      if (s.phase !== 'menu') {
+        for (const p  of s.particles)   if (p.active)  drawParticle(ctx, p);
+        for (const pu of s.powerUps)    if (pu.active) drawPowerUp(ctx, pu, t);
+        for (const a  of s.asteroids)   if (a.active)  drawAsteroid(ctx, a);
+        for (const e  of s.enemies)     if (e.active)  drawEnemy(ctx, e, assets, t);
+        for (const b  of s.enemyBullets) if (b.active) drawEnemyBullet(ctx, b);
+        for (const b  of s.bullets)     if (b.active)  drawBullet(ctx, b, t);
+        drawPlayer(ctx, s.player, assets, t);
+        drawHUD(ctx, s, t);
+        if (s.phase === 'asteroids') drawAsteroidHUD(ctx, s.asteroidTimer);
+      }
+
+      if      (s.phase === 'menu')            drawMenu(ctx, s.highScore, t);
+      else if (s.phase === 'asteroidWarning') drawAsteroidWarning(ctx, s.asteroidWarningTimer);
+      else if (s.phase === 'bossWarning')     drawBossWarning(ctx, s.bossWarningTimer);
+      else if (s.phase === 'waveClear')       drawWaveClear(ctx, s.wave, s.waveClearTimer);
+      else if (s.phase === 'levelWarp')       drawLevelWarp(ctx, s.player, assets, s.warpTimer, s.warpNextLevel, t);
+      else if (s.phase === 'gameOver')        drawGameOver(ctx, s.score, s.highScore, s.wave, t);
+      else if (s.phase === 'victory')         drawVictory(ctx, s.score, s.highScore, t);
+
+      ctx.restore();
+
+      // Restore swapped sprites
+      assets.player = basePlayer;
+      assets.boss   = baseBoss;
+
+      rafRef.current = requestAnimationFrame(loop);
+    };
+
+    rafRef.current = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [loaded]);
+
+  const handleCanvasClick = useCallback(() => {
+    const phase = stateRef.current.phase;
+    if (phase === 'menu' || phase === 'gameOver' || phase === 'victory') startOrRestartGame();
+  }, [startOrRestartGame]);
+
+  return (
+    <div style={{
+      position: 'fixed', inset: 0,
+      background: '#000011',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
+      zIndex: 9999,
+    }}>
+      {!loaded && (
+        <div style={{ color: '#00ccff', fontFamily: 'monospace', fontSize: 24 }}>
+          Loading...
+        </div>
+      )}
+
+      {/* ESC hint */}
+      {loaded && (
+        <div style={{
+          position: 'absolute', top: 10, right: 14,
+          color: '#334455', fontSize: 11, fontFamily: 'monospace',
+          letterSpacing: 1, pointerEvents: 'none',
+        }}>ESC — level map</div>
+      )}
+
+      <div style={{ position: 'relative' }}>
+        <canvas
+          ref={canvasRef}
+          width={CANVAS_WIDTH}
+          height={CANVAS_HEIGHT}
+          onClick={handleCanvasClick}
+          style={{
+            display: loaded ? 'block' : 'none',
+            imageRendering: 'auto',
+            cursor: 'crosshair',
+            width:  'min(100vw, calc(100vh * (900 / 650)))',
+            height: 'min(100vh, calc(100vw * (650 / 900)))',
+          }}
+        />
+
+        {/* Level complete overlay rendered over canvas */}
+        {showLevelComplete && (
+          <LevelCompleteOverlay
+            level={completedLevel}
+            score={completedScore}
+            onContinue={onBackToMap}
+          />
+        )}
+      </div>
+
+      <MobileControls inputRef={inputRef} onStart={startOrRestartGame} stateRef={stateRef} />
+    </div>
+  );
+}
+
+// ─── Mobile controls ─────────────────────────────────────────────────────────
+
+function MobileControls({ inputRef, onStart, stateRef }) {
+  const isMobile = 'ontouchstart' in window;
+  if (!isMobile) return null;
+
+  const press = (key, val) => { inputRef.current[key] = val; };
+
+  const btnStyle = (color = '#ffffff22') => ({
+    background: color,
+    border: '2px solid #ffffff44',
+    borderRadius: 12, color: '#ffffff',
+    fontFamily: 'monospace', fontSize: 20,
+    padding: '16px 20px',
+    touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none',
+  });
+
+  return (
+    <div style={{
+      position: 'fixed', bottom: 20, left: 0, right: 0,
+      display: 'flex', justifyContent: 'space-between',
+      padding: '0 20px', pointerEvents: 'none', zIndex: 10000,
+    }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,56px)', gridTemplateRows: 'repeat(2,56px)', gap: 6, pointerEvents: 'all' }}>
+        <div />
+        <button style={btnStyle()} onTouchStart={() => press('up',    true)} onTouchEnd={() => press('up',    false)}>▲</button>
+        <div />
+        <button style={btnStyle()} onTouchStart={() => press('left',  true)} onTouchEnd={() => press('left',  false)}>◀</button>
+        <button style={btnStyle()} onTouchStart={() => press('down',  true)} onTouchEnd={() => press('down',  false)}>▼</button>
+        <button style={btnStyle()} onTouchStart={() => press('right', true)} onTouchEnd={() => press('right', false)}>▶</button>
+      </div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'all' }}>
+        <button style={btnStyle('#ff440066')} onTouchStart={() => press('fire', true)}  onTouchEnd={() => press('fire', false)}>🔥</button>
+        <button style={btnStyle('#ff660044')} onTouchStart={() => { press('bomb', true); setTimeout(() => press('bomb', false), 300); }}>💣</button>
+      </div>
     </div>
   );
 }
