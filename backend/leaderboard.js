@@ -27,7 +27,7 @@ app.post("/api/points/add", async (req, res) => {
   const { wallet, txHash } = req.body;
 
   try {
-   
+
     if (!wallet || !txHash) {
 
       return res.status(400).json({ error: "Missing data" });
@@ -77,20 +77,20 @@ app.get("/api/leaderboard", async (req, res) => {
 });
 
 app.get("/api/points/get", async (req, res) => {
- 
+
   const { wallet } = req.query;
   if (!wallet) {
 
-    
+
     return res.status(400).json({ error: "Wallet required" });
   }
 
   const user = await Leaderboard.findOne({ wallet: wallet.toLowerCase() });
-  
-  res.json({ 
-    wallet: wallet.toLowerCase(), 
-    points: user ? user.points : 0, 
-    tasks: user ? user.completedTasks : [] 
+
+  res.json({
+    wallet: wallet.toLowerCase(),
+    points: user ? user.points : 0,
+    tasks: user ? user.completedTasks : []
   });
 });
 
@@ -98,23 +98,23 @@ app.post("/api/points/claim", async (req, res) => {
   const { wallet, task } = req.body;
   const walletLower = wallet?.toLowerCase();
 
-  if (!walletLower || task !== 'twitter_follow') {
+  if (!walletLower || (task !== 'twitter_follow' && task !== 'hairy_person')) {
     return res.status(400).json({ error: "Invalid claim request" });
   }
 
   try {
     let user = await Leaderboard.findOne({ wallet: walletLower });
     if (user && user.completedTasks && user.completedTasks.includes(task)) {
-      return res.status(400).json({ 
+      return res.status(400).json({
         error: "Task already completed",
-        alreadyDone: true 
+        alreadyDone: true
       });
     }
 
     const updatedUser = await Leaderboard.findOneAndUpdate(
       { wallet: walletLower, completedTasks: { $ne: task } },
-      { 
-        $inc: { points: 100 }, 
+      {
+        $inc: { points: 100 },
         $addToSet: { completedTasks: task },
         $set: { updatedAt: new Date() }
       },
@@ -122,13 +122,13 @@ app.post("/api/points/claim", async (req, res) => {
     );
 
     if (!updatedUser) {
-        return res.status(400).json({ error: "Task already processed" });
+      return res.status(400).json({ error: "Task already processed" });
     }
 
-    res.json({ 
-      success: true, 
+    res.json({
+      success: true,
       newTotal: updatedUser.points,
-      tasks: updatedUser.completedTasks 
+      tasks: updatedUser.completedTasks
     });
 
   } catch (err) {
