@@ -187,7 +187,7 @@ export function spawnWave(level: number, subWave: number): Enemy[] {
 
 export function spawnBoss(level: number): Enemy {
   const cfg = ENEMY_CONFIGS.boss;
-  const bossHp = cfg.maxHp + (level - 1) * 400;
+  const bossHp = cfg.maxHp + (level - 1) * 4000;
   const cx = CANVAS_WIDTH / 2 - cfg.width / 2;
   return {
     x: cx, y: -cfg.height,

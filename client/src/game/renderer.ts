@@ -14,6 +14,7 @@ interface Assets {
   bullet: HTMLImageElement;
   bg: HTMLImageElement;
   bg2: HTMLImageElement;
+  bomb?: HTMLImageElement;
 }
 
 let bgOffset  = 0;
@@ -433,7 +434,7 @@ export function drawPowerUp(ctx: CanvasRenderingContext2D, pu: PowerUp, tick: nu
     ctx.fill();
 
     ctx.shadowBlur = 4; ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 8px monospace';
+    ctx.font = 'bold 8px Arial, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText('UP', cx, cy);
 
@@ -468,7 +469,7 @@ export function drawPowerUp(ctx: CanvasRenderingContext2D, pu: PowerUp, tick: nu
     ctx.stroke();
 
     ctx.shadowBlur = 0; ctx.fillStyle = '#ffffff';
-    ctx.font = 'bold 7px monospace';
+    ctx.font = 'bold 7px Arial, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(pu.weaponType ? pu.weaponType.slice(0, 3).toUpperCase() : '???', cx, cy + s * 0.5);
 
@@ -488,7 +489,7 @@ export function drawPowerUp(ctx: CanvasRenderingContext2D, pu: PowerUp, tick: nu
     ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fill();
 
     ctx.shadowBlur = 0; ctx.fillStyle = '#ffffff';
-    ctx.font = `bold ${label.length > 4 ? 7 : 9}px monospace`;
+    ctx.font = `bold ${label.length > 4 ? 7 : 9}px Arial, sans-serif`;
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(label, cx, cy);
   }
@@ -496,14 +497,14 @@ export function drawPowerUp(ctx: CanvasRenderingContext2D, pu: PowerUp, tick: nu
   ctx.restore();
 }
 
-export function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, tick: number) {
+export function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, tick: number, assets: Assets) {
   const { player, score, wave, level } = state;
   ctx.save();
 
   ctx.fillStyle = 'rgba(0,0,20,0.75)';
   ctx.fillRect(0, 0, CANVAS_WIDTH, 50);
 
-  ctx.font = 'bold 13px monospace';
+  ctx.font = 'bold 13px Arial, sans-serif';
   ctx.fillStyle = '#aaddff';
   ctx.textAlign = 'left';
   ctx.textBaseline = 'middle';
@@ -514,21 +515,28 @@ export function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, tick: n
 
   const wx = CANVAS_WIDTH / 2;
   ctx.fillStyle = '#ffdd00'; ctx.textAlign = 'center';
-  ctx.font = 'bold 14px monospace';
+  ctx.font = 'bold 14px Arial, sans-serif';
   ctx.fillText(`⚡ ${player.weapon.name.toUpperCase()} LVL ${player.weapon.level}`, wx, 16);
-  ctx.fillStyle = '#7799bb'; ctx.font = '10px monospace';
+  ctx.fillStyle = '#7799bb'; ctx.font = '10px Arial, sans-serif';
   ctx.fillText('[SPACE] Fire  [B] Bomb', wx, 33);
 
   ctx.textAlign = 'right';
-  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 16px monospace';
+  ctx.fillStyle = '#ffffff'; ctx.font = 'bold 16px Arial, sans-serif';
   ctx.fillText(`${score.toLocaleString()}`, CANVAS_WIDTH - 14, 16);
-  ctx.fillStyle = '#7799bb'; ctx.font = '11px monospace';
+  ctx.fillStyle = '#7799bb'; ctx.font = '11px Arial, sans-serif';
   ctx.fillText(`LVL ${level ?? 1} – W${wave ?? 1}`, CANVAS_WIDTH - 14, 33);
 
   if (player.bombCount > 0) {
     ctx.textAlign = 'left'; ctx.fillStyle = '#ff6600';
-    ctx.font = 'bold 13px monospace';
-    ctx.fillText(`💣 x${player.bombCount}`, 14, CANVAS_HEIGHT - 14);
+    ctx.font = 'bold 13px Arial, sans-serif';
+    if (assets.bomb && assets.bomb.complete && assets.bomb.naturalWidth > 0) {
+      // Draw bomb image
+      ctx.drawImage(assets.bomb, 27, CANVAS_HEIGHT - 35, 20, 20);
+      ctx.fillText(`x${player.bombCount}`, 34, CANVAS_HEIGHT - 14);
+    } else {
+      // Fallback to emoji if image not loaded
+      ctx.fillText(`x${player.bombCount}`, 14, CANVAS_HEIGHT - 14);
+    }
   }
 
   const boss = state.enemies.find(e => e.type === 'boss' && e.active);
@@ -544,7 +552,7 @@ export function drawHUD(ctx: CanvasRenderingContext2D, state: GameState, tick: n
     ctx.fillRect(10, by, (CANVAS_WIDTH - 20) * ratio, barH);
     ctx.strokeStyle = '#ff000066'; ctx.lineWidth = 1;
     ctx.strokeRect(10, by, CANVAS_WIDTH - 20, barH);
-    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 12px monospace';
+    ctx.fillStyle = '#ffffff'; ctx.font = 'bold 12px Arial, sans-serif';
     ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
     ctx.fillText(`⚠ BOSS  ${boss.hp.toLocaleString()} / ${boss.maxHp.toLocaleString()}`, CANVAS_WIDTH / 2, by + barH / 2);
   }
@@ -566,10 +574,10 @@ export function drawAsteroidWarning(ctx: CanvasRenderingContext2D, timer: number
   ctx.save();
   ctx.fillStyle = `rgba(100,60,0,${alpha * 0.3})`;
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-  ctx.font = 'bold 64px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 64px Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = `rgba(255,160,40,${alpha})`; ctx.shadowColor = '#ff8800'; ctx.shadowBlur = 30;
   ctx.fillText('☄ ASTEROID FIELD ☄', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 20);
-  ctx.font = 'bold 24px monospace';
+  ctx.font = 'bold 24px Arial, sans-serif';
   ctx.fillStyle = `rgba(255,220,100,${alpha})`; ctx.shadowBlur = 12;
   ctx.fillText('Survive the meteor storm!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 48);
   ctx.restore();
@@ -578,7 +586,7 @@ export function drawAsteroidWarning(ctx: CanvasRenderingContext2D, timer: number
 export function drawAsteroidHUD(ctx: CanvasRenderingContext2D, timer: number) {
   const secs = Math.ceil(timer / 1000);
   ctx.save();
-  ctx.font = 'bold 14px monospace'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 14px Arial, sans-serif'; ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
   ctx.fillStyle   = secs <= 5 ? '#ff4400' : '#ffaa44';
   ctx.shadowColor = secs <= 5 ? '#ff2200' : '#ff8800'; ctx.shadowBlur = 8;
   ctx.fillText(`☄ ${secs}s`, CANVAS_WIDTH - 14, 33);
@@ -590,10 +598,10 @@ export function drawBossWarning(ctx: CanvasRenderingContext2D, timer: number) {
   ctx.save();
   ctx.fillStyle = `rgba(180,0,0,${alpha * 0.25})`;
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-  ctx.font = 'bold 72px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 72px Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = `rgba(255,40,40,${alpha})`; ctx.shadowColor = '#ff0000'; ctx.shadowBlur = 30;
   ctx.fillText('⚠ WARNING ⚠', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 20);
-  ctx.font = 'bold 28px monospace';
+  ctx.font = 'bold 28px Arial, sans-serif';
   ctx.fillStyle = `rgba(255,160,40,${alpha})`; ctx.shadowBlur = 15;
   ctx.fillText('BOSS INCOMING', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 48);
   ctx.restore();
@@ -604,10 +612,10 @@ export function drawWaveClear(ctx: CanvasRenderingContext2D, wave: number, timer
   ctx.save();
   ctx.fillStyle = `rgba(0,20,60,${alpha * 0.5})`;
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-  ctx.font = 'bold 52px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 52px Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = `rgba(100,220,255,${alpha})`; ctx.shadowColor = '#00aaff'; ctx.shadowBlur = 20;
   ctx.fillText(`WAVE ${wave} CLEAR!`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 16);
-  ctx.font = '22px monospace';
+  ctx.font = '22px Arial, sans-serif';
   ctx.fillStyle = `rgba(200,240,255,${alpha})`; ctx.shadowBlur = 8;
   ctx.fillText('Incoming formation...', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 38);
   ctx.restore();
@@ -615,25 +623,25 @@ export function drawWaveClear(ctx: CanvasRenderingContext2D, wave: number, timer
 
 export function drawMenu(ctx: CanvasRenderingContext2D, highScore: number, tick: number) {
   ctx.save();
-  ctx.font = 'bold 64px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 64px Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = '#00ccff'; ctx.shadowColor = '#0088ff'; ctx.shadowBlur = 30;
   ctx.fillText('VOID STRIKER', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 140);
-  ctx.font = '18px monospace'; ctx.fillStyle = '#aaddff'; ctx.shadowBlur = 10;
+  ctx.font = '18px Arial, sans-serif'; ctx.fillStyle = '#aaddff'; ctx.shadowBlur = 10;
   ctx.fillText('Space Shooter', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 85);
 
-  ctx.shadowBlur = 0; ctx.font = '15px monospace'; ctx.fillStyle = '#88aacc';
+  ctx.shadowBlur = 0; ctx.font = '15px Arial, sans-serif'; ctx.fillStyle = '#88aacc';
   ['WASD / Arrow Keys — Move', 'SPACE — Fire', 'B — Bomb (massive area damage)', 'Collect drops to switch weapons']
     .forEach((line, i) => ctx.fillText(line, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 30 + i * 26));
 
   const blinkAlpha = (Math.sin(tick * 0.08) + 1) / 2;
   ctx.globalAlpha = 0.5 + blinkAlpha * 0.5;
-  ctx.font = 'bold 26px monospace'; ctx.fillStyle = '#ffdd00';
+  ctx.font = 'bold 26px Arial, sans-serif'; ctx.fillStyle = '#ffdd00';
   ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 18;
   ctx.fillText('PRESS ENTER OR CLICK TO START', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 105);
 
   ctx.globalAlpha = 1; ctx.shadowBlur = 0;
   if (highScore > 0) {
-    ctx.font = '14px monospace'; ctx.fillStyle = '#aaaacc';
+    ctx.font = '14px Arial, sans-serif'; ctx.fillStyle = '#aaaacc';
     ctx.fillText(`High Score: ${highScore.toLocaleString()}`, CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 145);
   }
   ctx.restore();
@@ -702,9 +710,9 @@ export function drawLevelWarp(
   ctx.save();
   ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.shadowColor = '#00aaff'; ctx.shadowBlur = 25; ctx.globalAlpha = textAlpha;
-  ctx.font = 'bold 58px monospace'; ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 58px Arial, sans-serif'; ctx.fillStyle = '#ffffff';
   ctx.fillText('LEVEL CLEAR!', cx, CANVAS_HEIGHT / 2 - 60);
-  ctx.font = 'bold 28px monospace'; ctx.fillStyle = '#88ddff'; ctx.shadowBlur = 12;
+  ctx.font = 'bold 28px Arial, sans-serif'; ctx.fillStyle = '#88ddff'; ctx.shadowBlur = 12;
   ctx.fillText(`Entering Level ${warpNextLevel}...`, cx, CANVAS_HEIGHT / 2);
   ctx.restore();
 
@@ -720,10 +728,10 @@ export function drawGameOver(ctx: CanvasRenderingContext2D, score: number, highS
   ctx.save();
   ctx.fillStyle = 'rgba(0,0,0,0.7)';
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-  ctx.font = 'bold 72px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 72px Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = '#ff2244'; ctx.shadowColor = '#ff0000'; ctx.shadowBlur = 35;
   ctx.fillText('GAME OVER', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 90);
-  ctx.shadowBlur = 0; ctx.font = '22px monospace'; ctx.fillStyle = '#ffffff';
+  ctx.shadowBlur = 0; ctx.font = '22px Arial, sans-serif'; ctx.fillStyle = '#ffffff';
   ctx.fillText(`Score: ${score.toLocaleString()}`,  CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 20);
   ctx.fillText(`Wave Reached: ${wave}`,              CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 16);
   if (score >= highScore && score > 0) {
@@ -735,7 +743,7 @@ export function drawGameOver(ctx: CanvasRenderingContext2D, score: number, highS
   }
   const blinkAlpha = (Math.sin(tick * 0.08) + 1) / 2;
   ctx.globalAlpha = 0.5 + blinkAlpha * 0.5;
-  ctx.font = 'bold 22px monospace'; ctx.fillStyle = '#ffdd00';
+  ctx.font = 'bold 22px Arial, sans-serif'; ctx.fillStyle = '#ffdd00';
   ctx.fillText('PRESS ENTER OR CLICK TO RETRY', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 100);
   ctx.restore();
 }
@@ -744,10 +752,10 @@ export function drawVictory(ctx: CanvasRenderingContext2D, score: number, highSc
   ctx.save();
   ctx.fillStyle = 'rgba(0,10,30,0.75)';
   ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-  ctx.font = 'bold 60px monospace'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = 'bold 60px Arial, sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
   ctx.fillStyle = '#ffdd00'; ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 35;
   ctx.fillText('VICTORY!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 90);
-  ctx.shadowBlur = 0; ctx.font = '22px monospace';
+  ctx.shadowBlur = 0; ctx.font = '22px Arial, sans-serif';
   ctx.fillStyle = '#aaffaa';
   ctx.fillText('All waves defeated!', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 30);
   ctx.fillStyle = '#ffffff';
@@ -758,7 +766,7 @@ export function drawVictory(ctx: CanvasRenderingContext2D, score: number, highSc
   }
   const blinkAlpha = (Math.sin(tick * 0.08) + 1) / 2;
   ctx.globalAlpha = 0.5 + blinkAlpha * 0.5;
-  ctx.font = 'bold 22px monospace'; ctx.fillStyle = '#00ccff';
+  ctx.font = 'bold 22px Arial, sans-serif'; ctx.fillStyle = '#00ccff';
   ctx.fillText('PRESS ENTER OR CLICK TO PLAY AGAIN', CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 + 100);
   ctx.restore();
 }

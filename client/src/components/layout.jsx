@@ -46,12 +46,13 @@ export function Layout({ children }) {
 
   const [hoveredIndex, setHoveredIndex] = useState(null);
   const [isOpen, setIsOpen] = React.useState(false);
-
+  const [location] = useLocation();
+  const isGamePage = location.startsWith('/game/');
 
   return (
     <div className="min-h-screen flex flex-col bg-background font-sans overflow-x-hidden">
       {/* Header */}
-      <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-background/80 backdrop-blur flex justify-center">
+      {!isGamePage && <header className="sticky top-0 z-50 w-full border-b border-white/5 bg-background/80 backdrop-blur flex justify-center">
         <div className="container flex h-16 items-center justify-between px-4 md:px-8">
           <div className="flex items-center gap-2">
             <Link href="/" className="group flex items-center gap-2 hover:text-primary">
@@ -138,17 +139,18 @@ export function Layout({ children }) {
             </Sheet>
           </div>
         </div>
-      </header>
+      </header>}
 
       {/* Main Content */}
-      <main className="flex-1 w-full">
+      {!isGamePage && <main className="flex-1 w-full">
         <div className="max-w-6xl mx-auto px-4 py-8 md:py-12">
           {children}
         </div>
       </main>
+      }
 
       {/* Footer */}
-      <footer className="border-t border-white/5 bg-background/50 py-8 flex justify-center">
+      {!isGamePage && <footer className="border-t border-white/5 bg-background/50 py-8 flex justify-center">
         <div className="container px-4 flex flex-col md:flex-row justify-between items-center gap-4">
           <div className="flex items-center gap-2">
             <div className="size-6 rounded bg-primary/20 flex items-center justify-center">
@@ -176,6 +178,12 @@ export function Layout({ children }) {
           </p>
         </div>
       </footer>
+      }
+
+      {/* Game Page Content */}
+      {isGamePage && <main style={{ flex: 1, width: '100%' }}>
+        {children}
+      </main>}
     </div>
   );
 }

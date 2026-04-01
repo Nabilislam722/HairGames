@@ -1,17 +1,21 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { gsap } from 'gsap';
+import { useWeb3 } from '../lib/web3';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from '../game/constants';
 import { createInitialState, startGame, tick } from '../game/engine';
 import LevelSelect from './Levelselect';
-import playerSrc     from '../assets/player.png';
-import playerLeftSrc from '../assets/player_left.png';
+import playerSrc      from '../assets/player.png';
+import playerLeftSrc  from '../assets/player_left.png';
 import playerRightSrc from '../assets/player_right.png';
-import enemy1Src     from '../assets/enemy1.png';
-import enemy2Src     from '../assets/enemy2.png';
-import bossSrc       from '../assets/boss.png';
-import boss2Src      from '../assets/boss2.png';   // ← new boss for level 2+
-import bulletSrc     from '../assets/bullet.png';
-import bgSrc         from '../assets/bg_stars.png';
-import bg2Src        from '../assets/bg2.png';
+import enemy1Src      from '../assets/enemy1.png';
+import enemy2Src      from '../assets/enemy2.png';
+import bossSrc        from '../assets/boss.png';
+import boss2Src       from '../assets/boss2.png';
+import bulletSrc      from '../assets/bullet.png';
+import bgSrc          from '../assets/bg_stars.png';
+import bg2Src         from '../assets/bg2.png';
+import bombSrc        from '../assets/koyala.png';
 
 import {
   updateBgScroll, drawBackground, drawPlayer, drawEnemy, drawBullet,
@@ -21,458 +25,560 @@ import {
 } from '../game/renderer';
 import { drawAsteroid } from '../game/asteroids';
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// ─── Constants ────────────────────────────────────────────────────────────────
+
+const WEN_PHRASES  = ['WEN', 'WEN!', 'W E N', '🚀 WEN', 'WEN 💥', 'ser WEN?', '‼ WEN ‼', 'SOON™'];
+const CONFETTI_CFG = Array.from({ length: 55 }, (_, i) => ({
+  id: i, left: (i * 137.5) % 100,
+  color: ['#00ccff','#ffdd00','#ff44ff','#44ff88','#ff6600','#ffffff'][i % 6],
+  size: 4 + (i % 4) * 3, delay: (i * 0.11) % 1.8, dur: 1.4 + (i % 5) * 1,
+}));
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function loadImage(src) {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.onload  = () => resolve(img);
-    img.onerror = () => resolve(img);
-    img.src = src;
-  });
+  return new Promise(r => { const img = new Image(); img.onload = img.onerror = () => r(img); img.src = src; });
 }
 
 function saveCompletedLevel(level) {
   try {
-    const existing = JSON.parse(localStorage.getItem('voidStrikerCompletedLevels') ?? '[]');
-    if (!existing.includes(level)) {
-      existing.push(level);
-      localStorage.setItem('voidStrikerCompletedLevels', JSON.stringify(existing));
-    }
+    const arr = JSON.parse(localStorage.getItem('voidStrikerCompletedLevels') ?? '[]');
+    if (!arr.includes(level)) { arr.push(level); localStorage.setItem('voidStrikerCompletedLevels', JSON.stringify(arr)); }
   } catch {}
+}
+
+// ─── Canvas WEN FX ────────────────────────────────────────────────────────────
+
+function spawnWenTexts(enemies) {
+  return enemies.filter(e => e.active).map((e, i) => ({
+    x: e.x + e.width / 2, y: e.y + e.height / 2,
+    vx: (Math.random() - 0.5) * 2.8, vy: -(2.8 + Math.random() * 3),
+    age: 0, maxAge: 1400 + Math.random() * 700, scale: 0,
+    rot: (Math.random() - 0.5) * 0.45, rotSpd: (Math.random() - 0.5) * 0.07,
+    colorBase: (i * 53) % 360, wobble: Math.random() * Math.PI * 2,
+    phrase: WEN_PHRASES[i % WEN_PHRASES.length],
+  }));
+}
+
+function tickWenTexts(list, dt) {
+  for (const w of list) {
+    w.age += dt; w.x += w.vx * (dt/16); w.y += w.vy * (dt/16);
+    w.vy *= 0.972; w.rot += w.rotSpd; w.wobble += dt * 0.005;
+    w.scale = w.age < 180 ? w.age / 180 : 1;
+  }
+  return list.filter(w => w.age < w.maxAge);
+}
+
+function paintWenTexts(ctx, list) {
+  for (const w of list) {
+    const p = w.age / w.maxAge, alpha = p > 0.65 ? 1 - (p - 0.65) / 0.35 : 1;
+    if (alpha <= 0 || w.scale < 0.02) continue;
+    const fs = Math.round((19 + Math.sin(w.wobble * 1.3) * 5) * w.scale);
+    if (fs < 2) continue;
+    ctx.save();
+    ctx.globalAlpha = Math.max(0, alpha);
+    ctx.translate(w.x + Math.sin(w.wobble) * 8, w.y);
+    ctx.rotate(w.rot); ctx.scale(w.scale, w.scale);
+    ctx.font = `bold ${fs}px 'Arial', sans-serif`; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.lineWidth = 4; ctx.strokeStyle = '#000'; ctx.strokeText(w.phrase, 0, 0);
+    const hue = (w.colorBase + w.age * 0.28) % 360;
+    ctx.fillStyle = `hsl(${hue},100%,62%)`; ctx.shadowColor = `hsl(${hue},100%,62%)`; ctx.shadowBlur = 13;
+    ctx.fillText(w.phrase, 0, 0); ctx.restore();
+  }
+}
+
+function paintShockwaves(ctx, list) {
+  for (const sw of list) {
+    const p = sw.age / sw.maxAge, r = 340 * p, a = (1 - p) * 0.55;
+    ctx.save();
+    ctx.beginPath(); ctx.arc(sw.x, sw.y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = `rgba(255,200,0,${a})`; ctx.lineWidth = 7 * (1 - p);
+    ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 22; ctx.stroke();
+    if (r > 30) {
+      ctx.beginPath(); ctx.arc(sw.x, sw.y, r * 0.55, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,80,0,${a*0.5})`; ctx.lineWidth = 3*(1-p); ctx.shadowBlur = 8; ctx.stroke();
+    }
+    ctx.restore();
+  }
+}
+
+function paintBigWen(ctx, age, maxAge) {
+  if (age >= maxAge) return;
+  const p = age / maxAge;
+  const alpha = p < 0.12 ? p / 0.12 : 1 - (p - 0.12) / 0.88;
+  const scale = p < 0.1  ? 0.3 + (p/0.1)*0.7 : 1 + (p-0.1)*0.22;
+  ctx.save();
+  ctx.globalAlpha = Math.max(0, alpha);
+  ctx.fillStyle = `rgba(255,80,0,${alpha*0.14})`; ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+  ctx.translate(CANVAS_WIDTH/2, CANVAS_HEIGHT/2); ctx.scale(scale, scale);
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  const hue = (age * 0.7) % 360;
+  ctx.font = 'bold 106px \'Arial\', sans-serif'; ctx.lineWidth = 9;
+  ctx.strokeStyle = '#00000099'; ctx.strokeText('WEN BOOM', 0, 0);
+  ctx.fillStyle = `hsl(${hue},100%,58%)`; ctx.shadowColor = `hsl(${hue},100%,58%)`; ctx.shadowBlur = 44;
+  ctx.fillText('WEN BOOM', 0, 0);
+  ctx.font = 'bold 25px \'Arial\', sans-serif'; ctx.shadowBlur = 16; ctx.fillStyle = '#fff';
+  ctx.strokeStyle = '#000'; ctx.lineWidth = 3;
+  ctx.strokeText('💥 TO THE MOON 💥', 0, 86); ctx.fillText('💥 TO THE MOON 💥', 0, 86);
+  ctx.restore();
+}
+
+// ─── Score Submit Toast ───────────────────────────────────────────────────────
+
+function ScoreToast({ status, score, error, onDismiss }) {
+  const cols = { pending:'#ffdd00', success:'#44ff88', error:'#ff5555' };
+  const msgs = {
+    pending: `⏳  Submitting ${score?.toLocaleString()} pts on-chain...`,
+    success: `✅  ${score?.toLocaleString()} pts recorded on-chain! 🚀`,
+    error:   `❌  ${error ?? 'Submission failed — score saved locally.'}`,
+  };
+  return (
+    <motion.div
+      initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }}
+      exit={{ opacity:0, y:16 }} transition={{ type:'spring', stiffness:280, damping:22 }}
+      style={{
+        position:'fixed', bottom:28, left:'50%', transform:'translateX(-50%)',
+        background:'linear-gradient(135deg,#001428ee,#000d22ee)',
+        border:`1.5px solid ${cols[status]}55`, borderRadius:14,
+        padding:'13px 22px', fontFamily:"'Arial', sans-serif",
+        color: cols[status], fontSize:13, letterSpacing:1,
+        boxShadow:`0 8px 32px #00000099, 0 0 18px ${cols[status]}22`,
+        zIndex:99999, display:'flex', alignItems:'center', gap:12,
+        maxWidth:440, pointerEvents: status!=='pending' ? 'all' : 'none',
+      }}
+    >
+      <span style={{ flex:1 }}>{msgs[status]}</span>
+      {status !== 'pending' && (
+        <motion.button whileTap={{ scale:0.88 }} onClick={onDismiss}
+          style={{ background:'transparent', border:'none', color:'#445566', cursor:'pointer', fontSize:16, padding:'0 4px' }}
+        >✕</motion.button>
+      )}
+    </motion.div>
+  );
 }
 
 // ─── Level Complete Overlay ───────────────────────────────────────────────────
 
-const CONFETTI_ITEMS = Array.from({ length: 60 }, (_, i) => ({
-  left:   (i * 137.5) % 100,
-  delay:  (i * 0.13) % 2,
-  dur:    1.5 + (i % 5) * 0.4,
-  color:  ['#00ccff','#ffdd00','#ff44ff','#44ff88','#ff6600'][i % 5],
-  size:   4 + (i % 4) * 3,
-}));
+function LevelCompleteOverlay({ level, score, isConnected, submitStatus, submitError, onContinue }) {
+  const refs = useRef([]);
 
-function LevelCompleteOverlay({ level, score, onContinue }) {
-  const [visible, setVisible] = useState(false);
-  useEffect(() => { const t = setTimeout(() => setVisible(true), 80); return () => clearTimeout(t); }, []);
+  useEffect(() => {
+    refs.current.forEach((el, i) => {
+      if (!el) return;
+      const c = CONFETTI_CFG[i];
+      gsap.set(el, { y:-30, opacity:1, rotation:0 });
+      gsap.to(el, { y: window.innerHeight+60, rotation:680+Math.random()*360, opacity:0,
+        duration:c.dur, delay:c.delay, ease:'power1.in', repeat:-1, repeatDelay:Math.random()*0.4 });
+    });
+    return () => gsap.killTweensOf(refs.current);
+  }, []);
+
+  const card  = { hidden:{ scale:0.35,opacity:0,y:30 }, visible:{ scale:1,opacity:1,y:0, transition:{ type:'spring',stiffness:260,damping:22,delay:0.05 } } };
+  const badge = { hidden:{ opacity:0,y:-12 }, visible:{ opacity:1,y:0,transition:{ delay:0.25,duration:0.4 } } };
+  const titleV= { hidden:{ opacity:0,scale:0.5 }, visible:{ opacity:1,scale:1,transition:{ type:'spring',stiffness:300,damping:18,delay:0.35 } } };
+  const starV = (i) => ({ hidden:{ scale:0,rotate:-40,opacity:0 }, visible:{ scale:1,rotate:0,opacity:1,transition:{ type:'spring',stiffness:400,damping:15,delay:0.5+i*0.14 } } });
+  const scoreV= { hidden:{ opacity:0,y:16 }, visible:{ opacity:1,y:0,transition:{ delay:0.85,duration:0.4 } } };
+  const btnV  = { hidden:{ opacity:0,y:14 }, visible:{ opacity:1,y:0,transition:{ delay:1.05,duration:0.38 } }, hover:{ scale:1.06,boxShadow:'0 0 28px #00ccffcc' }, tap:{ scale:0.96 } };
+
+  const statusColor = { pending:'#ffdd00', success:'#44ff88', error:'#ff5555' };
+  const statusMsg   = submitStatus === 'pending' ? '⏳ Submitting score on-chain...'
+    : submitStatus === 'success'                 ? '✅ Score recorded on-chain!'
+    : submitStatus === 'error'                   ? `❌ ${submitError ?? 'Submission failed'}`
+    : isConnected                                ? '🔗 Preparing submission...'
+    : '⚠ Connect wallet to submit score';
+
+  const isPending = submitStatus === 'pending';
 
   return (
-    <div style={{
-      position: 'absolute', inset: 0, zIndex: 100,
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      background: 'rgba(0,5,20,0.88)',
-      fontFamily: "'Courier New', monospace",
-      transition: 'opacity 0.4s',
-      opacity: visible ? 1 : 0,
-    }}>
-      <style>{`
-        @keyframes confettiFall {
-          0%   { transform: translateY(-20px) rotate(0deg);   opacity: 1; }
-          100% { transform: translateY(110vh) rotate(720deg); opacity: 0; }
-        }
-        @keyframes scaleIn {
-          from { transform: scale(0.4); opacity: 0; }
-          to   { transform: scale(1);   opacity: 1; }
-        }
-        @keyframes starPop {
-          0%   { transform: scale(0) rotate(-30deg); opacity:0; }
-          60%  { transform: scale(1.3) rotate(10deg); opacity:1; }
-          100% { transform: scale(1) rotate(0deg); opacity:1; }
-        }
-        @keyframes shimmer {
-          0%,100% { text-shadow: 0 0 20px #ffdd00, 0 0 40px #ff8800; }
-          50%      { text-shadow: 0 0 40px #ffdd00, 0 0 80px #ff8800, 0 0 120px #ffaa00; }
-        }
-        @keyframes btnPulse {
-          0%,100% { box-shadow: 0 0 12px #00ccff88; }
-          50%      { box-shadow: 0 0 28px #00ccffcc, 0 0 50px #00ccff44; }
-        }
-      `}</style>
-
-      {/* Confetti */}
-      {CONFETTI_ITEMS.map((c, i) => (
-        <div key={i} style={{
-          position: 'absolute', top: 0,
-          left: `${c.left}%`,
-          width: c.size, height: c.size,
-          background: c.color,
-          borderRadius: i % 3 === 0 ? '50%' : 2,
-          animation: `confettiFall ${c.dur}s ${c.delay}s ease-in infinite`,
-          pointerEvents: 'none',
-        }} />
+    <motion.div
+      initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }} transition={{ duration:0.3 }}
+      style={{ position:'absolute',inset:0,zIndex:100,display:'flex',alignItems:'center',
+        justifyContent:'center',background:'rgba(0,5,20,0.88)',fontFamily:"'Arial', sans-serif" }}
+    >
+      {CONFETTI_CFG.map((c,i) => (
+        <div key={c.id} ref={el => refs.current[i]=el}
+          style={{ position:'absolute',top:0,left:`${c.left}%`,width:c.size,height:c.size,
+            background:c.color,borderRadius:i%3===0?'50%':2,pointerEvents:'none' }} />
       ))}
 
-      {/* Card */}
-      <div style={{
-        background: 'linear-gradient(160deg, #001428 0%, #000d22 100%)',
-        border: '2px solid #00ccff66',
-        borderRadius: 20,
-        padding: '48px 56px',
-        textAlign: 'center',
-        animation: 'scaleIn 0.4s cubic-bezier(.2,.8,.3,1) forwards',
-        boxShadow: '0 20px 80px #00000088, inset 0 0 40px #00ccff08',
-        minWidth: 380,
-      }}>
-        {/* Badge */}
-        <div style={{
-          display: 'inline-block',
-          background: 'linear-gradient(135deg, #00aaff, #0044ff)',
-          color: '#ffffff', fontSize: 10, fontWeight: 'bold',
-          letterSpacing: 3, padding: '4px 16px', borderRadius: 20,
-          marginBottom: 20,
-        }}>LEVEL {level} COMPLETE</div>
+      <motion.div variants={card} initial="hidden" animate="visible"
+        style={{ background:'linear-gradient(160deg,#001428 0%,#000d22 100%)', border:'2px solid #00ccff55',
+          borderRadius:22,padding:'46px 54px',textAlign:'center',
+          boxShadow:'0 24px 90px #00000099,inset 0 0 44px #00ccff07',minWidth:370,position:'relative' }}
+      >
+        <motion.div variants={badge} initial="hidden" animate="visible"
+          style={{ display:'inline-block',background:'linear-gradient(135deg,#00aaff,#0044ff)',
+            color:'#fff',fontSize:10,fontWeight:'bold',letterSpacing:3,
+            padding:'4px 16px',borderRadius:20,marginBottom:18 }}
+        >LEVEL {level} COMPLETE</motion.div>
 
-        {/* Title */}
-        <div style={{
-          color: '#ffdd00', fontSize: 40, fontWeight: 'bold',
-          letterSpacing: 4, marginBottom: 8,
-          animation: 'shimmer 2s ease-in-out infinite',
-        }}>VICTORY!</div>
+        <motion.div variants={titleV} initial="hidden" animate="visible"
+          style={{ color:'#ffdd00',fontSize:40,fontWeight:'bold',letterSpacing:4,marginBottom:8 }}
+        >
+          <motion.span animate={{ textShadow:[
+            '0 0 20px #ffdd00,0 0 40px #ff8800','0 0 44px #ffdd00,0 0 88px #ff8800,0 0 130px #ffaa00',
+            '0 0 20px #ffdd00,0 0 40px #ff8800'] }}
+            transition={{ duration:2,repeat:Infinity,ease:'easeInOut' }}
+          >VICTORY!</motion.span>
+        </motion.div>
 
-        {/* Stars */}
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginBottom: 28 }}>
-          {[0, 1, 2].map(i => (
-            <span key={i} style={{
-              fontSize: 36,
-              animation: `starPop 0.5s ${0.3 + i * 0.15}s cubic-bezier(.2,.8,.3,1) both`,
-              filter: 'drop-shadow(0 0 8px #ffdd00)',
-            }}>⭐</span>
+        <div style={{ display:'flex',justifyContent:'center',gap:12,marginBottom:26 }}>
+          {[0,1,2].map(i => (
+            <motion.span key={i} variants={starV(i)} initial="hidden" animate="visible"
+              style={{ fontSize:36,filter:'drop-shadow(0 0 8px #ffdd00)' }}
+            >⭐</motion.span>
           ))}
         </div>
 
-        {/* Score */}
-        <div style={{ color: '#aabbcc', fontSize: 13, letterSpacing: 2, marginBottom: 6 }}>
-          SCORE EARNED
-        </div>
-        <div style={{
-          color: '#ffffff', fontSize: 28, fontWeight: 'bold',
-          letterSpacing: 2, marginBottom: 32,
-        }}>
-          {score.toLocaleString()}
-        </div>
+        <motion.div variants={scoreV} initial="hidden" animate="visible">
+          <div style={{ color:'#aabbcc',fontSize:13,letterSpacing:2,marginBottom:5 }}>SCORE EARNED</div>
+          <div style={{ color:'#fff',fontSize:28,fontWeight:'bold',letterSpacing:2,marginBottom:14 }}>
+            {score?.toLocaleString()}
+          </div>
+          {/* Web3 submission status */}
+          <motion.div
+            initial={{ opacity:0,y:6 }} animate={{ opacity:1,y:0 }} transition={{ delay:1.1,duration:0.4 }}
+            style={{ fontSize:11,letterSpacing:1,marginBottom:20,
+              color: statusColor[submitStatus] ?? '#556677',
+              textShadow: submitStatus ? `0 0 10px ${statusColor[submitStatus]}55` : 'none' }}
+          >{statusMsg}</motion.div>
+        </motion.div>
 
-        {/* Continue button */}
-        <button
-          onClick={onContinue}
-          style={{
-            background: 'transparent',
-            border: '2px solid #00ccff',
-            color: '#00ccff',
-            fontFamily: "'Courier New', monospace",
-            fontSize: 14, fontWeight: 'bold',
-            letterSpacing: 4, padding: '14px 36px',
-            borderRadius: 8, cursor: 'pointer',
-            animation: 'btnPulse 2s ease-in-out infinite',
-            transition: 'background 0.2s, color 0.2s',
-          }}
-          onMouseEnter={e => { e.target.style.background = '#00ccff'; e.target.style.color = '#000011'; }}
-          onMouseLeave={e => { e.target.style.background = 'transparent'; e.target.style.color = '#00ccff'; }}
-        >
-          ▶ RETURN TO MAP
-        </button>
-      </div>
-    </div>
+        <motion.button variants={btnV} initial="hidden" animate="visible"
+          whileHover={isPending ? {} : "hover"} whileTap={isPending ? {} : "tap"}
+          onClick={() => !isPending && onContinue()}
+          style={{ background:'transparent',border:`2px solid ${isPending?'#224433':'#00ccff'}`,
+            color:isPending?'#336655':'#00ccff',fontFamily:"'Arial', sans-serif",
+            fontSize:14,fontWeight:'bold',letterSpacing:4,padding:'13px 34px',borderRadius:8,
+            cursor:isPending?'not-allowed':'pointer',boxShadow:`0 0 12px ${isPending?'#00443322':'#00ccff66'}`,
+            opacity:isPending?0.55:1 }}
+        >{isPending ? '⏳ PLEASE WAIT...' : '▶ RETURN TO MAP'}</motion.button>
+      </motion.div>
+    </motion.div>
   );
 }
 
-// ─── Main wrapper — controls which screen is visible ─────────────────────────
+// ─── Loading / ESC ────────────────────────────────────────────────────────────
+
+function LoadingScreen() {
+  return (
+    <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+      style={{ position:'absolute',inset:0,display:'flex',flexDirection:'column',
+        alignItems:'center',justifyContent:'center',gap:20 }}
+    >
+      <motion.div animate={{ opacity:[0.4,1,0.4] }} transition={{ duration:1.2,repeat:Infinity,ease:'easeInOut' }}
+        style={{ color:'#00ccff',fontFamily:'\'Arial\', sans-serif',fontSize:22,letterSpacing:4 }}
+      >LOADING</motion.div>
+      <div style={{ display:'flex',gap:8 }}>
+        {[0,1,2,3,4].map(i => (
+          <motion.div key={i} animate={{ scaleY:[0.3,1,0.3],opacity:[0.3,1,0.3] }}
+            transition={{ duration:0.9,repeat:Infinity,delay:i*0.14,ease:'easeInOut' }}
+            style={{ width:6,height:24,background:'#00ccff',borderRadius:3 }} />
+        ))}
+      </div>
+    </motion.div>
+  );
+}
+
+function EscHint() {
+  return (
+    <motion.div initial={{ opacity:0,y:-6 }} animate={{ opacity:1,y:0 }} transition={{ delay:0.6,duration:0.5 }}
+      style={{ position:'absolute',top:10,right:14,color:'#334455',
+        fontSize:11,fontFamily:'\'Arial\', sans-serif',letterSpacing:1,pointerEvents:'none' }}
+    >ESC — level map</motion.div>
+  );
+}
+
+// ─── Main wrapper ─────────────────────────────────────────────────────────────
 
 export default function GameWrapper() {
-  const [screen,     setScreen]     = useState('levelSelect'); // 'levelSelect' | 'game'
+  const [screen,     setScreen]     = useState('levelSelect');
   const [startLevel, setStartLevel] = useState(1);
 
-  const handleSelectLevel = (level) => {
-    setStartLevel(level);
-    setScreen('game');
-  };
-
-  const handleBackToMap = () => {
-    setScreen('levelSelect');
-  };
-
-  if (screen === 'levelSelect') {
-    return <LevelSelect onSelectLevel={handleSelectLevel} />;
-  }
-
   return (
-    <GameCanvas
-      key={startLevel}              // remount canvas when level changes
-      startLevel={startLevel}
-      onBackToMap={handleBackToMap}
-    />
+    <AnimatePresence mode="wait">
+      {screen === 'levelSelect' ? (
+        <motion.div key="ls" initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+          transition={{ duration:0.25 }} style={{ position:'fixed',inset:0 }}>
+          <LevelSelect onSelectLevel={(l) => { setStartLevel(l); setScreen('game'); }} />
+        </motion.div>
+      ) : (
+        <motion.div key={`g${startLevel}`} initial={{ opacity:0 }} animate={{ opacity:1 }} exit={{ opacity:0 }}
+          transition={{ duration:0.2 }} style={{ position:'fixed',inset:0 }}>
+          <GameCanvas startLevel={startLevel} onBackToMap={() => setScreen('levelSelect')} />
+        </motion.div>
+      )}
+    </AnimatePresence>
   );
 }
 
-// ─── Canvas game ─────────────────────────────────────────────────────────────
+// ─── Canvas game ──────────────────────────────────────────────────────────────
 
 function GameCanvas({ startLevel, onBackToMap }) {
-  const canvasRef      = useRef(null);
-  const stateRef       = useRef(createInitialState());
-  const inputRef       = useRef({
-    left: false, right: false, up: false, down: false,
-    fire: false, switchWeapon: false, bomb: false,
-  });
-  const assetsRef      = useRef(null);
-  const tickRef        = useRef(0);
-  const lastTimeRef    = useRef(0);
-  const rafRef         = useRef(0);
-  const bombCoolRef    = useRef(false);
-  const startLevelRef  = useRef(startLevel);
-  const [loaded, setLoaded]                       = useState(false);
+  const { address, isConnected, submitGuess } = useWeb3();
+
+  const canvasRef     = useRef(null);
+  const stateRef      = useRef(createInitialState());
+  const inputRef      = useRef({ left:false,right:false,up:false,down:false,fire:false,switchWeapon:false,bomb:false });
+  const assetsRef     = useRef(null);
+  const tickRef       = useRef(0);
+  const lastTimeRef   = useRef(0);
+  const rafRef        = useRef(0);
+  const bombCoolRef   = useRef(false);
+  const startLevelRef = useRef(startLevel);
+  const wenTextsRef   = useRef([]);
+  const shockwavesRef = useRef([]);
+  const bigWenRef     = useRef({ active:false, age:0, maxAge:1100 });
+
+  const [loaded,            setLoaded]            = useState(false);
   const [showLevelComplete, setShowLevelComplete] = useState(false);
   const [completedLevel,    setCompletedLevel]    = useState(null);
   const [completedScore,    setCompletedScore]    = useState(0);
+  const [submitStatus,      setSubmitStatus]      = useState(null);  // null|pending|success|error
+  const [submitError,       setSubmitError]       = useState(null);
+  const [toast,             setToast]             = useState(null);
 
   // Load assets
   useEffect(() => {
     Promise.all([
-      loadImage(playerSrc),
-      loadImage(playerLeftSrc),
-      loadImage(playerRightSrc),
-      loadImage(enemy1Src),
-      loadImage(enemy2Src),
-      loadImage(bossSrc),
-      loadImage(boss2Src),
-      loadImage(bulletSrc),
-      loadImage(bgSrc),
-      loadImage(bg2Src),
-    ]).then(([player, playerLeft, playerRight, enemy1, enemy2, boss, boss2, bullet, bg, bg2]) => {
-      assetsRef.current = { player, playerLeft, playerRight, enemy1, enemy2, boss, boss2, bullet, bg, bg2 };
+      loadImage(playerSrc), loadImage(playerLeftSrc), loadImage(playerRightSrc),
+      loadImage(enemy1Src), loadImage(enemy2Src), loadImage(bossSrc), loadImage(boss2Src),
+      loadImage(bulletSrc), loadImage(bgSrc), loadImage(bg2Src), loadImage(bombSrc),
+    ]).then(([player,playerLeft,playerRight,enemy1,enemy2,boss,boss2,bullet,bg,bg2,bomb]) => {
+      assetsRef.current = { player,playerLeft,playerRight,enemy1,enemy2,boss,boss2,bullet,bg,bg2,bomb };
       setLoaded(true);
     });
   }, []);
 
   const startOrRestartGame = useCallback(() => {
     stateRef.current = startGame(stateRef.current, startLevelRef.current);
-    setShowLevelComplete(false);
+    wenTextsRef.current = []; shockwavesRef.current = [];
+    bigWenRef.current = { active:false,age:0,maxAge:1100 };
+    setShowLevelComplete(false); setSubmitStatus(null); setSubmitError(null);
   }, []);
+
+  // ── On-chain score submission ────────────────────────────────────────────────
+  const submitScore = useCallback(async (score) => {
+    if (!isConnected || !address) return;
+    const points = Math.min(Math.round(score), 65535);   // uint16 max
+    setSubmitStatus('pending'); setSubmitError(null);
+    try {
+      const receipt = await submitGuess(points);
+      if (receipt.status !== 'success') throw new Error('Transaction reverted');
+
+      const res = await fetch('https://api.hairtoken.xyz/api/points/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ wallet: address, txHash: receipt.transactionHash, score: points }),
+      });
+      if (!res.ok) throw new Error((await res.json())?.error ?? 'API error');
+
+      setSubmitStatus('success');
+    } catch (err) {
+      console.error('Score submit:', err);
+      setSubmitStatus('error');
+      setSubmitError(err?.shortMessage ?? err?.message ?? 'Unknown error');
+    }
+  }, [isConnected, address, submitGuess]);
+
+  // Kick off submission when overlay appears
+  useEffect(() => {
+    if (showLevelComplete && completedScore > 0) submitScore(completedScore);
+  }, [showLevelComplete]);
+
+  // Return to map — carry status as toast if needed
+  const handleReturnToMap = useCallback(() => {
+    setShowLevelComplete(false);
+    if (submitStatus && submitStatus !== 'success') {
+      setToast({ status: submitStatus, score: completedScore, error: submitError });
+    }
+    onBackToMap();
+  }, [onBackToMap, submitStatus, completedScore, submitError]);
 
   // Input handling
   useEffect(() => {
-    const keyMap = {
-      ArrowLeft: 'left',  a: 'left',  A: 'left',
-      ArrowRight: 'right', d: 'right', D: 'right',
-      ArrowUp:   'up',    w: 'up',    W: 'up',
-      ArrowDown: 'down',  s: 'down',  S: 'down',
-      ' ': 'fire',
-    };
+    const keyMap = { ArrowLeft:'left',a:'left',A:'left',ArrowRight:'right',d:'right',D:'right',
+      ArrowUp:'up',w:'up',W:'up',ArrowDown:'down',s:'down',S:'down',' ':'fire' };
 
     const onKeyDown = (e) => {
       const phase = stateRef.current.phase;
-      if (e.key === 'Enter') {
-        if (phase === 'menu' || phase === 'gameOver' || phase === 'victory') startOrRestartGame();
-        return;
-      }
-      if (e.key === 'Escape') { onBackToMap(); return; }
-      if (e.key === 'b' || e.key === 'B') {
-        if (!bombCoolRef.current) {
-          inputRef.current.bomb = true;
-          bombCoolRef.current   = true;
-          setTimeout(() => { inputRef.current.bomb = false; bombCoolRef.current = false; }, 300);
+      if (e.key==='Enter' && ['menu','gameOver','victory'].includes(phase)) { startOrRestartGame(); return; }
+      if (e.key==='Escape') { handleReturnToMap(); return; }
+      if ((e.key==='b'||e.key==='B') && !bombCoolRef.current) {
+        const st = stateRef.current;
+        if (st.player?.bombCount > 0) {
+          wenTextsRef.current.push(...spawnWenTexts(st.enemies ?? []));
+          const px = st.player.x+st.player.width/2, py = st.player.y+st.player.height/2;
+          shockwavesRef.current.push({ x:px,y:py,age:0,maxAge:520 });
+          bigWenRef.current = { active:true,age:0,maxAge:1100 };
         }
+        inputRef.current.bomb = true; bombCoolRef.current = true;
+        setTimeout(() => { inputRef.current.bomb=false; bombCoolRef.current=false; }, 300);
         return;
       }
-      const mapped = keyMap[e.key];
-      if (mapped) { e.preventDefault(); inputRef.current[mapped] = true; }
+      const m = keyMap[e.key]; if (m) { e.preventDefault(); inputRef.current[m]=true; }
     };
+    const onKeyUp = (e) => { const m=keyMap[e.key]; if(m) inputRef.current[m]=false; };
+    window.addEventListener('keydown',onKeyDown); window.addEventListener('keyup',onKeyUp);
+    return () => { window.removeEventListener('keydown',onKeyDown); window.removeEventListener('keyup',onKeyUp); };
+  }, [startOrRestartGame, handleReturnToMap]);
 
-    const onKeyUp = (e) => {
-      const mapped = keyMap[e.key];
-      if (mapped) inputRef.current[mapped] = false;
-    };
-
-    window.addEventListener('keydown', onKeyDown);
-    window.addEventListener('keyup',   onKeyUp);
-    return () => {
-      window.removeEventListener('keydown', onKeyDown);
-      window.removeEventListener('keyup',   onKeyUp);
-    };
-  }, [startOrRestartGame, onBackToMap]);
-
-  // Start game at the chosen level once assets are loaded
-  useEffect(() => {
-    if (!loaded) return;
-    startOrRestartGame();
-  }, [loaded]);   // only on first load
+  useEffect(() => { if (loaded) startOrRestartGame(); }, [loaded]);
 
   // Game loop
   useEffect(() => {
     if (!loaded) return;
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+    const canvas = canvasRef.current; if (!canvas) return;
     const ctx = canvas.getContext('2d');
 
     const loop = (time) => {
-      const dt = Math.min(lastTimeRef.current ? time - lastTimeRef.current : 16, 50);
-      lastTimeRef.current = time;
-      tickRef.current += 1;
+      const dt = Math.min(lastTimeRef.current ? time-lastTimeRef.current : 16, 50);
+      lastTimeRef.current = time; tickRef.current += 1;
+      const state = stateRef.current, input = inputRef.current;
 
-      const state = stateRef.current;
-      const input = inputRef.current;
-
-      const inactive = ['menu','gameOver','victory','levelComplete'];
-      if (!inactive.includes(state.phase)) {
-        stateRef.current = tick(state, input, dt);
-        input.switchWeapon = false;
-        input.bomb = false;
+      if (!['menu','gameOver','victory','levelComplete'].includes(state.phase)) {
+        stateRef.current = tick(state,input,dt); input.switchWeapon=false; input.bomb=false;
       }
 
-      const s      = stateRef.current;
-      const assets = assetsRef.current;
-      const t      = tickRef.current;
+      const s=stateRef.current, assets=assetsRef.current, t=tickRef.current;
 
-      // ── Detect level complete (boss killed) ──────────────────
-      if (s.phase === 'levelComplete' && !showLevelComplete) {
-        saveCompletedLevel(s.level);
-        setCompletedLevel(s.level);
-        setCompletedScore(s.score);
-        setShowLevelComplete(true);
+      if (s.phase==='levelComplete' && !showLevelComplete) {
+        saveCompletedLevel(s.level); setCompletedLevel(s.level);
+        setCompletedScore(s.score); setShowLevelComplete(true);
       }
 
-      // ── Swap player sprite by direction ─────────────────────
-      const basePlayer = assets.player;
-      if (input.left && !input.right)       assets.player = assets.playerLeft;
-      else if (input.right && !input.left)  assets.player = assets.playerRight;
-
-      // ── Swap boss sprite by level ────────────────────────────
-      const baseBoss = assets.boss;
-      if (s.level >= 2) assets.boss = assets.boss2;
-
-      updateBgScroll(dt);
-      ctx.save();
-      if (s.screenShake > 0) {
-        ctx.translate(
-          (Math.random() - 0.5) * s.screenShake,
-          (Math.random() - 0.5) * s.screenShake,
-        );
+      wenTextsRef.current = tickWenTexts(wenTextsRef.current, dt);
+      shockwavesRef.current = shockwavesRef.current.map(sw=>{sw.age+=dt;return sw;}).filter(sw=>sw.age<sw.maxAge);
+      if (bigWenRef.current.active) {
+        bigWenRef.current.age += dt;
+        if (bigWenRef.current.age >= bigWenRef.current.maxAge) bigWenRef.current.active=false;
       }
 
-      drawBackground(ctx, assets);
+      const basePlayer=assets.player, baseBoss=assets.boss;
+      if      (input.left&&!input.right)  assets.player=assets.playerLeft;
+      else if (input.right&&!input.left)  assets.player=assets.playerRight;
+      if (s.level>=2) assets.boss=assets.boss2;
 
-      if (s.phase !== 'menu') {
-        for (const p  of s.particles)   if (p.active)  drawParticle(ctx, p);
-        for (const pu of s.powerUps)    if (pu.active) drawPowerUp(ctx, pu, t);
-        for (const a  of s.asteroids)   if (a.active)  drawAsteroid(ctx, a);
-        for (const e  of s.enemies)     if (e.active)  drawEnemy(ctx, e, assets, t);
-        for (const b  of s.enemyBullets) if (b.active) drawEnemyBullet(ctx, b);
-        for (const b  of s.bullets)     if (b.active)  drawBullet(ctx, b, t);
-        drawPlayer(ctx, s.player, assets, t);
-        drawHUD(ctx, s, t);
-        if (s.phase === 'asteroids') drawAsteroidHUD(ctx, s.asteroidTimer);
+      updateBgScroll(dt); ctx.save();
+      if (s.screenShake>0) ctx.translate((Math.random()-0.5)*s.screenShake,(Math.random()-0.5)*s.screenShake);
+
+      drawBackground(ctx,assets);
+      if (s.phase!=='menu') {
+        for(const p of s.particles)    if(p.active)  drawParticle(ctx,p);
+        for(const pu of s.powerUps)    if(pu.active) drawPowerUp(ctx,pu,t);
+        for(const a of s.asteroids)    if(a.active)  drawAsteroid(ctx,a);
+        for(const e of s.enemies)      if(e.active)  drawEnemy(ctx,e,assets,t);
+        for(const b of s.enemyBullets) if(b.active)  drawEnemyBullet(ctx,b);
+        for(const b of s.bullets)      if(b.active)  drawBullet(ctx,b,t);
+        drawPlayer(ctx,s.player,assets,t);
+        drawHUD(ctx,s,t,assets);
+        if(s.phase==='asteroids') drawAsteroidHUD(ctx,s.asteroidTimer);
+        paintShockwaves(ctx,shockwavesRef.current);
+        paintWenTexts(ctx,wenTextsRef.current);
+        if(bigWenRef.current.active) paintBigWen(ctx,bigWenRef.current.age,bigWenRef.current.maxAge);
       }
 
-      if      (s.phase === 'menu')            drawMenu(ctx, s.highScore, t);
-      else if (s.phase === 'asteroidWarning') drawAsteroidWarning(ctx, s.asteroidWarningTimer);
-      else if (s.phase === 'bossWarning')     drawBossWarning(ctx, s.bossWarningTimer);
-      else if (s.phase === 'waveClear')       drawWaveClear(ctx, s.wave, s.waveClearTimer);
-      else if (s.phase === 'levelWarp')       drawLevelWarp(ctx, s.player, assets, s.warpTimer, s.warpNextLevel, t);
-      else if (s.phase === 'gameOver')        drawGameOver(ctx, s.score, s.highScore, s.wave, t);
-      else if (s.phase === 'victory')         drawVictory(ctx, s.score, s.highScore, t);
+      if      (s.phase==='menu')            drawMenu(ctx,s.highScore,t);
+      else if (s.phase==='asteroidWarning') drawAsteroidWarning(ctx,s.asteroidWarningTimer);
+      else if (s.phase==='bossWarning')     drawBossWarning(ctx,s.bossWarningTimer);
+      else if (s.phase==='waveClear')       drawWaveClear(ctx,s.wave,s.waveClearTimer);
+      else if (s.phase==='levelWarp')       drawLevelWarp(ctx,s.player,assets,s.warpTimer,s.warpNextLevel,t);
+      else if (s.phase==='gameOver')        drawGameOver(ctx,s.score,s.highScore,s.wave,t);
+      else if (s.phase==='victory')         drawVictory(ctx,s.score,s.highScore,t);
 
-      ctx.restore();
-
-      // Restore swapped sprites
-      assets.player = basePlayer;
-      assets.boss   = baseBoss;
-
-      rafRef.current = requestAnimationFrame(loop);
+      ctx.restore(); assets.player=basePlayer; assets.boss=baseBoss;
+      rafRef.current=requestAnimationFrame(loop);
     };
 
-    rafRef.current = requestAnimationFrame(loop);
+    rafRef.current=requestAnimationFrame(loop);
     return () => cancelAnimationFrame(rafRef.current);
   }, [loaded]);
 
   const handleCanvasClick = useCallback(() => {
-    const phase = stateRef.current.phase;
-    if (phase === 'menu' || phase === 'gameOver' || phase === 'victory') startOrRestartGame();
+    if(['menu','gameOver','victory'].includes(stateRef.current.phase)) startOrRestartGame();
   }, [startOrRestartGame]);
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0,
-      background: '#000011',
-      display: 'flex', alignItems: 'center', justifyContent: 'center',
-      zIndex: 9999,
-    }}>
-      {!loaded && (
-        <div style={{ color: '#00ccff', fontFamily: 'monospace', fontSize: 24 }}>
-          Loading...
-        </div>
-      )}
+    <div style={{ position:'fixed',inset:0,background:'#000011',display:'flex',alignItems:'center',justifyContent:'center' }}>
+      <AnimatePresence>{!loaded && <LoadingScreen key="ld" />}</AnimatePresence>
+      <AnimatePresence>{loaded  && <EscHint key="esc" />}</AnimatePresence>
 
-      {/* ESC hint */}
-      {loaded && (
-        <div style={{
-          position: 'absolute', top: 10, right: 14,
-          color: '#334455', fontSize: 11, fontFamily: 'monospace',
-          letterSpacing: 1, pointerEvents: 'none',
-        }}>ESC — level map</div>
-      )}
+      <div style={{ position:'relative' }}>
+        <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} onClick={handleCanvasClick}
+          style={{ display:loaded?'block':'none', imageRendering:'auto', cursor:'crosshair',
+            width:'min(100vw,calc(100vh*(900/650)))', height:'min(100vh,calc(100vw*(650/900)))' }} />
 
-      <div style={{ position: 'relative' }}>
-        <canvas
-          ref={canvasRef}
-          width={CANVAS_WIDTH}
-          height={CANVAS_HEIGHT}
-          onClick={handleCanvasClick}
-          style={{
-            display: loaded ? 'block' : 'none',
-            imageRendering: 'auto',
-            cursor: 'crosshair',
-            width:  'min(100vw, calc(100vh * (900 / 650)))',
-            height: 'min(100vh, calc(100vw * (650 / 900)))',
-          }}
-        />
-
-        {/* Level complete overlay rendered over canvas */}
-        {showLevelComplete && (
-          <LevelCompleteOverlay
-            level={completedLevel}
-            score={completedScore}
-            onContinue={onBackToMap}
-          />
-        )}
+        <AnimatePresence>
+          {showLevelComplete && (
+            <LevelCompleteOverlay key="lc"
+              level={completedLevel} score={completedScore}
+              isConnected={isConnected} submitStatus={submitStatus} submitError={submitError}
+              onContinue={handleReturnToMap}
+            />
+          )}
+        </AnimatePresence>
       </div>
 
-      <MobileControls inputRef={inputRef} onStart={startOrRestartGame} stateRef={stateRef} />
+      {/* Persistent toast for submission that outlasts the overlay */}
+      <AnimatePresence>
+        {toast && (
+          <ScoreToast key="toast"
+            status={submitStatus ?? toast.status} score={toast.score} error={submitError ?? toast.error}
+            onDismiss={() => setToast(null)}
+          />
+        )}
+      </AnimatePresence>
+
+      <MobileControls inputRef={inputRef} stateRef={stateRef}
+        wenTextsRef={wenTextsRef} shockwavesRef={shockwavesRef} bigWenRef={bigWenRef} />
     </div>
   );
 }
 
-// ─── Mobile controls ─────────────────────────────────────────────────────────
+// ─── Mobile controls ──────────────────────────────────────────────────────────
 
-function MobileControls({ inputRef, onStart, stateRef }) {
-  const isMobile = 'ontouchstart' in window;
-  if (!isMobile) return null;
-
-  const press = (key, val) => { inputRef.current[key] = val; };
-
-  const btnStyle = (color = '#ffffff22') => ({
-    background: color,
-    border: '2px solid #ffffff44',
-    borderRadius: 12, color: '#ffffff',
-    fontFamily: 'monospace', fontSize: 20,
-    padding: '16px 20px',
-    touchAction: 'none', userSelect: 'none', WebkitUserSelect: 'none',
-  });
-
+function MobileControls({ inputRef, stateRef, wenTextsRef, shockwavesRef, bigWenRef }) {
+  if (!('ontouchstart' in window)) return null;
+  const press = (k, v) => { inputRef.current[k]=v; };
+  const dpad = (label, key) => (
+    <motion.button whileTap={{ scale:0.82,opacity:0.7 }}
+      style={{ background:'#ffffff18',border:'2px solid #ffffff33',borderRadius:12,color:'#fff',
+        fontFamily:'\'Arial\', sans-serif',fontSize:20,padding:'16px 20px',touchAction:'none',
+        userSelect:'none',WebkitUserSelect:'none',cursor:'pointer' }}
+      onTouchStart={()=>press(key,true)} onTouchEnd={()=>press(key,false)}
+    >{label}</motion.button>
+  );
+  const fireWen = () => {
+    const st = stateRef.current;
+    if (st?.player?.bombCount>0) {
+      wenTextsRef.current.push(...spawnWenTexts(st.enemies??[]));
+      const px=st.player.x+st.player.width/2, py=st.player.y+st.player.height/2;
+      shockwavesRef.current.push({x:px,y:py,age:0,maxAge:520});
+      bigWenRef.current={active:true,age:0,maxAge:1100};
+    }
+    press('bomb',true); setTimeout(()=>press('bomb',false),300);
+  };
   return (
-    <div style={{
-      position: 'fixed', bottom: 20, left: 0, right: 0,
-      display: 'flex', justifyContent: 'space-between',
-      padding: '0 20px', pointerEvents: 'none', zIndex: 10000,
-    }}>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3,56px)', gridTemplateRows: 'repeat(2,56px)', gap: 6, pointerEvents: 'all' }}>
-        <div />
-        <button style={btnStyle()} onTouchStart={() => press('up',    true)} onTouchEnd={() => press('up',    false)}>▲</button>
-        <div />
-        <button style={btnStyle()} onTouchStart={() => press('left',  true)} onTouchEnd={() => press('left',  false)}>◀</button>
-        <button style={btnStyle()} onTouchStart={() => press('down',  true)} onTouchEnd={() => press('down',  false)}>▼</button>
-        <button style={btnStyle()} onTouchStart={() => press('right', true)} onTouchEnd={() => press('right', false)}>▶</button>
+    <div style={{ position:'fixed',bottom:20,left:0,right:0,display:'flex',
+      justifyContent:'space-between',padding:'0 20px',pointerEvents:'none',zIndex:10000 }}>
+      <div style={{ display:'grid',gridTemplateColumns:'repeat(3,56px)',gridTemplateRows:'repeat(2,56px)',gap:6,pointerEvents:'all' }}>
+        <div/>{dpad('▲','up')}<div/>
+        {dpad('◀','left')}{dpad('▼','down')}{dpad('▶','right')}
       </div>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, pointerEvents: 'all' }}>
-        <button style={btnStyle('#ff440066')} onTouchStart={() => press('fire', true)}  onTouchEnd={() => press('fire', false)}>🔥</button>
-        <button style={btnStyle('#ff660044')} onTouchStart={() => { press('bomb', true); setTimeout(() => press('bomb', false), 300); }}>💣</button>
+      <div style={{ display:'flex',flexDirection:'column',gap:10,pointerEvents:'all' }}>
+        <motion.button whileTap={{ scale:0.8 }}
+          style={{ background:'#ff440066',border:'2px solid #ff4400aa',borderRadius:12,color:'#fff',
+            fontFamily:'\'Arial\', sans-serif',fontSize:20,padding:'16px 20px',touchAction:'none',
+            userSelect:'none',WebkitUserSelect:'none',cursor:'pointer' }}
+          onTouchStart={()=>press('fire',true)} onTouchEnd={()=>press('fire',false)}
+        >🔥</motion.button>
+        <motion.button whileTap={{ scale:0.75 }} transition={{ duration:0.3 }} onTouchStart={fireWen}
+          style={{ background:'linear-gradient(135deg,#ff4400aa,#ff0099aa)',border:'2px solid #ffaa00',
+            borderRadius:12,color:'#ffdd00',fontFamily:'\'Arial\', sans-serif',fontSize:11,fontWeight:'bold',
+            letterSpacing:1,padding:'10px 12px',lineHeight:1.4,touchAction:'none',
+            userSelect:'none',WebkitUserSelect:'none',cursor:'pointer',
+            textShadow:'0 0 8px #ff4400',boxShadow:'0 0 14px #ff440055' }}
+        >💥{'\n'}WEN</motion.button>
       </div>
     </div>
   );
