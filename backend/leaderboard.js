@@ -4,10 +4,8 @@ import Leaderboard from "./models/Leaderboard.js";
 import cors from "cors";
 import { ethers } from "ethers";
 
-
 const provider = new ethers.JsonRpcProvider("https://rpc.hemi.network/rpc");
 const smart_contract = "0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5";
-
 
 const app = express();
 
@@ -40,7 +38,7 @@ app.post('/api/points/add', async (req, res) => {
     if (alreadyProcessed) {
       return res.status(400).json({ error: 'Transaction already processed' });
     }
-
+    
     const receipt = await provider.getTransactionReceipt(txHash);
     if (!receipt || receipt.status !== 1) {
       return res.status(400).json({ error: 'Transaction failed or not found' });
