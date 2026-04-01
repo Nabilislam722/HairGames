@@ -43,13 +43,13 @@ const QUESTS = [
 const GAMES = [
   {
     id: "space_shooter",
-    title: "Space Shooter",
+    title: "Void Striker",
     description: "Destroy everything comes on your way",
     entryFee: `${GAME_COST_ETH} ETH (~$0.02)`,
     image: "bg-gradient-to-br from-emerald-600 to-teal-600",
     icon: RocketIcon,
     status: "active",
-    difficulty: "Speed",
+    difficulty: "HARD",
   },
   {
     id: "find-number",
