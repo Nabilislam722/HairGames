@@ -425,7 +425,6 @@ function GameCanvas({ startLevel, onBackToMap }) {
 
   useEffect(() => { if (loaded) startOrRestartGame(); }, [loaded]);
 
-  // Game loop
   useEffect(() => {
     if (!loaded) return;
     const canvas = canvasRef.current; if (!canvas) return;
