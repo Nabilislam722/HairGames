@@ -170,7 +170,7 @@ export default function Dashboard() {
   useEffect(() => {
     if (!address) return;
 
-    fetch(`http://127.0.0.1:5000/api/points/get?wallet=${address}`)
+    fetch(`https://api.hairtoken.xyz/api/points/get?wallet=${address}`)
       .then(res => res.json())
       .then(data => {
         setPoints(data.points);
@@ -192,12 +192,12 @@ export default function Dashboard() {
     setStep(quest.id, "verifying");
 
     try {
-      const response = await fetch(`http://127.0.0.1:5000/api/points/claim`, {
+      const response = await fetch(`https://api.hairtoken.xyz/api/points/claim`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           wallet: address,
-          task: 'twitter_follow'
+          task: quest.id
         })
       });
 

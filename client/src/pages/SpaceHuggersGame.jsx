@@ -81,7 +81,7 @@ export default function SpaceHuggersGame() {
           console.log(`Submitting stats for Level ${level} to the secure backend authority...`);
 
           // ◄ Modified: Passing raw metrics instead of frontend computed scores
-          const verifyRes = await fetch('http://127.0.0.1:5000/api/points/verify', {
+          const verifyRes = await fetch('https://api.hairtoken.xyz/api/points/verify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -111,7 +111,7 @@ export default function SpaceHuggersGame() {
 
           setActiveTxHash(txHash);
 
-          const res = await fetch('http://127.0.0.1:5000/api/points/add', {
+          const res = await fetch('https://api.hairtoken.xyz/api/points/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
