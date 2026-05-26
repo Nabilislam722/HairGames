@@ -2,7 +2,7 @@ import { Link } from "wouter";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { RocketIcon, BrainCircuit, Search, Lock, CheckCircle2 } from "lucide-react";
+import { RocketIcon, BrainCircuit, Search, Lock, CheckCircle2, Gamepad2 } from "lucide-react";
 import { GAME_COST_ETH } from "@/lib/web3";
 import { useBalance, useAccount } from "wagmi";
 import { useState, useEffect } from "react";
@@ -39,24 +39,34 @@ const QUESTS = [
   },
 ];
 
-//Game definitions
+// ─── Game Definitions ────────────────────────────────────────────────────────
 const GAMES = [
   {
     id: "space_shooter",
     title: "Void Striker",
-    description: "Destroy everything comes on your way",
-    entryFee: `${GAME_COST_ETH} ETH (~$0.02)`,
-    image: "bg-gradient-to-br from-emerald-600 to-teal-600",
-    icon: RocketIcon,
+    description: "Classic 8-bit block mechanics meets high-speed cyber logic.",
+    entryFee: `${GAME_COST_ETH} ETH (~$0.05)`,
+    image: "bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.3)_2px,rgba(0,0,0,0.3)_4px)] bg-indigo-900",
+    icon: Gamepad2,
     status: "active",
     difficulty: "HARD",
+  },
+  {
+    id: "space_huggers",
+    title: "Space Huggers",
+    description: "Complete the Mission",
+    entryFee: `0.00001 ETH (~$0.02)`,
+    image: "bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.3)_2px,rgba(0,0,0,0.3)_4px)] bg-purple-900",
+    icon: Search,
+    status: "active",
+    difficulty: "Medium",
   },
   {
     id: "find-number",
     title: "Find The Number",
     description: "Use logic to find the hidden 4-digit number within 15 attempts.",
     entryFee: `${GAME_COST_ETH} ETH (~$0.05)`,
-    image: "bg-gradient-to-br from-indigo-600 to-purple-600",
+    image: "bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.3)_2px,rgba(0,0,0,0.3)_4px)] bg-purple-900",
     icon: Search,
     status: "closed",
     difficulty: "Logic",
@@ -66,14 +76,14 @@ const GAMES = [
     title: "Memory Match",
     description: "Memorize and match complex neural patterns.",
     entryFee: `${GAME_COST_ETH} ETH (~$0.05)`,
-    image: "bg-gradient-to-br from-rose-600 to-orange-600",
+    image: "bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.3)_2px,rgba(0,0,0,0.3)_4px)] bg-rose-900",
     icon: BrainCircuit,
     status: "closed",
     difficulty: "Memory",
   },
 ];
 
-// ─── QuestCard component ──────────────────────────────────────────────────────
+// ─── QuestCard Component
 function QuestCard({ quest, step, onAction, onClaim }) {
   return (
     <Card className="bg-card border-white/10 overflow-hidden relative group transition-all duration-300">
@@ -156,6 +166,7 @@ export default function Dashboard() {
 
   const setStep = (id, step) =>
     setQuestSteps((prev) => ({ ...prev, [id]: step }));
+
   useEffect(() => {
     if (!address) return;
 
@@ -280,11 +291,11 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* Games Grid */}
+      {/* Games Grid - Retro Styled */}
       <div className="flex flex-col gap-6">
-        <h2 className="text-2xl font-display font-bold text-white flex items-center gap-2">
-          Logic Puzzles{" "}
-          <span className="text-xs font-sans font-normal text-muted-foreground px-2 py-1 rounded bg-white/5 border border-white/10">
+        <h2 className="text-2xl font-display font-bold text-white flex items-center gap-2 uppercase tracking-wider font-mono">
+          Arcade Games{" "}
+          <span className="text-xs font-sans font-normal text-primary px-2 py-1 rounded-sm bg-primary/10 border border-primary/30 animate-pulse">
             Season 1
           </span>
         </h2>
@@ -293,57 +304,58 @@ export default function Dashboard() {
           {GAMES.map((game) => (
             <Card
               key={game.id}
-              className="bg-card border-white/10 overflow-hidden group hover:border-primary/50 transition-all duration-300 hover:shadow-[0_0_30px_rgba(123,104,238,0.15)]"
+              className="bg-[#0a0a16] border-2 border-primary/30 rounded-none overflow-hidden group hover:border-primary transition-all duration-300 shadow-[4px_4px_0px_rgba(255,255,255,0.05)] hover:shadow-[0_0_25px_rgba(234,88,12,0.3)]"
             >
-              <div className={`h-32 ${game.image} relative flex items-center justify-center`}>
-                <div className="absolute inset-0 bg-black/20 group-hover:bg-transparent transition-colors" />
-                <game.icon className="h-12 w-12 text-white drop-shadow-lg transform group-hover:scale-110 transition-transform duration-300" />
+              <div className={`h-36 ${game.image} relative flex items-center justify-center border-b-2 border-primary/30`}>
+                <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors duration-500" />
+                <game.icon className="h-14 w-14 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)] transform group-hover:scale-110 transition-transform duration-300" />
                 {game.status === "coming-soon" && (
                   <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center">
-                    <Badge variant="secondary" className="font-mono">Coming Soon</Badge>
+                    <Badge variant="secondary" className="font-mono uppercase tracking-widest border-primary/50 text-primary">Coming Soon</Badge>
                   </div>
                 )}
               </div>
 
-              <CardHeader>
+              <CardHeader className="pt-6">
                 <div className="flex justify-between items-start">
-                  <CardTitle className={`text-xl font-bold ${game.status === "coming-soon" ? "blur" : ""}`}>
+                  <CardTitle className={`text-xl font-bold font-mono tracking-tight text-white ${game.status === "coming-soon" ? "blur" : ""}`}>
                     {game.title}
                   </CardTitle>
-                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 rounded-none font-mono text-xs">
                     {game.difficulty}
                   </Badge>
                 </div>
-                <CardDescription className={`line-clamp-2 h-10 ${game.status === "coming-soon" ? "blur" : ""}`}>
+                <CardDescription className={`line-clamp-2 h-10 mt-2 font-mono text-xs text-muted-foreground ${game.status === "coming-soon" ? "blur" : ""}`}>
                   {game.description}
                 </CardDescription>
               </CardHeader>
 
               <CardContent>
-                <div className="flex items-center justify-between text-sm p-2 rounded bg-background/50 border border-white/5">
-                  <span className="text-muted-foreground">Entry Fee</span>
-                  <span className="font-mono text-white">{game.entryFee}</span>
+                <div className="flex items-center justify-between text-xs p-3 rounded-none bg-black/50 border border-white/10 font-mono">
+                  <span className="text-muted-foreground uppercase tracking-wider">Insert Coin</span>
+                  <span className="text-white drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]">{game.entryFee}</span>
                 </div>
               </CardContent>
 
-              <CardFooter>
+              <CardFooter className="pb-6">
                 {game.status === "active" ? (
                   <Link
                     href={`/game/${game.id}`}
                     className={buttonVariants({
                       variant: "outline",
                       className:
-                        "w-full font-display font-bold " +
-                        "bg-white text-orange-600 border-orange-600 " +
-                        "hover:bg-orange-600 hover:text-white " +
-                        "transition-colors duration-300",
+                        "w-full font-mono font-bold uppercase tracking-wider rounded-none " +
+                        "bg-transparent text-orange-500 border-2 border-orange-500/50 " +
+                        "hover:bg-orange-500 hover:text-white hover:border-orange-500 " +
+                        "hover:shadow-[0_0_15px_rgba(234,88,12,0.5)] " +
+                        "transition-all duration-300",
                     })}
                   >
-                    Play Game
+                    Start Game
                   </Link>
                 ) : (
-                  <Button disabled className="w-full opacity-50 cursor-not-allowed">
-                    {game.status === "closed" ? "Closed" : "Coming Soon"}
+                  <Button disabled className="w-full opacity-50 cursor-not-allowed rounded-none font-mono uppercase tracking-wider border-2 border-dashed border-white/20 bg-transparent">
+                    {game.status === "closed" ? "Offline" : "Loading..."}
                   </Button>
                 )}
               </CardFooter>

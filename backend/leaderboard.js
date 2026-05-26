@@ -3,14 +3,39 @@ import mongoose from "mongoose";
 import Leaderboard from "./models/Leaderboard.js";
 import cors from "cors";
 import { ethers } from "ethers";
+import dotenv from "dotenv";
 
-const provider = new ethers.JsonRpcProvider("https://rpc.hemi.network/rpc");
-const smart_contract = "0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5";
+dotenv.config();
+
+const hemiRpcUrl = "https://rpc.hemi.network/rpc";
+const provider = new ethers.JsonRpcProvider(hemiRpcUrl);
+
+const ECOSYSTEM_CONTRACTS = {
+  "space_huggers": "0x895087a3b85C38DAB365495A5E1EA518459A9750",
+  "default_legacy": "0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5"
+};
+
+const SPACE_HUGGERS_ABI = [
+  {
+    "inputs": [
+      { "internalType": "address", "name": "", "type": "address" }
+    ],
+    "name": "userNonces",
+    "outputs": [
+      { "internalType": "uint256", "name": "", "type": "uint256" }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  }
+];
+
+const SERVER_PRIVATE_KEY = process.env.SERVER_PRIVATE_KEY;
+const SUBMIT_LEVEL_SCORE_SELECTOR = "0xaba261ec";
 
 const app = express();
 
 app.use(cors({
-  origin: "https://game.hairtoken.xyz",
+  origin: "http://127.0.0.1:5173",
   methods: ['GET', 'POST'],
   credentials: true
 }));
@@ -21,8 +46,73 @@ mongoose.connect("mongodb://127.0.0.1:27017/hp-db")
   .then(() => console.log("MongoDB Connected"))
   .catch(err => console.error(err));
 
+/**
+ * Utility function to securely hash and sign score parameters
+ */
+async function generateCryptoSignature(level, kills, points, nonce, walletAddress, targetAddress, chainId) {
+  if (!SERVER_PRIVATE_KEY) {
+    throw new Error("Server authentication private key environment variable missing");
+  }
+
+  const serverWallet = new ethers.Wallet(SERVER_PRIVATE_KEY);
+
+  // Aligns perfectly with Solidity: msg.sender, level, kills, points, nonce, address(this), block.chainid
+  const messageHash = ethers.solidityPackedKeccak256(
+    ["address", "uint256", "uint256", "uint256", "uint256", "address", "uint256"],
+    [walletAddress, BigInt(level), BigInt(kills), BigInt(points), BigInt(nonce), targetAddress, BigInt(chainId)]
+  );
+
+  const signature = await serverWallet.signMessage(ethers.getBytes(messageHash));
+  return signature;
+}
+
+app.post('/api/points/verify', async (req, res) => {
+  try {
+    const { wallet, level = 1, kills = 0, livesRemaining = 0, gameId = "default_legacy" } = req.body;
+
+    if (!wallet) throw new Error("Wallet address is required");
+
+    let points = 0;
+    if (gameId === "space_huggers") {
+      points = Math.min(Math.round((Number(kills) * 100) + (Number(livesRemaining) * 50)), 65535) || 0;
+    } else {
+      points = Number(req.body.score) || 0;
+    }
+
+    const targetAddress = ECOSYSTEM_CONTRACTS[gameId] || ECOSYSTEM_CONTRACTS["default_legacy"];
+    const gameContract = new ethers.Contract(targetAddress, SPACE_HUGGERS_ABI, provider);
+
+    const nonce = await gameContract.userNonces(wallet);
+
+    // 1. Fetch current network data to extract the live chainid
+    const network = await provider.getNetwork();
+    const chainId = network.chainId;
+
+    // 2. Supply target address and chainId into signature generation
+    const signature = await generateCryptoSignature(
+      Number(level),
+      Number(kills),
+      points,
+      nonce,
+      wallet,
+      targetAddress,
+      chainId
+    );
+
+    res.json({
+      nonce: nonce.toString(),
+      signature: signature,
+      points: points
+    });
+
+  } catch (error) {
+    console.error("Verification Endpoint error execution loop:", error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 app.post('/api/points/add', async (req, res) => {
-  const { wallet, txHash, score } = req.body;
+  const { wallet, txHash, score, gameId } = req.body;
 
   try {
     if (!wallet || !txHash) {
@@ -38,13 +128,14 @@ app.post('/api/points/add', async (req, res) => {
     if (alreadyProcessed) {
       return res.status(400).json({ error: 'Transaction already processed' });
     }
-    
-    const receipt = await provider.getTransactionReceipt(txHash);
+
+    const receipt = await provider.waitForTransaction(txHash);
     if (!receipt || receipt.status !== 1) {
       return res.status(400).json({ error: 'Transaction failed or not found' });
     }
 
-    if (receipt.to.toLowerCase() !== smart_contract.toLowerCase()) {
+    const targetAddress = ECOSYSTEM_CONTRACTS[gameId] || ECOSYSTEM_CONTRACTS["default_legacy"];
+    if (receipt.to.toLowerCase() !== targetAddress.toLowerCase()) {
       return res.status(400).json({ error: 'Transaction not sent to game contract' });
     }
 
@@ -54,14 +145,38 @@ app.post('/api/points/add', async (req, res) => {
     }
 
     const inputData = tx.data;
-
-    if (!inputData.startsWith(SUBMIT_GUESS_SELECTOR)) {
-      return res.status(400).json({ error: 'Transaction did not call submitGuess' });
-    }
-
+    let onChainScore;
     const abiCoder = new ethers.AbiCoder();
-    const [decodedScore] = abiCoder.decode(['uint16'], '0x' + inputData.slice(10));
-    const onChainScore   = Number(decodedScore);
+
+    // ── ROUTE THE DECODING BASED ON THE GAME ──
+    if (gameId === "space_huggers") {
+
+      if (!inputData.startsWith(SUBMIT_LEVEL_SCORE_SELECTOR)) {
+        return res.status(400).json({ error: 'Transaction did not call submitLevelScore' });
+      }
+      const decodedData = abiCoder.decode(
+        ['uint256', 'uint256', 'uint256', 'uint256', 'bytes'],
+        '0x' + inputData.slice(10)
+      );
+      onChainScore = Number(decodedData[2]);
+
+    }
+    else {
+      const SELECTOR_16 = ethers.id("submitGuess(uint16)").slice(0, 10);
+      const SELECTOR_256 = ethers.id("submitGuess(uint256)").slice(0, 10);
+
+      if (inputData.startsWith(SELECTOR_16)) {
+        const decodedData = abiCoder.decode(['uint16'], '0x' + inputData.slice(10));
+        onChainScore = Number(decodedData[0]);
+      }
+      else if (inputData.startsWith(SELECTOR_256)) {
+        const decodedData = abiCoder.decode(['uint256'], '0x' + inputData.slice(10));
+        onChainScore = Number(decodedData[0]);
+      }
+      else {
+        return res.status(400).json({ error: 'Transaction did not call submitGuess' });
+      }
+    }
 
     if (onChainScore !== pointsRequested) {
       return res.status(400).json({
@@ -76,15 +191,15 @@ app.post('/api/points/add', async (req, res) => {
       {
         $inc: { points: pointsToAdd },
         $push: { processedHashes: txHash },
-        $set:  { lastUpdated: new Date() },
+        $set: { lastUpdated: new Date() },
       },
       { upsert: true, new: true }
     );
 
     return res.json({
-      wallet:    user.wallet,
-      points:    user.points,
-      added:     pointsToAdd,
+      wallet: user.wallet,
+      points: user.points,
+      added: pointsToAdd,
       txHash,
     });
 
@@ -104,11 +219,8 @@ app.get("/api/leaderboard", async (req, res) => {
 });
 
 app.get("/api/points/get", async (req, res) => {
-
   const { wallet } = req.query;
   if (!wallet) {
-
-
     return res.status(400).json({ error: "Wallet required" });
   }
 

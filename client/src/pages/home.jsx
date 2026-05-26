@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowRight, Zap, Shield, Coins, Trophy } from "lucide-react";
 import { motion } from "framer-motion";
 import BackgroundImg from '../assets/bg.jpg';
-import "../index.css"
-import IntroVideo from "../components/ui/introvideo";
+import "../index.css";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 
 export default function Home() {
@@ -15,7 +14,6 @@ export default function Home() {
 
   return (
     <div className="flex flex-col gap-16 ">
-      <IntroVideo />
       {/* Hero Section */}
       <section className="relative py-20 md:py-32 overflow-hidden rounded-3xl border border-white/10">
         {/* Background Image with Overlay */}
@@ -101,7 +99,7 @@ export default function Home() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-8 container mx-auto px-4">
         {[
           { label: "Total Fee Collected", value: "0.01 ETH", icon: Coins },
-          { label: "Active Players", value: "77", icon: Trophy },
+          { label: "Active Players", value: "29", icon: Trophy },
           { label: "Soon?", value: "??", icon: Zap },
         ].map((stat, i) => (
           <motion.div

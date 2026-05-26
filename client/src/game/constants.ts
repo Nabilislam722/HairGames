@@ -48,7 +48,7 @@ export const WEAPONS: Record<string, WeaponConfig> = {
     type: 'lightning',
     name: 'Lightning',
     level: 1,
-    fireRate: 380,
+    fireRate: 100,
     damage: 20,
     color: '#aaddff',
     description: 'Chain lightning bolt',
@@ -61,7 +61,7 @@ export const ENEMY_CONFIGS = {
     height: 50,
     maxHp: 30,
     speed: 1,
-    scoreValue: 10,
+    scoreValue: 2,
     shootInterval: 5000,
   },
   fighter: {
@@ -69,7 +69,7 @@ export const ENEMY_CONFIGS = {
     height: 60,
     maxHp: 60,
     speed: 2,
-    scoreValue: 20,
+    scoreValue: 4,
     shootInterval: 4000,
   },
   boss: {
@@ -77,7 +77,7 @@ export const ENEMY_CONFIGS = {
     height: 200,
     maxHp: 2000,
     speed: 1,
-    scoreValue: 500,
+    scoreValue: 200,
     shootInterval: 1200,
   },
 };

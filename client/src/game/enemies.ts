@@ -194,7 +194,7 @@ export function spawnBoss(level: number): Enemy {
     width: cfg.width, height: cfg.height,
     hp: bossHp, maxHp: bossHp,
     speed: cfg.speed,
-    scoreValue: cfg.scoreValue + (level - 1) * 1500,
+    scoreValue: cfg.scoreValue + (level - 1) * 200,
     movePattern: 'boss',
     shootTimer: 0,
     shootInterval: Math.max(800, cfg.shootInterval - (level - 1) * 80),
