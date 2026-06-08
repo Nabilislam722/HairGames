@@ -1,8 +1,9 @@
 import { Link } from "wouter";
-import { Button, buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { RocketIcon, BrainCircuit, Search, Lock, CheckCircle2, Gamepad2 } from "lucide-react";
+import {
+  RocketIcon, BrainCircuit, Search,
+  CheckCircle2, Play, Wallet, Gamepad2,
+  Star, Zap, Trophy, ExternalLink, Loader2, TrendingUp
+} from "lucide-react";
 import { GAME_COST_ETH } from "@/lib/web3";
 import { useBalance, useAccount } from "wagmi";
 import { useState, useEffect } from "react";
@@ -11,35 +12,40 @@ import X_logo from "../assets/x.jpg";
 import Guild_logo from "../assets/hair.png";
 import { motion } from "framer-motion";
 import "../index.css";
+import "../components/dashboard.css";
 
+/* ─── Font Injection ─────────────────────────────────────────────────────── */
+if (!document.getElementById("dashboard-fonts")) {
+  const l = document.createElement("link");
+  l.id = "dashboard-fonts"; l.rel = "stylesheet";
+  l.href = "https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Space+Mono:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap";
+  document.head.appendChild(l);
+}
+
+/* ─── Data ───────────────────────────────────────────────────────────────── */
 const QUESTS = [
   {
     id: "twitter_follow",
-    title: "Follow us on X",
+    title: "Follow on X",
     description: "Join the community to unlock +100 PTS.",
     points: 100,
     actionLabel: "Follow @HairMaxToken",
     url: "https://x.com/intent/follow?screen_name=HairMaxToken",
-    iconBg: "bg-sky-500/10 border-sky-500/20",
-    icon: (
-      <img src={X_logo} alt="X" className="w-full h-full object-cover" />
-    ),
+    accent: "#38bdf8",
+    icon: <img src={X_logo} alt="X" style={{ width:"100%",height:"100%",objectFit:"cover" }} />,
   },
   {
     id: "hairy_person",
     title: "Join Guild HAIR",
-    description: "Become a Hairy Person to unlock +200 PTS.",
+    description: "Become a Hairy Person and unlock +200 PTS.",
     points: 200,
     actionLabel: "Join Guild",
     url: "https://guild.xyz/hair",
-    iconBg: "bg-white/90 border-white/20",
-    icon: (
-      <img src={Guild_logo} alt="Guild" className="w-full h-full object-cover" />
-    ),
+    accent: "#a78bfa",
+    icon: <img src={Guild_logo} alt="Guild" style={{ width:"100%",height:"100%",objectFit:"cover" }} />,
   },
 ];
 
-// ─── Game Definitions ────────────────────────────────────────────────────────
 const GAMES = [
   {
     id: "space_shooter",
@@ -62,13 +68,13 @@ const GAMES = [
     difficulty: "Medium",
   },
   {
-    id: "find-number",
-    title: "Find The Number",
+    id: "race_car",
+    title: "NEED FOR HAIR",
     description: "Use logic to find the hidden 4-digit number within 15 attempts.",
     entryFee: `${GAME_COST_ETH} ETH (~$0.05)`,
     image: "bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.3)_2px,rgba(0,0,0,0.3)_4px)] bg-purple-900",
     icon: Search,
-    status: "closed",
+    status: "active",
     difficulty: "Logic",
   },
   {
@@ -83,286 +89,248 @@ const GAMES = [
   },
 ];
 
-// ─── QuestCard Component
-function QuestCard({ quest, step, onAction, onClaim }) {
+/* ─── QuestRow ───────────────────────────────────────────────────────────── */
+function QuestRow({ quest, step, onAction, onClaim }) {
   return (
-    <Card className="bg-card border-white/10 overflow-hidden relative group transition-all duration-300">
-      <CardContent className="p-5 relative z-10">
-        <div className="flex flex-col md:flex-row items-center justify-between gap-6">
-
-          {/* Icon + info */}
-          <div className="flex items-center gap-5">
-            <div className={`size-14 rounded-2xl ${quest.iconBg} border flex items-center justify-center overflow-hidden`}>
-              {quest.icon}
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white">{quest.title}</h3>
-              <p className="text-sm text-muted-foreground">{quest.description}</p>
-            </div>
-          </div>
-
-          {/* Reward + CTA */}
-          <div className="flex items-center gap-4 w-full md:w-auto">
-            <div className="flex flex-col items-end mr-2">
-              <span className="text-xs font-mono text-primary uppercase font-bold">Reward</span>
-              <span className="text-xl font-bold text-white">+{quest.points} PTS</span>
-            </div>
-
-            {step === "idle" && (
-              <Button
-                onClick={onAction}
-                className="group relative overflow-hidden bg-white text-black hover:bg-orange-600 hover:text-white p-4 rounded-xl font-bold cursor-pointer transition-all duration-300"
-              >
-                <span className="absolute top-0 left-13 w-60 h-16 -mt-1 -ml-12 transition-all duration-500 ease-out transform -rotate-45 -translate-x-full bg-white opacity-40 group-hover:translate-x-full" />
-                <span className="relative z-10">{quest.actionLabel}</span>
-              </Button>
-            )}
-
-            {step === "following" && (
-              <Button disabled className="bg-white/10 text-white/50 px-8 py-6 rounded-xl font-bold border border-white/5">
-                Wait 10s...
-              </Button>
-            )}
-
-            {(step === "claimable" || step === "verifying") && (
-              <Button
-                onClick={onClaim}
-                disabled={step === "verifying"}
-                className="group relative overflow-hidden bg-orange-600 text-white hover:bg-orange-500 px-8 py-6 rounded-xl font-bold animate-pulse cursor-pointer disabled:animate-none disabled:opacity-60"
-              >
-                <span className="absolute top-0 left-14 w-60 h-16 -mt-1 -ml-12 transition-all duration-500 ease-out transform -rotate-45 -translate-x-full bg-white opacity-30 group-hover:translate-x-full" />
-                <span className="relative z-10">
-                  {step === "verifying" ? "Verifying..." : "Verify & Claim"}
-                </span>
-              </Button>
-            )}
-
-            {step === "completed" && (
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                className="flex items-center gap-2 text-emerald-400 font-bold px-4 py-2 bg-emerald-400/10 rounded-lg border border-emerald-400/20"
-              >
-                <CheckCircle2 className="h-6 w-6" /> Claimed
-              </motion.div>
-            )}
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+    <motion.div
+      className={`q-row${step==="completed"?" done":""}`}
+      style={{ "--q-accent": quest.accent }}
+      initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
+    >
+      <div className="q-ico">{quest.icon}</div>
+      <div className="q-txt">
+        <p className="q-name">{quest.title}</p>
+        <p className="q-desc">{quest.description}</p>
+      </div>
+      <div className="q-pts">
+        <small>Reward</small>
+        +{quest.points} PTS
+      </div>
+      <div style={{ flexShrink:0 }}>
+        {step === "idle" && (
+          <button onClick={onAction} className="btn btn-o">
+            {quest.actionLabel} <ExternalLink size={11} />
+          </button>
+        )}
+        {step === "following" && (
+          <button className="btn btn-ghost" disabled style={{ opacity:.55 }}>
+            <Loader2 size={12} className="spin" /> Waiting…
+          </button>
+        )}
+        {(step === "claimable" || step === "verifying") && (
+          <button onClick={onClaim} disabled={step==="verifying"} className="btn btn-g">
+            {step === "verifying"
+              ? <><Loader2 size={12} className="spin" /> Verifying…</>
+              : <><Zap size={11} /> Claim Reward</>}
+          </button>
+        )}
+        {step === "completed" && (
+          <motion.div initial={{ scale:.85 }} animate={{ scale:1 }} className="btn btn-claimed">
+            <CheckCircle2 size={13} /> Claimed
+          </motion.div>
+        )}
+      </div>
+    </motion.div>
   );
 }
 
-// ─── Dashboard ────────────────────────────────────────────────────────────────
+/* ─── GameCard ───────────────────────────────────────────────────────────── */
+function GameCard({ game, index }) {
+  const BIcon = game.icon;
+  const live = game.status === "active";
+
+  const inner = (
+    <motion.div
+      className={`g-card${live?" live":""}`}
+      initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }}
+      transition={{ delay: index * 0.07 }}
+    >
+      <div className="g-banner" style={{ background: game.bannerBg, backgroundSize:"cover", backgroundPosition:"center" }}>
+        <div className="g-banner-grad" />
+        <span className="g-diff">{game.difficulty}</span>
+        {!live && (
+          <div className="g-closed-overlay">
+            <span style={{ fontFamily:"var(--font-m)", fontSize:"9px", letterSpacing:"0.15em", textTransform:"uppercase",
+              padding:"4px 12px", borderRadius:"6px", background:"rgba(8,11,18,.6)", color:"rgba(238,242,255,.3)",
+              border:"1px solid rgba(255,255,255,.08)" }}>Closed</span>
+          </div>
+        )}
+        <div className="g-logo" style={{ background: game.logoBg }}>
+          <BIcon size={19} color={game.logoColor} />
+        </div>
+      </div>
+
+      <div className="g-body">
+        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+          <h3 className="g-title">{game.title}</h3>
+          <span className="g-cat" style={{ color: game.accent, background:`${game.accent}12`, border:`1px solid ${game.accent}28` }}>
+            {game.category}
+          </span>
+        </div>
+        <p className="g-desc">{game.description}</p>
+        <div className="g-fee">
+          <span className="g-fee-lbl">Entry Fee</span>
+          <span className="g-fee-val">{game.entryFee}</span>
+        </div>
+        {live ? (
+          <button className="btn btn-g" style={{ width:"100%", padding:"12px", borderRadius:"10px" }}>
+            <Play size={13} fill="currentColor" stroke="none" /> Play Now
+          </button>
+        ) : (
+          <button className="btn btn-off" style={{ width:"100%", padding:"12px", borderRadius:"10px" }} disabled>
+            Closed
+          </button>
+        )}
+      </div>
+    </motion.div>
+  );
+
+  return live
+    ? <Link href={`/game/${game.id}`} style={{ textDecoration:"none" }}>{inner}</Link>
+    : inner;
+}
+
+/* ─── Stat ───────────────────────────────────────────────────────────────── */
+function Stat({ icon: Icon, label, value, suffix, accent, index, note }) {
+  return (
+    <motion.div className="stat"
+      initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
+      transition={{ delay: index * 0.06 }}>
+      <div className="stat-ico" style={{ background:`${accent}10`, border:`1px solid ${accent}1a` }}>
+        <Icon size={16} color={accent} />
+      </div>
+      <div className="stat-lbl">{label}</div>
+      <div className="stat-val">{value}{suffix && <span>{suffix}</span>}</div>
+      {note && <div className="stat-note"><TrendingUp size={10} />{note}</div>}
+    </motion.div>
+  );
+}
+
+/* ─── Dashboard ─────────────────────────────────────────────────────────── */
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
   const { data: ethBalanceData } = useBalance({ address });
-
   const [points, setPoints] = useState(null);
-
   const [questSteps, setQuestSteps] = useState(
-    () => Object.fromEntries(QUESTS.map((q) => [q.id, "idle"]))
+    () => Object.fromEntries(QUESTS.map(q => [q.id, "idle"]))
   );
-
-  const setStep = (id, step) =>
-    setQuestSteps((prev) => ({ ...prev, [id]: step }));
+  const setStep = (id, step) => setQuestSteps(p => ({ ...p, [id]: step }));
 
   useEffect(() => {
     if (!address) return;
-
-    fetch(`https://api.hairtoken.xyz/api/points/get?wallet=${address}`)
-      .then(res => res.json())
-      .then(data => {
-        setPoints(data.points);
-        QUESTS.forEach((q) => {
-          if (data.tasks?.includes(q.id)) setStep(q.id, "completed");
-        });
-      })
-      .catch(console.error);
+    fetch(`http://api.hairtoken.xyz/api/points/get?wallet=${address}`)
+      .then(r => r.json())
+      .then(d => {
+        setPoints(d.points);
+        QUESTS.forEach(q => { if (d.tasks?.includes(q.id)) setStep(q.id, "completed"); });
+      }).catch(console.error);
   }, [address]);
 
-  const handleAction = (quest) => {
-    window.open(quest.url, "_blank");
-    setStep(quest.id, "following");
-    setTimeout(() => setStep(quest.id, "claimable"), 10000);
+  const handleAction = q => {
+    window.open(q.url, "_blank");
+    setStep(q.id, "following");
+    setTimeout(() => setStep(q.id, "claimable"), 10000);
   };
 
-  const handleClaim = async (quest) => {
+  const handleClaim = async q => {
     if (!address) return;
-    setStep(quest.id, "verifying");
-
+    setStep(q.id, "verifying");
     try {
-      const response = await fetch(`https://api.hairtoken.xyz/api/points/claim`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          wallet: address,
-          task: quest.id
-        })
+      const r = await fetch(`http://api.hairtoken.xyz/api/points/claim`, {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({ wallet:address, task:q.id }),
       });
-
-      if (response.ok) {
-        const data = await response.json();
-        setStep(quest.id, "completed");
-        setPoints(data.newTotal);
-      } else {
-        const errData = await response.json();
-        setStep(quest.id, errData.alreadyDone ? "completed" : "claimable");
-      }
-    } catch (error) {
-      console.error("Claim failed", error);
-      setStep(quest.id, "claimable");
-    }
+      const d = await r.json();
+      if (r.ok) { setStep(q.id, "completed"); setPoints(d.newTotal); }
+      else setStep(q.id, d.alreadyDone ? "completed" : "claimable");
+    } catch { setStep(q.id, "claimable"); }
   };
 
-  if (!isConnected) {
-    return (
-      <div className="flex flex-col items-center justify-center min-h-[60vh] gap-6 text-center">
-        <div className="p-6 rounded-full bg-primary/10 text-primary mb-4">
-          <Lock className="h-12 w-12" />
+  if (!isConnected) return (
+    <>
+      <div className="db">
+        <div className="db-glow1" /><div className="db-glow2" /><div className="db-noise" />
+        <div className="conn">
+          <motion.div className="conn-orb"
+            initial={{ scale:.8, opacity:0 }} animate={{ scale:1, opacity:1 }}
+            transition={{ duration:.5, ease:"backOut" }}>
+            <Gamepad2 size={38} color="var(--green)" />
+          </motion.div>
+          <motion.div style={{ display:"flex", flexDirection:"column", gap:10, alignItems:"center" }}
+            initial={{ opacity:0, y:14 }} animate={{ opacity:1, y:0 }} transition={{ delay:.15 }}>
+            <h2 className="conn-title">Connect to Play</h2>
+            <p className="conn-sub">Link your wallet to access the arena, earn points, and compete on Hemi.</p>
+          </motion.div>
+          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.28 }}>
+            <ConnectButton.Custom>
+              {({ openConnectModal }) => (
+                <button onClick={openConnectModal} className="btn btn-g"
+                  style={{ padding:"13px 26px", fontSize:"11px", borderRadius:"11px" }}>
+                  <Wallet size={14} /> Connect Wallet
+                </button>
+              )}
+            </ConnectButton.Custom>
+          </motion.div>
         </div>
-        <h2 className="text-3xl font-display font-bold">Wallet Not Connected</h2>
-        <p className="text-muted-foreground max-w-md">
-          Connect your wallet to access the dashboard and play on Hemi.
-        </p>
-        <ConnectButton.Custom>
-          {({ openConnectModal }) => (
-            <Button size="lg" onClick={openConnectModal} className="mt-4 cursor-pointer">
-              Connect Wallet
-            </Button>
-          )}
-        </ConnectButton.Custom>
       </div>
-    );
-  }
+    </>
+  );
+
+  const ethVal = ethBalanceData ? Number(ethBalanceData.formatted).toFixed(5) : "0.00000";
+  const short = address ? `${address.slice(0,6)}…${address.slice(-4)}` : "";
 
   return (
-    <div className="flex flex-col gap-10 font-[system-ui]">
+    <>
+      <div className="db">
+        <div className="db-glow1" /><div className="db-glow2" /><div className="db-noise" />
+        <div className="db-inner">
 
-      {/* Stats Bar */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-card border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Balance</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-white">
-              {ethBalanceData ? Number(ethBalanceData.formatted).toFixed(6) : "0.000000"} ETH
+          {/* Header */}
+          <motion.div className="hdr"
+            initial={{ opacity:0, y:-14 }} animate={{ opacity:1, y:0 }}>
+            <div className="hdr-eye">
+              <span className="ldot" />
+              Hemi Network · {short}
             </div>
-          </CardContent>
-        </Card>
+            <h1 className="hdr-title">Your <em>Arena</em></h1>
+            <p className="hdr-sub">Compete in on-chain games, complete quests, and accumulate points on the Hemi network.</p>
+          </motion.div>
 
-        <Card className="bg-card border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Games Played</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-white">0</div>
-          </CardContent>
-        </Card>
+          {/* Stats */}
+          <motion.div className="stats"
+            initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.1 }}>
+            <Stat index={0} icon={Wallet}  label="ETH Balance"  value={ethVal}      suffix="ETH" accent="var(--green)"  note="On Hemi" />
+            <Stat index={1} icon={Trophy}  label="Multiplier" value="1x"                        accent="var(--orange)" />
+            <Stat index={2} icon={Star}    label="Total Points" value={points ?? 0} suffix="HP" accent="var(--purple)"/>
+          </motion.div>
 
-        <Card className="bg-card border-white/10">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Total Points</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold font-mono text-white">{points ?? 0}</div>
-          </CardContent>
-        </Card>
-      </div>
+          {/* Quests */}
+          <section style={{ marginBottom:52 }}>
+            <div className="s-head">
+              <h2 className="s-title">Active Quests</h2>
+              <span className="s-tag">Earn Rewards</span>
+            </div>
+            <div className="q-list">
+              {QUESTS.map(q => (
+                <QuestRow key={q.id} quest={q} step={questSteps[q.id]}
+                  onAction={() => handleAction(q)} onClaim={() => handleClaim(q)} />
+              ))}
+            </div>
+          </section>
 
-      {/* Quests Section */}
-      <div className="flex flex-col gap-6">
-        <h2 className="text-2xl font-display font-bold text-white flex items-center gap-2">
-          Active Quests
-          <span className="text-xs font-sans font-normal text-muted-foreground px-2 py-1 rounded bg-white/5 border border-white/10">
-            Earn Rewards
-          </span>
-        </h2>
+          {/* Games */}
+          <section>
+            <div className="s-head">
+              <h2 className="s-title">Arcade Games</h2>
+              <span className="s-tag">Season 2</span>
+            </div>
+            <div className="g-grid">
+              {GAMES.map((g, i) => <GameCard key={g.id} game={g} index={i} />)}
+            </div>
+          </section>
 
-        {QUESTS.map((quest) => (
-          <QuestCard
-            key={quest.id}
-            quest={quest}
-            step={questSteps[quest.id]}
-            onAction={() => handleAction(quest)}
-            onClaim={() => handleClaim(quest)}
-          />
-        ))}
-      </div>
-
-      {/* Games Grid - Retro Styled */}
-      <div className="flex flex-col gap-6">
-        <h2 className="text-2xl font-display font-bold text-white flex items-center gap-2 uppercase tracking-wider font-mono">
-          Arcade Games{" "}
-          <span className="text-xs font-sans font-normal text-primary px-2 py-1 rounded-sm bg-primary/10 border border-primary/30 animate-pulse">
-            Season 1
-          </span>
-        </h2>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {GAMES.map((game) => (
-            <Card
-              key={game.id}
-              className="bg-[#0a0a16] border-2 border-primary/30 rounded-none overflow-hidden group hover:border-primary transition-all duration-300 shadow-[4px_4px_0px_rgba(255,255,255,0.05)] hover:shadow-[0_0_25px_rgba(234,88,12,0.3)]"
-            >
-              <div className={`h-36 ${game.image} relative flex items-center justify-center border-b-2 border-primary/30`}>
-                <div className="absolute inset-0 bg-black/40 group-hover:bg-transparent transition-colors duration-500" />
-                <game.icon className="h-14 w-14 text-white drop-shadow-[0_0_10px_rgba(255,255,255,0.8)] transform group-hover:scale-110 transition-transform duration-300" />
-                {game.status === "coming-soon" && (
-                  <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center">
-                    <Badge variant="secondary" className="font-mono uppercase tracking-widest border-primary/50 text-primary">Coming Soon</Badge>
-                  </div>
-                )}
-              </div>
-
-              <CardHeader className="pt-6">
-                <div className="flex justify-between items-start">
-                  <CardTitle className={`text-xl font-bold font-mono tracking-tight text-white ${game.status === "coming-soon" ? "blur" : ""}`}>
-                    {game.title}
-                  </CardTitle>
-                  <Badge variant="outline" className="bg-primary/10 text-primary border-primary/30 rounded-none font-mono text-xs">
-                    {game.difficulty}
-                  </Badge>
-                </div>
-                <CardDescription className={`line-clamp-2 h-10 mt-2 font-mono text-xs text-muted-foreground ${game.status === "coming-soon" ? "blur" : ""}`}>
-                  {game.description}
-                </CardDescription>
-              </CardHeader>
-
-              <CardContent>
-                <div className="flex items-center justify-between text-xs p-3 rounded-none bg-black/50 border border-white/10 font-mono">
-                  <span className="text-muted-foreground uppercase tracking-wider">Insert Coin</span>
-                  <span className="text-white drop-shadow-[0_0_5px_rgba(255,255,255,0.5)]">{game.entryFee}</span>
-                </div>
-              </CardContent>
-
-              <CardFooter className="pb-6">
-                {game.status === "active" ? (
-                  <Link
-                    href={`/game/${game.id}`}
-                    className={buttonVariants({
-                      variant: "outline",
-                      className:
-                        "w-full font-mono font-bold uppercase tracking-wider rounded-none " +
-                        "bg-transparent text-orange-500 border-2 border-orange-500/50 " +
-                        "hover:bg-orange-500 hover:text-white hover:border-orange-500 " +
-                        "hover:shadow-[0_0_15px_rgba(234,88,12,0.5)] " +
-                        "transition-all duration-300",
-                    })}
-                  >
-                    Start Game
-                  </Link>
-                ) : (
-                  <Button disabled className="w-full opacity-50 cursor-not-allowed rounded-none font-mono uppercase tracking-wider border-2 border-dashed border-white/20 bg-transparent">
-                    {game.status === "closed" ? "Offline" : "Loading..."}
-                  </Button>
-                )}
-              </CardFooter>
-            </Card>
-          ))}
         </div>
       </div>
-    </div>
+    </>
   );
 }
