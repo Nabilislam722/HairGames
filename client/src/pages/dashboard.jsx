@@ -218,7 +218,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!address) return;
-    fetch(`http://api.hairtoken.xyz/api/points/get?wallet=${address}`)
+    fetch(`https://api.hairtoken.xyz/api/points/get?wallet=${address}`)
       .then(r => r.json())
       .then(d => {
         setPoints(d.points);
@@ -236,7 +236,7 @@ export default function Dashboard() {
     if (!address) return;
     setStep(q.id, "verifying");
     try {
-      const r = await fetch(`http://api.hairtoken.xyz/api/points/claim`, {
+      const r = await fetch(`https://api.hairtoken.xyz/api/points/claim`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ wallet:address, task:q.id }),
       });

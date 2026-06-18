@@ -31,7 +31,7 @@ const DECOR = [
 const AI_COLORS = ["green", "blue", "yellow", "white", "black", "red"];
 
 // seeded pseudo-random for deterministic objects
-let seed = 12345;
+let seed = 12345; 
 function seededRand() {
   seed = (seed * 1664525 + 1013904223) & 0xffffffff;
   return (seed >>> 0) / 0xffffffff;
@@ -172,8 +172,24 @@ function buildSideObjects(trackValue: number[]) {
   return { leftObjects, rightObjects };
 }
 
-export default function RacingGame() {
+interface RacingGameProps {
+  onStart?: () => void;
+  onFinish?: () => void;
+  status?: string;
+}
+
+export default function RacingGame({ onStart, onFinish, status }: RacingGameProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  
+  // Ref for parent props to avoid React dependency loop traps causing visual resets
+  const propsRef = useRef({ onStart, onFinish, status });
+  useEffect(() => {
+    propsRef.current = { onStart, onFinish, status };
+  }, [onStart, onFinish, status]);
+
+  // Lock to prevent firing onFinish 60 times a second
+  const hasFinishedRef = useRef(false);
+
   const stateRef = useRef<{
     speed: number;
     position: number;
@@ -193,6 +209,7 @@ export default function RacingGame() {
     leftObjects: (SideObj | null)[];
     rightObjects: (SideObj | null)[];
   } | null>(null);
+  
   const spritesRef = useRef<Record<string, HTMLImageElement>>({});
   const spritesLoadedRef = useRef(false);
   const rafRef = useRef<number>(0);
@@ -324,7 +341,6 @@ export default function RacingGame() {
     const SX = W / MS_W;
     const SY = H / MS_H;
 
-    // Coordinate converters
     const cx = (mx: number) => W / 2 + mx * SX;
     const cy = (my: number) => H / 2 - my * SY;
     const cw = (mw: number) => mw * SX;
@@ -368,21 +384,18 @@ export default function RacingGame() {
     // === drawBackground ===
     fillRect(0, 0, MS_W, MS_H, "rgb(255,179,28)");
 
-    // Sky gradient (top half)
     const grad = ctx.createLinearGradient(W / 2, H / 2, W / 2, 0);
     grad.addColorStop(0, "rgb(255,198,255)");
     grad.addColorStop(1, "#48C");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, W, H / 2);
 
-    // Background strip
     ctx.globalAlpha = 1;
     const h = fmod(st.horizon, 200);
     for (let o = -W / 2 - 100; o <= W / 2 + 100; o += 200) {
       drawSprite("background", o / SX + h / SX, 15, 200, 30);
     }
 
-    // Clouds
     for (const c of st.clouds) {
       ctx.globalAlpha = 0.5 + ((c.y - 30) * 0.5) / 40;
       drawSprite(c.name, c.x, c.y, c.size, c.size);
@@ -440,7 +453,6 @@ export default function RacingGame() {
         else if (carTurn + st.x - c.x < -100) carDir = 0;
         else carDir = 1;
         const carName = `car_ai_${c.color}${["_left", "", "_right"][Math.max(0, Math.min(2, carDir))]}`;
-        // Shadow
         ctx.globalAlpha = 0.25;
         ctx.fillStyle = "black";
         const sx = cx(c.x * scale * 0.012 + px);
@@ -546,7 +558,6 @@ export default function RacingGame() {
 
     ctx.textAlign = "center";
 
-    // Touch arrows
     const leftActive = touchRef.current.touching && touchRef.current.x < 0;
     const rightActive = touchRef.current.touching && touchRef.current.x >= 0;
     ctx.globalAlpha = leftActive ? 1 : 0.4;
@@ -575,6 +586,9 @@ export default function RacingGame() {
   }, []);
 
   const update = useCallback((dt: number) => {
+    // PAUSE the game mechanics immediately if status isn't "playing"
+    if (propsRef.current.status !== "playing") return;
+
     const st = stateRef.current!;
     const trackValue = st.trackValue;
     const tl = trackValue.length;
@@ -619,7 +633,7 @@ export default function RacingGame() {
       st.x *= Math.pow(0.99, dt);
     }
 
-    // Lap tracking
+    // Lap tracking & Game Over Detect
     if (st.position >= tl) {
       st.position -= tl;
       st.lapProgress = 0;
@@ -627,6 +641,13 @@ export default function RacingGame() {
         st.lap++;
       } else {
         st.finished = true;
+        // FIRE THE SUBMIT ACTION EXACTLY ONCE
+        if (!hasFinishedRef.current) {
+          hasFinishedRef.current = true;
+          if (propsRef.current.onFinish) {
+            propsRef.current.onFinish();
+          }
+        }
       }
     } else {
       st.lapProgress = st.position / tl;
@@ -637,7 +658,7 @@ export default function RacingGame() {
       c.position += ((c.speed * 0.02) / 50) * dt;
       if (c.position > tl) c.position -= tl;
     }
-  }, []);
+  }, []); // Empty dependency array. Loop will not recreate when status changes.
 
   const loop = useCallback(
     (time: number) => {
@@ -646,7 +667,6 @@ export default function RacingGame() {
         rafRef.current = requestAnimationFrame(loop);
         return;
       }
-      // First frame: seed the timestamp and skip update to avoid huge dt
       if (lastTimeRef.current < 0) {
         lastTimeRef.current = time;
         rafRef.current = requestAnimationFrame(loop);
@@ -654,8 +674,10 @@ export default function RacingGame() {
       }
       const dt = Math.min((time - lastTimeRef.current) / 16.67, 3);
       lastTimeRef.current = time;
+      
       update(dt);
       draw(canvas, dt);
+      
       rafRef.current = requestAnimationFrame(loop);
     },
     [update, draw],
