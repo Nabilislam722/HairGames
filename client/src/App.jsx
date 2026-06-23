@@ -10,6 +10,7 @@ import NotFound from "@/pages/not-found";
 import Leaderboard from "./components/Leaderboard";
 import SpaceHuggersGame from "./pages/SpaceHuggersGame";
 import RacingGamePage from "./pages/RacingGamePage"
+import EventRank from "./pages/eventRank";
 
 function Router() {
   return (
@@ -22,6 +23,7 @@ function Router() {
         <Route path="/game/race_car" component={RacingGamePage} />
         <Route path="/leaderboard" component={Leaderboard} />
         <Route path="/profile" component={Profile} />
+        <Route path="/eventrank" component={EventRank}/>
         <Route component={NotFound} />
       </Switch>
     </Layout>

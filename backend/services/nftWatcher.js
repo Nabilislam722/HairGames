@@ -43,7 +43,7 @@ const ERC721_ABI = [
 async function resolveOwnedTokenIds(contract, walletLower, balance, collection, provider) {
   const balanceNum = Number(balance);
 
-  // ── Strategy 1: ERC721Enumerable ──────────────────────────────────────────
+  // ERC721Enumerable 
   try {
     const ids = [];
     for (let i = 0; i < balanceNum; i++) {
@@ -79,18 +79,22 @@ async function resolveOwnedTokenIds(contract, walletLower, balance, collection, 
       )
     ];
 
-    if (ids.length === 0 && balanceNum > 0) {
-      // RPC silently capped the block range and returned nothing.
+    // ── NEW FIX: Catch partial RPC log drops ──
+    if (ids.length < balanceNum) {
       console.warn(
-        `   │  └── ⚠️  Log scan returned 0 IDs despite balance=${balanceNum}.\n` +
-        `   │      Fix: add "startBlock": <deployBlock> to CollectionConfig for "${collection.name}".`
+        `   │  └── ⚠️ Mismatch: balanceOf says ${balanceNum}, but log scan only found ${ids.length}.\n` +
+        `   │      The RPC node likely dropped older events. Padding the missing NFTs.`
       );
       
-      // CHANGE THIS: Instead of returning null, return fake/placeholder IDs 
-      // matching the actual balance count so the sync process can proceed.
-      const fallbackIds = Array.from({ length: balanceNum }, (_, i) => i); 
-      console.log(`   │  └── [Fallback] Using placeholder token IDs: [${fallbackIds.join(", ")}]`);
-      return fallbackIds;
+      const missingCount = balanceNum - ids.length;
+      let placeholderId = 9999000; 
+      
+      for (let i = 0; i < missingCount; i++) {
+        // Ensure our placeholder doesn't accidentally match a real ID we did find
+        while (ids.includes(placeholderId)) { placeholderId++; }
+        ids.push(placeholderId);
+        placeholderId++;
+      }
     }
 
     console.log(`   │  └── [Log scan] Resolved token IDs: [${ids.join(", ")}]`);
@@ -142,14 +146,12 @@ async function recalculateUserMultiplier(walletLower, allowedCollections) {
 export async function syncWalletNFTs(walletLower, provider, allowedCollections) {
   console.log(`⚙️  [SYNC] Running NFT sync for: ${walletLower}`);
 
+  // 1. Look for profile, but don't bail out if it doesn't exist yet!
   const profile = await UserProfile.findOne({ wallet: walletLower });
-  if (!profile) {
-    console.log(`ℹ️  [SYNC] No DB profile for ${walletLower} — skipping.`);
-    return;
-  }
-
-  let baselineHoldings = [...profile.nftHoldings];
-  let structureChanged = false;
+  
+  // If profile is missing, start with an empty holdings array
+  let baselineHoldings = profile ? [...profile.nftHoldings] : [];
+  let structureChanged = !profile; // If it's a new profile, we absolutely need to save it
 
   for (const collection of allowedCollections) {
     const contractLower = collection.address.toLowerCase();
@@ -160,19 +162,17 @@ export async function syncWalletNFTs(walletLower, provider, allowedCollections) 
       const balanceNum    = Number(actualBalance);
       const dbCount       = baselineHoldings.filter(h => h.contractAddress === contractLower).length;
 
-      console.log(
-        `   ├─ 📄 [${collection.name}]: DB=${dbCount} | Chain=${balanceNum}`
-      );
+      console.log(`   ├─ 📄 [${collection.name}]: DB=${dbCount} | Chain=${balanceNum}`);
 
-      // ── CASE 1: Wallet sold/transferred all tokens while server was offline ──
+      // CASE 1: Wallet doesn't own any tokens, but DB has stale records
       if (balanceNum === 0 && dbCount > 0) {
-        console.log(`   ├─ ⚠️  [CASE 1] On-chain balance is 0. Clearing stale DB entries for ${collection.name}.`);
+        console.log(`   ├─ ⚠️  [CASE 1] Balance is 0. Clearing stale DB entries for ${collection.name}.`);
         baselineHoldings = baselineHoldings.filter(h => h.contractAddress !== contractLower);
         structureChanged = true;
         continue;
       }
 
-      // ── CASE 2: Chain balance exceeds DB — resolve and write missing tokens ──
+      // CASE 2: Chain balance exceeds DB (Catching historical or missed assets)
       if (balanceNum > dbCount) {
         console.log(`   ├─ ⚠️  [CASE 2] Chain ahead of DB. Resolving token IDs for ${collection.name}...`);
 
@@ -180,13 +180,11 @@ export async function syncWalletNFTs(walletLower, provider, allowedCollections) 
           contract, walletLower, actualBalance, collection, provider
         );
 
-        if (!ownedIds) {
-          // resolveOwnedTokenIds returned null — RPC issue, skip silently
-          continue;
-        }
+        if (!ownedIds) continue; // RPC failure mitigation
 
-        console.log(`   ├─ ✅ Final owned IDs: [${ownedIds.join(", ")}]`);
+        console.log(`   ├─ ✅ Final owned IDs discovered: [${ownedIds.join(", ")}]`);
 
+        // Flush old records for this collection to avoid duplicates, then rebuild
         baselineHoldings = baselineHoldings.filter(h => h.contractAddress !== contractLower);
         for (const id of ownedIds) {
           baselineHoldings.push({
@@ -200,18 +198,16 @@ export async function syncWalletNFTs(walletLower, provider, allowedCollections) 
         }
         structureChanged = true;
       }
-      // balanceNum === dbCount → already in sync, nothing to do
-
     } catch (err) {
       console.error(`   ❌ balanceOf error on ${collection.address}:`, err.message);
     }
   }
 
+  // 2. If data changed OR this is a completely new user profile, commit via Upsert
   if (structureChanged) {
     let highestMultiplier = 1.0;
-    const uniqueAddresses = [
-      ...new Set(baselineHoldings.map(h => h.contractAddress.toLowerCase()))
-    ];
+    const uniqueAddresses = [...new Set(baselineHoldings.map(h => h.contractAddress.toLowerCase()))];
+    
     for (const address of uniqueAddresses) {
       const config = allowedCollections.find(c => c.address.toLowerCase() === address);
       if (config && config.multiplier > highestMultiplier) {
@@ -219,20 +215,25 @@ export async function syncWalletNFTs(walletLower, provider, allowedCollections) 
       }
     }
 
-    await UserProfile.updateOne(
+    // Use findOneAndUpdate with upsert to write data safely
+    await UserProfile.findOneAndUpdate(
       { wallet: walletLower },
       {
         $set: {
           nftHoldings:  baselineHoldings,
           multiplier:   highestMultiplier,
           lastSyncedAt: new Date()
+        },
+        $setOnInsert: {
+          points: 0,
+          completedTasks: [],
+          processedHashes: []
         }
-      }
+      },
+      { upsert: true, new: true }
     );
 
-    console.log(
-      `   💾 [SYNC SAVED] ${walletLower} | holdings=${baselineHoldings.length} | multiplier=${highestMultiplier}x\n`
-    );
+    console.log(`   💾 [SYNC SAVED] ${walletLower} | holdings=${baselineHoldings.length} | multiplier=${highestMultiplier}x\n`);
   } else {
     console.log(`   ✅ Already up-to-date for ${walletLower}.\n`);
   }

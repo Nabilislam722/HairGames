@@ -46,6 +46,7 @@ async function getMultiplierForWallet(walletAddress) {
  * @access  Public
  */
 router.get("/:wallet", async (req, res) => {
+  console.log(`\n🚨 PROFILE ROUTE HIT FOR: ${req.params.wallet} 🚨\n`);
   const { wallet } = req.params;
 
   // 1. Structural Sanity Guard Input Validation
@@ -56,37 +57,33 @@ router.get("/:wallet", async (req, res) => {
   try {
     const walletLower = wallet.toLowerCase();
 
-    // 2. Make sure a profile document exists BEFORE syncing. syncWalletNFTs
-    // (services/nftWatcher.js) silently no-ops on any wallet it can't find
-    // in Mongo, so without this upsert a brand-new wallet's first profile
-    // view would never get its holdings populated at all.
-    await UserProfile.findOneAndUpdate(
-      { wallet: walletLower },
-      { $set: { wallet: walletLower }, $setOnInsert: { points: 0, nftHoldings: [], completedTasks: [] } },
-      { upsert: true, setDefaultsOnInsert: true }
-    );
+    // 2. Fetch the monitored collection configs from the database
+    const allowedCollections = await CollectionConfig.find({}).lean();
 
-    // 3. On-demand sync: reconciles nftHoldings against current chain state
-    // on every profile view. Previously this only ever ran at server boot
-    // (runStartupSanityCheck) or on live Transfer events — both of which
-    // miss a wallet whose NFT was acquired, or whose profile document
-    // didn't exist yet, before the watcher last started. This is what was
-    // actually leaving holdings empty.
+    // 3. On-demand sync: reconciles nftHoldings against current chain state.
+    // The upgraded syncWalletNFTs handles creating the profile document via 
+    // an upsert operation if it's a brand new wallet visiting for the first time.
     try {
-      const allowedCollections = await CollectionConfig.find({}).lean();
       await syncWalletNFTs(walletLower, provider, allowedCollections);
     } catch (syncErr) {
-      // Don't let an RPC hiccup take the whole profile fetch down — fall
-      // back to whatever's already cached from the last successful sync.
       console.error("⚠️  On-demand NFT sync failed, serving cached holdings:", syncErr.message);
     }
 
-    // 4. Re-fetch — syncWalletNFTs writes directly to Mongo, so anything
-    // read before it ran is stale.
-    const user = await UserProfile.findOne({ wallet: walletLower });
+    // 4. Fetch profile document after sync execution to grab the updated state
+    let user = await UserProfile.findOne({ wallet: walletLower });
+
+    // Defensive Fallback Guard: If the RPC/Sync completely failed and no document exists,
+    // upsert a barebones record here to prevent downstream application crashes.
+    if (!user) {
+      user = await UserProfile.findOneAndUpdate(
+        { wallet: walletLower },
+        { $set: { wallet: walletLower }, $setOnInsert: { points: 0, nftHoldings: [], completedTasks: [] } },
+        { upsert: true, new: true, setDefaultsOnInsert: true }
+      );
+    }
 
     // 5. Fetch current points value to build high-performance dynamic rank scoring indexing
-    const userPoints = user ? (user.points || 0) : 0;
+    const userPoints = user.points || 0;
 
     // Efficiently count how many users have more points than this specific wallet address
     const globalRank = await UserProfile.countDocuments({ points: { $gt: userPoints } }) + 1;
@@ -94,26 +91,13 @@ router.get("/:wallet", async (req, res) => {
     // 6. Multiplier comes from the live on-chain balanceOf check, not the DB
     const multiplier = await getMultiplierForWallet(walletLower);
 
-    // 7. Fallback Provision: shouldn't trigger given the upsert above, kept as a defensive guard
-    if (!user) {
-      return res.json({
-        wallet: walletLower,
-        points: 0,
-        nftHoldings: [],
-        multiplier,
-        completedTasks: [],
-        rank: globalRank,
-        isNewUser: true
-      });
-    }
-
-    // 8. Secure Database Write-Back Process: Persist the freshly computed global placement rank metric
+    // 7. Secure Database Write-Back Process: Persist the freshly computed global placement rank metric
     await UserProfile.updateOne(
       { wallet: walletLower },
       { $set: { rank: globalRank } }
     );
 
-    // 9. Clean, Sanitized and Structured Production Response Object Payload Delivery
+    // 8. Clean, Sanitized and Structured Production Response Object Payload Delivery
     return res.json({
       wallet: user.wallet,
       points: user.points,

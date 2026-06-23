@@ -26,7 +26,7 @@ import {
 import { drawAsteroid } from '../game/asteroids';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
-
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const WEN_PHRASES  = ['WEN', 'WEN!', 'W E N', '🚀 WEN', 'WEN 💥', 'ser WEN?', '‼ WEN ‼', 'SOON™'];
 const CONFETTI_CFG = Array.from({ length: 55 }, (_, i) => ({
   id: i, left: (i * 137.5) % 100,
@@ -379,7 +379,7 @@ function GameCanvas({ startLevel, onBackToMap }) {
       const receipt = await submitGuess(points);
       if (receipt.status !== 'success') throw new Error('Transaction reverted');
 
-      const res = await fetch('https://api.hairtoken.xyz/api/points/add', {
+      const res = await fetch(`${API_BASE}/api/points/add`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ wallet: address, txHash: receipt.transactionHash, score: points, gameId: "default_legacy" }),

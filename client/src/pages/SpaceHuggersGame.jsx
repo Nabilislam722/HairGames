@@ -7,6 +7,7 @@ import { parseEther } from "viem";
 
 const GAME_COST_ETH = 0.00001;
 const SPACE_HUGGERS_CONTRACT_ADDRESS = "0x895087a3b85C38DAB365495A5E1EA518459A9750";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const SPACE_HUGGERS_ABI = [
   {
     "inputs": [
@@ -81,7 +82,7 @@ export default function SpaceHuggersGame() {
           console.log(`Submitting stats for Level ${level} to the secure backend authority...`);
 
           // ◄ Modified: Passing raw metrics instead of frontend computed scores
-          const verifyRes = await fetch('https://api.hairtoken.xyz/api/points/verify', {
+          const verifyRes = await fetch(`${API_BASE}/api/points/verify`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -111,7 +112,7 @@ export default function SpaceHuggersGame() {
 
           setActiveTxHash(txHash);
 
-          const res = await fetch('https://api.hairtoken.xyz/api/points/add', {
+          const res = await fetch(`${API_BASE}/api/points/add`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

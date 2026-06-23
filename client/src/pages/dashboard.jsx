@@ -14,6 +14,8 @@ import { motion } from "framer-motion";
 import "../index.css";
 import "../components/dashboard.css";
 
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
 /* ─── Font Injection ─────────────────────────────────────────────────────── */
 if (!document.getElementById("dashboard-fonts")) {
   const l = document.createElement("link");
@@ -70,7 +72,7 @@ const GAMES = [
   {
     id: "race_car",
     title: "NEED FOR HAIR",
-    description: "Use logic to find the hidden 4-digit number within 15 attempts.",
+    description: "THREE!!  TWO!!  ONE!!  GO!!!    |  Be careful, don't lose your HP... Slow down!!!",
     entryFee: `${GAME_COST_ETH} ETH (~$0.05)`,
     image: "bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.3)_2px,rgba(0,0,0,0.3)_4px)] bg-purple-900",
     icon: Search,
@@ -218,7 +220,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!address) return;
-    fetch(`https://api.hairtoken.xyz/api/points/get?wallet=${address}`)
+    fetch(`${API_BASE}/api/points/get?wallet=${address}`)
       .then(r => r.json())
       .then(d => {
         setPoints(d.points);
@@ -236,7 +238,7 @@ export default function Dashboard() {
     if (!address) return;
     setStep(q.id, "verifying");
     try {
-      const r = await fetch(`https://api.hairtoken.xyz/api/points/claim`, {
+      const r = await fetch(`${API_BASE}/api/points/claim`, {
         method:"POST", headers:{"Content-Type":"application/json"},
         body: JSON.stringify({ wallet:address, task:q.id }),
       });
@@ -322,7 +324,7 @@ export default function Dashboard() {
           <section>
             <div className="s-head">
               <h2 className="s-title">Arcade Games</h2>
-              <span className="s-tag">Season 2</span>
+              <span className="s-tag">Season 4</span>
             </div>
             <div className="g-grid">
               {GAMES.map((g, i) => <GameCard key={g.id} game={g} index={i} />)}

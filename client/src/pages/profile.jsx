@@ -8,6 +8,8 @@ import {
 import { MdLocalFireDepartment } from "react-icons/md";
 import { HiMiniTrophy } from "react-icons/hi2";
 
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 /* Helpers */
 function shortenAddr(addr) {
   if (!addr) return "";
@@ -86,6 +88,7 @@ function NFTCard({ nft, index }) {
   );
 }
 
+
 export default function Profile() {
   const { address, isConnected } = useAccount();
   const [profile, setProfile] = useState({
@@ -107,7 +110,7 @@ export default function Profile() {
     async function fetchProfile() {
       try {
         // Updated to target the direct express sub-router endpoint path cleanly
-        const res = await fetch(`https://api.hairtoken.xyz/api/profile/${address}`);
+        const res = await fetch(`${API_BASE}/api/profile/${address}`);
         if (!res.ok) throw new Error("Network profile sync failure");
         const data = await res.json();
 

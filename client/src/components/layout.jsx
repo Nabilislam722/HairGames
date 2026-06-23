@@ -12,6 +12,8 @@ const NAV_LINKS = [
   { href: "/profile",     label: "Profile"     },
 ];
 
+const EVENT_LINK = { href: "/eventrank", label: "Event" };
+
 /* ─── Desktop NavLink ─────────────────────────────────────────────────── */
 function NavLink({ href, children, hovered, index, setHovered }) {
   const [location] = useLocation();
@@ -48,6 +50,77 @@ function NavLink({ href, children, hovered, index, setHovered }) {
   );
 }
 
+/* ─── Event NavLink — same pill pattern, orange-tinted ───────────────── */
+function EventNavLink({ hovered, index, setHovered }) {
+  const [location] = useLocation();
+  const active = location === EVENT_LINK.href;
+  const showPill = hovered === index || (active && hovered === null);
+
+  return (
+    <Link
+      href={EVENT_LINK.href}
+      onMouseEnter={() => setHovered(index)}
+      onMouseLeave={() => setHovered(null)}
+      className="relative flex items-center gap-1.5 px-3.5 py-2 font-mono text-[11px] font-bold uppercase tracking-widest rounded-lg transition-colors duration-200 z-10"
+      style={{
+        color: active || showPill ? "#fb923c" : "rgba(251,146,60,0.45)",
+      }}
+    >
+      {/* Shared pill — separate layoutId keeps it from merging with nav-pill */}
+      <AnimatePresence>
+        {showPill && (
+          <motion.span
+            layoutId="event-nav-pill"
+            className="absolute inset-0 rounded-lg -z-10"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ type: "spring", bounce: 0.15, duration: 0.35 }}
+            style={{
+              background: "rgba(251,146,60,0.08)",
+              border: "1px solid rgba(251,146,60,0.22)",
+              boxShadow: "0 0 12px rgba(251,146,60,0.15)",
+            }}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Ambient glow always present — subtle so it doesn't shout */}
+      <span
+        className="absolute inset-0 rounded-lg pointer-events-none"
+        style={{ boxShadow: "0 0 6px rgba(251,146,60,0.07)" }}
+      />
+
+      {/* Pulsing live dot */}
+      <span
+        className="w-1.5 h-1.5 rounded-full flex-shrink-0 animate-pulse"
+        style={{ background: "#fb923c", animationDuration: "2s" }}
+      />
+
+      {EVENT_LINK.label}
+
+      {/* WEEKLY badge */}
+      <span
+        className="px-1 py-px rounded text-[8px] font-black tracking-widest leading-none"
+        style={{
+          background: "rgba(251,146,60,0.1)",
+          color: "rgba(251,146,60,0.6)",
+          border: "1px solid rgba(251,146,60,0.18)",
+        }}
+      >
+        WEEKLY
+      </span>
+
+      {active && (
+        <span
+          className="absolute bottom-1 left-1/2 -translate-x-1/2 w-3 h-[2px] rounded-full"
+          style={{ background: "#fb923c" }}
+        />
+      )}
+    </Link>
+  );
+}
+
 /* ─── Layout ─────────────────────────────────────────────────────────── */
 export function Layout({ children }) {
   const [hovered, setHovered] = useState(null);
@@ -74,7 +147,7 @@ export function Layout({ children }) {
   );
 
   return (
-    <div className="min-h-screen flex  flex-col bg-background overflow-x-hidden">
+    <div className="min-h-screen flex flex-col bg-background overflow-x-hidden">
 
       {/* ── Navbar ── */}
       <header
@@ -85,7 +158,6 @@ export function Layout({ children }) {
             : "bg-transparent border-b border-transparent",
         ].join(" ")}
       >
-        {/* Top accent line */}
         <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-primary/60 to-transparent" />
 
         <div className="w-full px-6 xl:px-10 h-14 flex justify-between gap-6">
@@ -109,13 +181,19 @@ export function Layout({ children }) {
             </span>
           </Link>
 
-          {/* Desktop nav*/}
-          <nav className="hidden md:flex items-center gap-1  ">
+          {/* Desktop nav */}
+          <nav className="hidden md:flex items-center gap-1">
             {NAV_LINKS.map((n, i) => (
               <NavLink key={n.href} href={n.href} index={i} hovered={hovered} setHovered={setHovered}>
                 {n.label}
               </NavLink>
             ))}
+
+            {/* Divider before event link */}
+            <span className="w-px h-4 bg-white/10 mx-2 flex-shrink-0" />
+
+            {/* Event link gets the next index slot after NAV_LINKS */}
+            <EventNavLink hovered={hovered} index={NAV_LINKS.length} setHovered={setHovered} />
           </nav>
 
           {/* Right side */}
@@ -188,6 +266,47 @@ export function Layout({ children }) {
                     </Link>
                   );
                 })}
+
+                {/* Separator */}
+                <div className="flex items-center gap-3 my-1">
+                  <div className="flex-1 h-px bg-white/6" />
+                  <span className="font-mono text-[8px] uppercase tracking-widest text-white/20">Weekly</span>
+                  <div className="flex-1 h-px bg-white/6" />
+                </div>
+
+                {/* Event link */}
+                {(() => {
+                  const active = location === EVENT_LINK.href;
+                  return (
+                    <Link
+                      href={EVENT_LINK.href}
+                      onClick={() => setMobileOpen(false)}
+                      className="flex items-center gap-3 px-4 py-3.5 rounded-xl font-mono text-[12px] uppercase tracking-widest font-bold border transition-all"
+                      style={{
+                        background: active ? "rgba(251,146,60,0.08)" : "rgba(251,146,60,0.03)",
+                        borderColor: "rgba(251,146,60,0.2)",
+                        color: active ? "#fb923c" : "rgba(251,146,60,0.6)",
+                        boxShadow: "0 0 10px rgba(251,146,60,0.08)",
+                      }}
+                    >
+                      <span
+                        className="w-1.5 h-1.5 rounded-full flex-shrink-0 animate-pulse"
+                        style={{ background: "#fb923c", animationDuration: "2s" }}
+                      />
+                      {EVENT_LINK.label}
+                      <span
+                        className="ml-auto px-1.5 py-px rounded text-[8px] font-black tracking-widest"
+                        style={{
+                          background: "rgba(251,146,60,0.1)",
+                          color: "rgba(251,146,60,0.6)",
+                          border: "1px solid rgba(251,146,60,0.18)",
+                        }}
+                      >
+                        WEEKLY
+                      </span>
+                    </Link>
+                  );
+                })()}
               </nav>
 
               <div className="border-t border-white/6" />
@@ -211,11 +330,8 @@ export function Layout({ children }) {
       {/* ── Footer ── */}
       <footer className="border-t border-white/6 bg-background/60 mt-auto">
         <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-
         <div className="w-full px-6 xl:px-10 py-8">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
-
-            {/* Brand */}
             <div className="flex flex-col gap-2.5">
               <Link href="/" className="flex items-center gap-2.5 group w-fit">
                 <div className="w-6 h-6 rounded-md overflow-hidden border border-white/10 group-hover:border-primary/30 transition-colors">
@@ -230,60 +346,48 @@ export function Layout({ children }) {
               </p>
             </div>
 
-            {/* Footer nav — centered */}
             <nav className="hidden md:flex items-center gap-5">
               {NAV_LINKS.map(n => (
-                <Link
-                  key={n.href}
-                  href={n.href}
-                  className="font-mono text-[10px] uppercase tracking-widest text-white/30 hover:text-white/70 transition-colors"
-                >
+                <Link key={n.href} href={n.href} className="font-mono text-[10px] uppercase tracking-widest text-white/30 hover:text-white/70 transition-colors">
                   {n.label}
                 </Link>
               ))}
+              <Link
+                href={EVENT_LINK.href}
+                className="font-mono text-[10px] uppercase tracking-widest transition-colors"
+                style={{ color: "rgba(251,146,60,0.4)" }}
+                onMouseEnter={e => (e.currentTarget.style.color = "rgba(251,146,60,0.75)")}
+                onMouseLeave={e => (e.currentTarget.style.color = "rgba(251,146,60,0.4)")}
+              >
+                {EVENT_LINK.label}
+              </Link>
             </nav>
 
-            {/* Right: socials + contract */}
             <div className="flex flex-col items-start md:items-end gap-3">
               <div className="flex items-center gap-2">
-                <a
-                  href="https://discord.gg/k2W7g5xR"
-                  target="_blank" rel="noopener noreferrer"
-                  className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/4 border border-white/8 text-white/35 hover:bg-indigo-500/15 hover:text-indigo-300 hover:border-indigo-500/30 transition-all"
-                  title="Discord"
-                >
+                <a href="https://discord.gg/k2W7g5xR" target="_blank" rel="noopener noreferrer"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/4 border border-white/8 text-white/35 hover:bg-indigo-500/15 hover:text-indigo-300 hover:border-indigo-500/30 transition-all" title="Discord">
                   <div className="w-3.5 h-3.5" style={{ background:"currentColor", maskImage:"url('/discord.svg')", WebkitMaskImage:"url('/discord.svg')", maskSize:"contain", maskRepeat:"no-repeat", maskPosition:"center" }} />
                 </a>
-                <a
-                  href="https://explorer.hemi.xyz/address/0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5?tab=contract"
-                  target="_blank" rel="noopener noreferrer"
-                  className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/4 border border-white/8 text-white/35 hover:bg-teal-500/15 hover:text-teal-300 hover:border-teal-500/30 transition-all"
-                  title="Block Explorer"
-                >
+                <a href="https://explorer.hemi.xyz/address/0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5?tab=contract" target="_blank" rel="noopener noreferrer"
+                  className="w-7 h-7 rounded-lg flex items-center justify-center bg-white/4 border border-white/8 text-white/35 hover:bg-teal-500/15 hover:text-teal-300 hover:border-teal-500/30 transition-all" title="Block Explorer">
                   <div className="w-3.5 h-3.5" style={{ background:"currentColor", maskImage:"url('/expo.svg')", WebkitMaskImage:"url('/expo.svg')", maskSize:"contain", maskRepeat:"no-repeat", maskPosition:"center" }} />
                 </a>
               </div>
-
               <div className="text-right">
                 <p className="font-mono text-[9px] uppercase tracking-widest text-white/20 leading-relaxed">
                   Built on Hemi Network · Play responsibly
                 </p>
-                <a
-                  href="https://explorer.hemi.xyz/token/0x5B774f563C902FA7b203FB7029ed6eD4Ce274705"
-                  target="_blank" rel="noopener noreferrer"
-                  className="font-mono text-[9px] text-primary/50 hover:text-primary/80 transition-colors uppercase tracking-widest"
-                >
+                <a href="https://explorer.hemi.xyz/token/0x5B774f563C902FA7b203FB7029ed6eD4Ce274705" target="_blank" rel="noopener noreferrer"
+                  className="font-mono text-[9px] text-primary/50 hover:text-primary/80 transition-colors uppercase tracking-widest">
                   $HAIR: 0x5B77…4705
                 </a>
-                <p className="font-mono text-[9px] uppercase tracking-widest text-white/15 mt-0.5">
-                  ©2026 Hair. All rights reserved.
-                </p>
+                <p className="font-mono text-[9px] uppercase tracking-widest text-white/15 mt-0.5">©2026 Hair. All rights reserved.</p>
               </div>
             </div>
           </div>
         </div>
       </footer>
-
     </div>
   );
 }

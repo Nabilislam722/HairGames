@@ -7,6 +7,9 @@ import { ethers } from "ethers";
 
 const GAME_COST_ETH = "0.000017";
 const CONTRACT_ADDRESS = "0x3E0784ffE4e036bCc1859CA124dF327e8B866E29";
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+
 const DEFAULT_POINTS_CONFIG = { initialPoints: 15000, decrementPerSecond: 100 };
 
 // ── FIXED ABI: Matched your contract modifiers exactly ──────────────────
@@ -33,7 +36,7 @@ export default function RacingGamePage() {
 
   // ── Pull the point economy ────────────────────────────────────────────────
   useEffect(() => {
-    fetch("https://api.hairtoken.xyz/api/race/config")
+    fetch(`${API_BASE}/api/race/config`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Bad config response"))))
       .then((cfg) => {
         pointsConfigRef.current = {
@@ -115,7 +118,7 @@ export default function RacingGamePage() {
       pointsConfigRef.current.initialPoints - (Math.floor(totalTimeMs / 1000) * pointsConfigRef.current.decrementPerSecond)
     );
 
-    const dbSyncRes = await fetch("https://api.hairtoken.xyz/api/points/add", {
+    const dbSyncRes = await fetch(`${API_BASE}/api/points/add`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -150,7 +153,7 @@ export default function RacingGamePage() {
       const signer = await provider.getSigner();
       userAddress = await signer.getAddress();
 
-      const response = await fetch("https://api.hairtoken.xyz/api/race/signature", {
+      const response = await fetch(`${API_BASE}/api/race/signature`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
