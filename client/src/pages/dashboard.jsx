@@ -79,16 +79,6 @@ const GAMES = [
     status: "active",
     difficulty: "Logic",
   },
-  {
-    id: "pattern-match",
-    title: "Memory Match",
-    description: "Memorize and match complex neural patterns.",
-    entryFee: `${GAME_COST_ETH} ETH (~$0.05)`,
-    image: "bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.3)_2px,rgba(0,0,0,0.3)_4px)] bg-rose-900",
-    icon: BrainCircuit,
-    status: "closed",
-    difficulty: "Memory",
-  },
 ];
 
 /* ─── QuestRow ───────────────────────────────────────────────────────────── */
@@ -213,6 +203,7 @@ export default function Dashboard() {
   const { address, isConnected } = useAccount();
   const { data: ethBalanceData } = useBalance({ address });
   const [points, setPoints] = useState(null);
+  const [multiplier, setMultiplier] = useState(1.0);
   const [questSteps, setQuestSteps] = useState(
     () => Object.fromEntries(QUESTS.map(q => [q.id, "idle"]))
   );
@@ -220,12 +211,21 @@ export default function Dashboard() {
 
   useEffect(() => {
     if (!address) return;
+
+    // Points + completed tasks
     fetch(`${API_BASE}/api/points/get?wallet=${address}`)
       .then(r => r.json())
       .then(d => {
         setPoints(d.points);
         QUESTS.forEach(q => { if (d.tasks?.includes(q.id)) setStep(q.id, "completed"); });
       }).catch(console.error);
+
+    // Multiplier from profile (syncs NFT holdings and returns stacked multiplier)
+    fetch(`${API_BASE}/api/profile/${address}`)
+      .then(r => r.json())
+      .then(d => { if (d.multiplier != null) setMultiplier(d.multiplier); })
+      .catch(console.error);
+
   }, [address]);
 
   const handleAction = q => {
@@ -301,9 +301,9 @@ export default function Dashboard() {
           {/* Stats */}
           <motion.div className="stats"
             initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.1 }}>
-            <Stat index={0} icon={Wallet}  label="ETH Balance"  value={ethVal}      suffix="ETH" accent="var(--green)"  note="On Hemi" />
-            <Stat index={1} icon={Trophy}  label="Multiplier" value="1x"                        accent="var(--orange)" />
-            <Stat index={2} icon={Star}    label="Total Points" value={points ?? 0} suffix="HP" accent="var(--purple)"/>
+            <Stat index={0} icon={Wallet} label="ETH Balance"  value={ethVal}      suffix="ETH" accent="var(--green)"  note="On Hemi" />
+            <Stat index={1} icon={Trophy} label="Multiplier"   value={`${Number(multiplier).toFixed(2)}×`}              accent="var(--orange)" />
+            <Stat index={2} icon={Star}   label="Total Points" value={points ?? 0} suffix="HP"  accent="var(--purple)" />
           </motion.div>
 
           {/* Quests */}
@@ -324,7 +324,7 @@ export default function Dashboard() {
           <section>
             <div className="s-head">
               <h2 className="s-title">Arcade Games</h2>
-              <span className="s-tag">Season 4</span>
+              <span className="s-tag">Season 5</span>
             </div>
             <div className="g-grid">
               {GAMES.map((g, i) => <GameCard key={g.id} game={g} index={i} />)}

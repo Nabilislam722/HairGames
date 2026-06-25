@@ -112,9 +112,6 @@ export default function EventRank() {
               >
                 LIVE
               </span>
-              <span className="font-mono text-[9px] uppercase tracking-widest text-white/25">
-                Resets every Monday · 00:00 UTC
-              </span>
             </div>
             <h1 className="font-display font-black text-2xl sm:text-3xl text-white tracking-tight">
               Weekly Event
@@ -129,7 +126,7 @@ export default function EventRank() {
 
           <button
             onClick={fetchBoard}
-            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors flex-shrink-0"
+            className="w-8 h-8 rounded-lg flex items-center justify-center transition-colors flex-shrink-0 cursor-pointer"
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}
             onMouseEnter={e => (e.currentTarget.style.color = "rgba(255,255,255,0.75)")}
             onMouseLeave={e => (e.currentTarget.style.color = "rgba(255,255,255,0.35)")}

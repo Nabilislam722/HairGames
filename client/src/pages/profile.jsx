@@ -10,6 +10,18 @@ import { HiMiniTrophy } from "react-icons/hi2";
 
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+// ─── NFT Image Map ────────────────────────────────────────────────────────────
+// Key   = contract address (lowercase)
+// Value = public image URL (Cloudflare R2 or any CDN)
+const NFT_IMAGE_MAP = {
+  "0xb45bc6d128d284025aabc0ae3159af9c228db16a": "https://pub-6fd72b146dbb4330a7ad961c7c584367.r2.dev/site_assets/Screenshot%202026-06-24%20150809.png",
+  // "0x21d494d2f708d418d58908b48b3e80d8e08a8533": "https://your-r2.dev/hemi1y.png",
+};
+const NFT_IMAGE_FALLBACK = "https://amaranth-imperial-otter-134.mypinata.cloud/ipfs/bafybeicdxf6wh2i7jtkinytziitfhv4nagmkvmzaraoy5b2ris27jiu7ae";
+// ─────────────────────────────────────────────────────────────────────────────
+
+
 /* Helpers */
 function shortenAddr(addr) {
   if (!addr) return "";
@@ -18,11 +30,11 @@ function shortenAddr(addr) {
 
 function getLevelInfo(points) {
   const levels = [
-    { level: 1, title: "Rookie", min: 0, max: 5000, color: "#94a3b8", emoji: "🌱" },
-    { level: 2, title: "Player", min: 50000, max: 15000, color: "#34d399", emoji: "⚡" },
-    { level: 3, title: "Veteran", min: 150000, max: 400000, color: "#38bdf8", emoji: "🔥" },
-    { level: 4, title: "Elite", min: 4000000, max: 1000000, color: "#a78bfa", emoji: "💎" },
-    { level: 5, title: "Legend", min: 10000000, max: 25000000, color: "#fb923c", emoji: "👑" },
+    { level: 1, title: "Rookie",   min: 0,        max: 5000,     color: "#94a3b8", emoji: "🌱" },
+    { level: 2, title: "Player",   min: 50000,    max: 15000,    color: "#34d399", emoji: "⚡" },
+    { level: 3, title: "Veteran",  min: 150000,   max: 400000,   color: "#38bdf8", emoji: "🔥" },
+    { level: 4, title: "Elite",    min: 4000000,  max: 1000000,  color: "#a78bfa", emoji: "💎" },
+    { level: 5, title: "Legend",   min: 10000000, max: 25000000, color: "#fb923c", emoji: "👑" },
     { level: 6, title: "Immortal", min: 25000000, max: 99999999, color: "#f43f5e", emoji: "🏆" },
   ];
   const current = levels.findLast(l => points >= l.min) ?? levels[0];
@@ -67,7 +79,7 @@ function NFTCard({ nft, index }) {
       className="group relative rounded-2xl border border-white/8 bg-white/3 overflow-hidden hover:border-primary/30 transition-colors duration-300"
     >
       <div
-        className="w-full aspect-square flex items-center justify-center text-4xl relative overflow-hidden"
+        className="w-full aspect-square relative overflow-hidden"
         style={{ background: `linear-gradient(135deg, ${nft.color || '#a78bfa'}18, ${nft.color || '#a78bfa'}08)` }}
       >
         <div
@@ -76,7 +88,11 @@ function NFTCard({ nft, index }) {
             backgroundImage: `radial-gradient(circle at 30% 30%, ${nft.color || '#a78bfa'}40 0%, transparent 60%)`
           }}
         />
-        <span className="relative z-10 text-3xl"><img src="https://amaranth-imperial-otter-134.mypinata.cloud/ipfs/bafybeicdxf6wh2i7jtkinytziitfhv4nagmkvmzaraoy5b2ris27jiu7ae"/></span>
+        <img
+          src={NFT_IMAGE_MAP[nft.contractAddress?.toLowerCase()] ?? NFT_IMAGE_FALLBACK}
+          alt={nft.name}
+          className="relative z-10 w-full h-full object-cover"
+        />
       </div>
       <div className="p-3">
         <p className="font-mono font-bold text-[11px] text-white/80 truncate">{nft.name}</p>
@@ -109,7 +125,6 @@ export default function Profile() {
 
     async function fetchProfile() {
       try {
-        // Updated to target the direct express sub-router endpoint path cleanly
         const res = await fetch(`${API_BASE}/api/profile/${address}`);
         if (!res.ok) throw new Error("Network profile sync failure");
         const data = await res.json();
@@ -345,11 +360,11 @@ export default function Profile() {
         </h3>
         <div className="space-y-2">
           {[
-            { level: 1, title: "Rookie", min: 0, max: 5000, color: "#94a3b8", emoji: "🌱" },
-            { level: 2, title: "Player", min: 50000, max: 15000, color: "#34d399", emoji: "⚡" },
-            { level: 3, title: "Veteran", min: 150000, max: 400000, color: "#38bdf8", emoji: "🔥" },
-            { level: 4, title: "Elite", min: 4000000, max: 1000000, color: "#a78bfa", emoji: "💎" },
-            { level: 5, title: "Legend", min: 10000000, max: 25000000, color: "#fb923c", emoji: "👑" },
+            { level: 1, title: "Rookie",   min: 0,        max: 5000,     color: "#94a3b8", emoji: "🌱" },
+            { level: 2, title: "Player",   min: 50000,    max: 15000,    color: "#34d399", emoji: "⚡" },
+            { level: 3, title: "Veteran",  min: 150000,   max: 400000,   color: "#38bdf8", emoji: "🔥" },
+            { level: 4, title: "Elite",    min: 4000000,  max: 1000000,  color: "#a78bfa", emoji: "💎" },
+            { level: 5, title: "Legend",   min: 10000000, max: 25000000, color: "#fb923c", emoji: "👑" },
             { level: 6, title: "Immortal", min: 25000000, max: 99999999, color: "#f43f5e", emoji: "🏆" },
           ].map(l => {
             const isActive = points >= l.min && points < l.max;

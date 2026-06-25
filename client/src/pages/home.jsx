@@ -313,8 +313,8 @@ export default function Home() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col divide-y divide-white/5">
             {[
-              { label: "Total Fee Collected", value: "0.01", suffix: " ETH", icon: Coins, accent: "text-accent", num: true },
-              { label: "Active Players", value: "30", suffix: "", icon: Trophy, accent: "text-primary", num: true },
+              { label: "Total Fee Collected", value: "0.05", suffix: " ETH", icon: Coins, accent: "text-accent", num: true },
+              { label: "Active Players", value: "43", suffix: "", icon: Trophy, accent: "text-primary", num: true },
               { label: "Games Live", value: "3", suffix: "", icon: Zap, accent: "text-secondary", num: true },
             ].map((s, i) => (
               <Reveal key={i} delay={i * 0.1} from="left">
