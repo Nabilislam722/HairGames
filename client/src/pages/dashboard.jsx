@@ -54,7 +54,7 @@ const GAMES = [
     title: "Void Striker",
     description: "Classic 8-bit block mechanics meets high-speed cyber logic.",
     entryFee: `${GAME_COST_ETH} ETH (~$0.05)`,
-    image: "bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.3)_2px,rgba(0,0,0,0.3)_4px)] bg-indigo-900",
+    image: "https://pub-6fd72b146dbb4330a7ad961c7c584367.r2.dev/site_assets/image0.png",
     icon: Gamepad2,
     status: "active",
     difficulty: "HARD",
@@ -64,7 +64,7 @@ const GAMES = [
     title: "Space Huggers",
     description: "Complete the Mission",
     entryFee: `0.00001 ETH (~$0.02)`,
-    image: "bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.3)_2px,rgba(0,0,0,0.3)_4px)] bg-purple-900",
+    image: "https://pub-6fd72b146dbb4330a7ad961c7c584367.r2.dev/site_assets/image.png",
     icon: Search,
     status: "active",
     difficulty: "Medium",
@@ -74,7 +74,7 @@ const GAMES = [
     title: "NEED FOR HAIR",
     description: "THREE!!  TWO!!  ONE!!  GO!!!    |  Be careful, don't lose your HP... Slow down!!!",
     entryFee: `${GAME_COST_ETH} ETH (~$0.05)`,
-    image: "bg-[repeating-linear-gradient(0deg,transparent,transparent_2px,rgba(0,0,0,0.3)_2px,rgba(0,0,0,0.3)_4px)] bg-purple-900",
+    image: "https://pub-6fd72b146dbb4330a7ad961c7c584367.r2.dev/site_assets/image2.png",
     icon: Search,
     status: "active",
     difficulty: "Logic",
@@ -137,7 +137,7 @@ function GameCard({ game, index }) {
       initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }}
       transition={{ delay: index * 0.07 }}
     >
-      <div className="g-banner" style={{ background: game.bannerBg, backgroundSize:"cover", backgroundPosition:"center" }}>
+      <div className="g-banner" style={{ backgroundImage: `url(${game.image})`, backgroundSize:"cover", backgroundPosition:"center" }}>
         <div className="g-banner-grad" />
         <span className="g-diff">{game.difficulty}</span>
         {!live && (

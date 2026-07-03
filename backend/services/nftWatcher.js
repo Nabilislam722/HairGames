@@ -29,7 +29,9 @@ function computeStackedMultiplier(holdings, allowedCollections) {
       totalBonus += (config.multiplier - 1.0) * count;
     }
   }
-
+  if (totalBonus > 0.5) {
+    totalBonus = 0.5;
+  }
   return parseFloat((1.0 + totalBonus).toFixed(2));
 }
 
