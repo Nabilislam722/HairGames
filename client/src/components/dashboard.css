@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Instrument+Sans:ital,wdth,wght@0,75..100,400..700;1,75..100,400..700&display=swap');
+
 *,
 *::before,
 *::after {
@@ -33,7 +34,7 @@
   overflow-x: hidden;
 }
 
-/* ambient glows */
+/* ── Ambient Glows & Noise ── */
 .db-glow1 {
   position: fixed;
   top: -25vh;
@@ -56,7 +57,6 @@
   z-index: 0;
 }
 
-/* noise */
 .db-noise {
   position: fixed;
   inset: 0;
@@ -123,7 +123,7 @@
   margin: 0;
 }
 
-/* ── Stats strip ── */
+/* ── Stats Strip ── */
 .stats {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -187,7 +187,7 @@
   gap: 4px;
 }
 
-/* ── Section head ── */
+/* ── Section Head ── */
 .s-head {
   display: flex;
   align-items: baseline;
@@ -215,7 +215,7 @@
   border-radius: 99px;
 }
 
-/* ── Quest rows ── */
+/* ── Quest Rows ── */
 .q-list {
   display: flex;
   flex-direction: column;
@@ -317,7 +317,7 @@
   margin-bottom: 1px;
 }
 
-/* ── Buttons ── */
+/* ── Core Buttons ── */
 .btn {
   display: inline-flex;
   align-items: center;
@@ -383,7 +383,7 @@
   cursor: not-allowed;
 }
 
-/* ── Game grid ── */
+/* ── Modern Game Card Grid (Redesigned) ── */
 .g-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
@@ -393,11 +393,14 @@
 .g-card {
   background: var(--panel);
   border: 1px solid var(--border);
-  border-radius: 18px;
-  overflow: hidden;
+  border-radius: 20px;
+  position: relative;
+  overflow: hidden; 
   display: flex;
   flex-direction: column;
-  transition: border-color .25s, transform .25s, box-shadow .25s;
+  transition: border-color 0.3s cubic-bezier(0.16, 1, 0.3, 1), 
+              box-shadow 0.3s cubic-bezier(0.16, 1, 0.3, 1),
+              transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .g-card.live {
@@ -405,23 +408,105 @@
 }
 
 .g-card.live:hover {
-  border-color: rgba(0, 255, 170, .22);
-  transform: translateY(-5px);
-  box-shadow: 0 24px 64px rgba(0, 0, 0, .55), 0 0 0 1px rgba(0, 255, 170, .08);
+  border-color: rgba(255, 255, 255, 0.15);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, .55);
+}
+
+/* ── Highlighted Card Aesthetics ── */
+.g-card.highlighted {
+  border: 1px solid transparent;
+  /* First layer is solid panel fill, second is the dynamic glow border */
+  background-image: linear-gradient(var(--panel), var(--panel)), 
+                    linear-gradient(135deg, var(--g-accent, var(--green)), transparent 60%);
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  
+  box-shadow: 
+    0 24px 48px -12px rgba(0, 0, 0, 0.75),
+    0 0 40px -10px color-mix(in srgb, var(--g-accent, var(--green)) 22%, transparent);
+}
+
+.g-card.highlighted:hover {
+  box-shadow: 
+    0 32px 64px -12px rgba(0, 0, 0, 0.85),
+    0 0 50px -5px color-mix(in srgb, var(--g-accent, var(--green)) 35%, transparent);
+}
+
+/* ── Sweeping Light Animation for Highlighted Cards ── */
+@keyframes sweep {
+  0% { left: -120%; }
+  50% { left: 120%; }
+  100% { left: 120%; }
+}
+
+.g-card.highlighted::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -120%;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg, 
+    transparent, 
+    color-mix(in srgb, var(--g-accent, var(--green)) 12%, transparent), 
+    transparent
+  );
+  transform: skewX(-20deg);
+  animation: sweep 7s infinite ease-in-out;
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* ── Glowing Featured Badge ── */
+.g-highlight-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: color-mix(in srgb, var(--g-accent, var(--green)) 15%, #080b12);
+  border: 1px solid color-mix(in srgb, var(--g-accent, var(--green)) 40%, transparent);
+  color: var(--g-accent, var(--green));
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.g-highlight-badge span {
+  font-family: var(--font-m);
+  font-size: 8px;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+}
+
+/* ── Banner Zoom Wrapper & Setup ── */
+.g-banner-container {
+  height: 155px;
+  position: relative;
+  overflow: hidden; /* Clips the inner banner hover without breaking out */
+  border-radius: 19px 19px 0 0;
 }
 
 .g-banner {
-  height: 155px;
-  position: relative;
-  overflow: hidden;
+  height: 100%;
+  width: 100%;
   background-size: cover;
   background-position: center;
+  transition: transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.g-card.live:hover .g-banner {
+  transform: scale(1.05);
 }
 
 .g-banner-grad {
   position: absolute;
   inset: 0;
   background: linear-gradient(to bottom, transparent 35%, var(--panel) 100%);
+  pointer-events: none;
 }
 
 .g-closed-overlay {
@@ -433,21 +518,6 @@
   display: flex;
   align-items: center;
   justify-content: center;
-}
-
-.g-logo {
-  position: absolute;
-  bottom: -15px;
-  left: 16px;
-  z-index: 4;
-  width: 44px;
-  height: 44px;
-  border-radius: 11px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2.5px solid var(--panel);
-  box-shadow: 0 4px 18px rgba(0, 0, 0, .5);
 }
 
 .g-diff {
@@ -467,12 +537,32 @@
   color: var(--muted);
 }
 
+/* ── Absolute Floating App Logo (Fixed Positioning) ── */
+.g-logo {
+  position: absolute;
+  top: 132px; /* Hangs perfectly halfway over the banner boundary */
+  left: 16px;
+  z-index: 8; /* Stays securely on top of the body layer */
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-clip: padding-box;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6), 
+              inset 0 1px 1px rgba(255, 255, 255, 0.1);
+}
+
+/* ── Body Content ── */
 .g-body {
-  padding: 26px 16px 16px;
+  padding: 30px 16px 16px; /* Increased top padding to accommodate absolute logo */
   flex: 1;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
+  position: relative;
+  z-index: 2; /* Keeps text layered neatly beneath the floating logo */
 }
 
 .g-title {
@@ -518,14 +608,27 @@
 
 .g-cat {
   font-family: var(--font-m);
-  font-size: 8px;
+  font-size: 10px;
+  font-weight: bold;
   letter-spacing: .12em;
   text-transform: uppercase;
   padding: 3px 8px;
   border-radius: 6px;
 }
 
-/* ── Connect screen ── */
+/* ── Card Specific Play Button ── */
+.g-play-btn {
+  background: var(--g-accent, var(--green));
+  color: #080b12;
+  box-shadow: 0 4px 14px color-mix(in srgb, var(--g-accent, var(--green)) 25%, transparent);
+}
+
+.g-play-btn:hover {
+  box-shadow: 0 6px 20px color-mix(in srgb, var(--g-accent, var(--green)) 40%, transparent);
+  transform: translateY(-1px);
+}
+
+/* ── Connect Screen ── */
 .conn {
   display: flex;
   flex-direction: column;
@@ -559,7 +662,7 @@
 
 .conn-title {
   font-family: var(--font-d);
-  font-size: 32px;
+  font-size: 32px; 
   font-weight: 800;
   letter-spacing: -0.02em;
   color: var(--text);
@@ -574,15 +677,12 @@
   margin: 0;
 }
 
-/* live dot */
+/* ── Live Dot Animation ── */
 @keyframes pdot {
-
-  0%,
-  100% {
+  0%, 100% {
     opacity: 1;
     transform: scale(1)
   }
-
   50% {
     opacity: .35;
     transform: scale(.8)
@@ -598,6 +698,7 @@
   display: inline-block;
 }
 
+/* ── Spinner ── */
 @keyframes spin {
   to {
     transform: rotate(360deg)
@@ -608,20 +709,18 @@
   animation: spin .9s linear infinite;
 }
 
-@media(max-width:640px) {
+/* ── Media Queries ── */
+@media(max-width: 640px) {
   .stats {
     grid-template-columns: 1fr
   }
-
   .g-grid {
     grid-template-columns: 1fr
   }
-
   .q-row {
     flex-direction: column;
     align-items: flex-start
   }
-
   .hdr-title {
     font-size: 28px
   }

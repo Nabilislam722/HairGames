@@ -10,7 +10,7 @@ const CONTRACT_ADDRESS = "0x3E0784ffE4e036bCc1859CA124dF327e8B866E29";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 
-const DEFAULT_POINTS_CONFIG = { initialPoints: 15000, decrementPerSecond: 100 };
+const DEFAULT_POINTS_CONFIG = { initialPoints: 13000, decrementPerSecond: 90 };
 
 // ── FIXED ABI: Matched your contract modifiers exactly ──────────────────
 const RACING_GAME_ABI = [

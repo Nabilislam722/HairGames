@@ -22,10 +22,10 @@ function Router() {
         <Route path="/game/space_huggers" component={SpaceHuggersGame} />
         <Route path="/game/space_shooter" component={Game} />
         <Route path="/game/race_car" component={RacingGamePage} />
+        <Route path="/game/fishing_game" component={FishingGame}/>
         <Route path="/leaderboard" component={Leaderboard} />
         <Route path="/profile" component={Profile} />
         <Route path="/eventrank" component={EventRank}/>
-        <Route path="/fishing_game" component={FishingGame}/>
         <Route component={NotFound} />
       </Switch>
     </Layout>

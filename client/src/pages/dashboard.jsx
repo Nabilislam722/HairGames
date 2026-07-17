@@ -13,6 +13,7 @@ import Guild_logo from "../assets/hair.png";
 import { motion } from "framer-motion";
 import "../index.css";
 import "../components/dashboard.css";
+import FishingLogo from "/game_assets/fishing.png";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -34,7 +35,7 @@ const QUESTS = [
     actionLabel: "Follow @HairMaxToken",
     url: "https://x.com/intent/follow?screen_name=HairMaxToken",
     accent: "#38bdf8",
-    icon: <img src={X_logo} alt="X" style={{ width:"100%",height:"100%",objectFit:"cover" }} />,
+    icon: <img src={X_logo} alt="X" style={{ width: "100%", height: "100%", objectFit: "cover" }} />,
   },
   {
     id: "hairy_person",
@@ -44,7 +45,7 @@ const QUESTS = [
     actionLabel: "Join Guild",
     url: "https://guild.xyz/hair",
     accent: "#a78bfa",
-    icon: <img src={Guild_logo} alt="Guild" style={{ width:"100%",height:"100%",objectFit:"cover" }} />,
+    icon: <img src={Guild_logo} alt="Guild" style={{ width: "100%", height: "100%", objectFit: "cover" }} />,
   },
 ];
 
@@ -55,7 +56,10 @@ const GAMES = [
     description: "Classic 8-bit block mechanics meets high-speed cyber logic.",
     entryFee: `${GAME_COST_ETH} ETH (~$0.05)`,
     image: "https://pub-6fd72b146dbb4330a7ad961c7c584367.r2.dev/site_assets/image0.png",
+    // logo: ShooterLogo,
     icon: Gamepad2,
+    category: "Shooter",
+    accent: "#38bdf8",
     status: "active",
     difficulty: "HARD",
   },
@@ -65,7 +69,10 @@ const GAMES = [
     description: "Complete the Mission",
     entryFee: `0.00001 ETH (~$0.02)`,
     image: "https://pub-6fd72b146dbb4330a7ad961c7c584367.r2.dev/site_assets/image.png",
+    // logo: HuggersLogo,
     icon: Search,
+    category: "Adventure",
+    accent: "#a78bfa",
     status: "active",
     difficulty: "Medium",
   },
@@ -75,9 +82,26 @@ const GAMES = [
     description: "THREE!!  TWO!!  ONE!!  GO!!!    |  Be careful, don't lose your HP... Slow down!!!",
     entryFee: `${GAME_COST_ETH} ETH (~$0.05)`,
     image: "https://pub-6fd72b146dbb4330a7ad961c7c584367.r2.dev/site_assets/image2.png",
+    // logo: RaceLogo,
     icon: Search,
+    category: "Racing",
+    accent: "#fb923c",
     status: "active",
-    difficulty: "Logic",
+    difficulty: "Easy",
+  },
+  {
+    id: "fishing_game",
+    title: "Max Prø Fishing 2026",
+    description: "Catch fishes and sell them.",
+    entryFee: `${GAME_COST_ETH} ETH (~$0.02)`,
+    image: "/game_assets/fishingbanner.png",
+    logo: FishingLogo,
+    icon: Gamepad2,
+    category: "Fishing",
+    accent: "#34d399",
+    status: "active",
+    difficulty: "HARD",
+    isHighlighted: true,
   },
 ];
 
@@ -85,9 +109,9 @@ const GAMES = [
 function QuestRow({ quest, step, onAction, onClaim }) {
   return (
     <motion.div
-      className={`q-row${step==="completed"?" done":""}`}
+      className={`q-row${step === "completed" ? " done" : ""}`}
       style={{ "--q-accent": quest.accent }}
-      initial={{ opacity:0, y:8 }} animate={{ opacity:1, y:0 }}
+      initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
     >
       <div className="q-ico">{quest.icon}</div>
       <div className="q-txt">
@@ -98,26 +122,26 @@ function QuestRow({ quest, step, onAction, onClaim }) {
         <small>Reward</small>
         +{quest.points} PTS
       </div>
-      <div style={{ flexShrink:0 }}>
+      <div style={{ flexShrink: 0 }}>
         {step === "idle" && (
           <button onClick={onAction} className="btn btn-o">
             {quest.actionLabel} <ExternalLink size={11} />
           </button>
         )}
         {step === "following" && (
-          <button className="btn btn-ghost" disabled style={{ opacity:.55 }}>
+          <button className="btn btn-ghost" disabled style={{ opacity: .55 }}>
             <Loader2 size={12} className="spin" /> Waiting…
           </button>
         )}
         {(step === "claimable" || step === "verifying") && (
-          <button onClick={onClaim} disabled={step==="verifying"} className="btn btn-g">
+          <button onClick={onClaim} disabled={step === "verifying"} className="btn btn-g">
             {step === "verifying"
               ? <><Loader2 size={12} className="spin" /> Verifying…</>
               : <><Zap size={11} /> Claim Reward</>}
           </button>
         )}
         {step === "completed" && (
-          <motion.div initial={{ scale:.85 }} animate={{ scale:1 }} className="btn btn-claimed">
+          <motion.div initial={{ scale: .85 }} animate={{ scale: 1 }} className="btn btn-claimed">
             <CheckCircle2 size={13} /> Claimed
           </motion.div>
         )}
@@ -125,51 +149,86 @@ function QuestRow({ quest, step, onAction, onClaim }) {
     </motion.div>
   );
 }
-
 /* ─── GameCard ───────────────────────────────────────────────────────────── */
 function GameCard({ game, index }) {
   const BIcon = game.icon;
   const live = game.status === "active";
+  const accent = game.accent || "var(--green)";
+  const highlighted = game.isHighlighted; // Read the highlight attribute
 
   const inner = (
     <motion.div
-      className={`g-card${live?" live":""}`}
-      initial={{ opacity:0, y:20 }} animate={{ opacity:1, y:0 }}
+      className={`g-card${live ? " live" : ""}${highlighted ? " highlighted" : ""}`}
+      style={{ 
+        "--g-accent": accent,
+        "--g-accent-glow": `${accent}15` // 8% opacity fallback for older browsers
+      }}
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.07 }}
+      whileHover={live ? { y: -6, scale: 1.01 } : {}}
     >
-      <div className="g-banner" style={{ backgroundImage: `url(${game.image})`, backgroundSize:"cover", backgroundPosition:"center" }}>
+      {/* Visual Highlight Badge */}
+      {highlighted && (
+        <div className="g-highlight-badge">
+          <Zap size={10} fill="currentColor" />
+          <span>FEATURED</span>
+        </div>
+      )}
+
+      {/* Banner Area */}
+      <div className="g-banner-container">
+        <div 
+          className="g-banner" 
+          style={{ backgroundImage: `url(${game.image})` }}
+        />
         <div className="g-banner-grad" />
         <span className="g-diff">{game.difficulty}</span>
-        {!live && (
-          <div className="g-closed-overlay">
-            <span style={{ fontFamily:"var(--font-m)", fontSize:"9px", letterSpacing:"0.15em", textTransform:"uppercase",
-              padding:"4px 12px", borderRadius:"6px", background:"rgba(8,11,18,.6)", color:"rgba(238,242,255,.3)",
-              border:"1px solid rgba(255,255,255,.08)" }}>Closed</span>
-          </div>
-        )}
-        <div className="g-logo" style={{ background: game.logoBg }}>
-          <BIcon size={19} color={game.logoColor} />
-        </div>
       </div>
 
+      {/* Floating App-Style Logo (No longer clipped by the banner container!) */}
+      <div
+        className="g-logo"
+        style={{
+          background: game.logoBg || `linear-gradient(135deg, ${accent}25, ${accent}10)`,
+          border: `1.5px solid ${accent}50`,
+        }}
+      >
+        {game.logo ? (
+          <img
+            src={game.logo}
+            alt={`${game.title} logo`}
+            style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }}
+          />
+        ) : (
+          <BIcon size={18} color={game.logoColor || accent} />
+        )}
+      </div>
+
+      {/* Body Content */}
       <div className="g-body">
-        <div style={{ display:"flex", alignItems:"center", justifyContent:"space-between", gap:8 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
           <h3 className="g-title">{game.title}</h3>
-          <span className="g-cat" style={{ color: game.accent, background:`${game.accent}12`, border:`1px solid ${game.accent}28` }}>
-            {game.category}
-          </span>
+          {game.category && (
+            <span className="g-cat" style={{ color: accent, background: `${accent}12`, border: `1px solid ${accent}25` }}>
+              {game.category}
+            </span>
+          )}
         </div>
+        
         <p className="g-desc">{game.description}</p>
+        
         <div className="g-fee">
           <span className="g-fee-lbl">Entry Fee</span>
           <span className="g-fee-val">{game.entryFee}</span>
         </div>
+
         {live ? (
-          <button className="btn btn-g" style={{ width:"100%", padding:"12px", borderRadius:"10px" }}>
-            <Play size={13} fill="currentColor" stroke="none" /> Play Now
+          <button className="btn btn-g g-play-btn" style={{ width: "100%" }}>
+            <Play size={12} fill="currentColor" stroke="none" /> Play Now
           </button>
         ) : (
-          <button className="btn btn-off" style={{ width:"100%", padding:"12px", borderRadius:"10px" }} disabled>
+          <button className="btn btn-off" style={{ width: "100%" }} disabled>
             Closed
           </button>
         )}
@@ -178,7 +237,7 @@ function GameCard({ game, index }) {
   );
 
   return live
-    ? <Link href={`/game/${game.id}`} style={{ textDecoration:"none" }}>{inner}</Link>
+    ? <Link href={`/game/${game.id}`} style={{ textDecoration: "none" }}>{inner}</Link>
     : inner;
 }
 
@@ -186,9 +245,9 @@ function GameCard({ game, index }) {
 function Stat({ icon: Icon, label, value, suffix, accent, index, note }) {
   return (
     <motion.div className="stat"
-      initial={{ opacity:0, y:10 }} animate={{ opacity:1, y:0 }}
+      initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}
       transition={{ delay: index * 0.06 }}>
-      <div className="stat-ico" style={{ background:`${accent}10`, border:`1px solid ${accent}1a` }}>
+      <div className="stat-ico" style={{ background: `${accent}10`, border: `1px solid ${accent}1a` }}>
         <Icon size={16} color={accent} />
       </div>
       <div className="stat-lbl">{label}</div>
@@ -239,8 +298,8 @@ export default function Dashboard() {
     setStep(q.id, "verifying");
     try {
       const r = await fetch(`${API_BASE}/api/points/claim`, {
-        method:"POST", headers:{"Content-Type":"application/json"},
-        body: JSON.stringify({ wallet:address, task:q.id }),
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet: address, task: q.id }),
       });
       const d = await r.json();
       if (r.ok) { setStep(q.id, "completed"); setPoints(d.newTotal); }
@@ -254,20 +313,20 @@ export default function Dashboard() {
         <div className="db-glow1" /><div className="db-glow2" /><div className="db-noise" />
         <div className="conn">
           <motion.div className="conn-orb"
-            initial={{ scale:.8, opacity:0 }} animate={{ scale:1, opacity:1 }}
-            transition={{ duration:.5, ease:"backOut" }}>
+            initial={{ scale: .8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}
+            transition={{ duration: .5, ease: "backOut" }}>
             <Gamepad2 size={38} color="var(--green)" />
           </motion.div>
-          <motion.div style={{ display:"flex", flexDirection:"column", gap:10, alignItems:"center" }}
-            initial={{ opacity:0, y:14 }} animate={{ opacity:1, y:0 }} transition={{ delay:.15 }}>
+          <motion.div style={{ display: "flex", flexDirection: "column", gap: 10, alignItems: "center" }}
+            initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: .15 }}>
             <h2 className="conn-title">Connect to Play</h2>
             <p className="conn-sub">Link your wallet to access the arena, earn points, and compete on Hemi.</p>
           </motion.div>
-          <motion.div initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.28 }}>
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .28 }}>
             <ConnectButton.Custom>
               {({ openConnectModal }) => (
                 <button onClick={openConnectModal} className="btn btn-g"
-                  style={{ padding:"13px 26px", fontSize:"11px", borderRadius:"11px" }}>
+                  style={{ padding: "13px 26px", fontSize: "11px", borderRadius: "11px" }}>
                   <Wallet size={14} /> Connect Wallet
                 </button>
               )}
@@ -279,7 +338,7 @@ export default function Dashboard() {
   );
 
   const ethVal = ethBalanceData ? Number(ethBalanceData.formatted).toFixed(5) : "0.00000";
-  const short = address ? `${address.slice(0,6)}…${address.slice(-4)}` : "";
+  const short = address ? `${address.slice(0, 6)}…${address.slice(-4)}` : "";
 
   return (
     <>
@@ -289,7 +348,7 @@ export default function Dashboard() {
 
           {/* Header */}
           <motion.div className="hdr"
-            initial={{ opacity:0, y:-14 }} animate={{ opacity:1, y:0 }}>
+            initial={{ opacity: 0, y: -14 }} animate={{ opacity: 1, y: 0 }}>
             <div className="hdr-eye">
               <span className="ldot" />
               Hemi Network · {short}
@@ -300,14 +359,14 @@ export default function Dashboard() {
 
           {/* Stats */}
           <motion.div className="stats"
-            initial={{ opacity:0 }} animate={{ opacity:1 }} transition={{ delay:.1 }}>
-            <Stat index={0} icon={Wallet} label="ETH Balance"  value={ethVal}      suffix="ETH" accent="var(--green)"  note="On Hemi" />
-            <Stat index={1} icon={Trophy} label="Multiplier"   value={`${Number(multiplier).toFixed(2)}×`}              accent="var(--orange)" />
-            <Stat index={2} icon={Star}   label="Total Points" value={points ?? 0} suffix="HP"  accent="var(--purple)" />
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: .1 }}>
+            <Stat index={0} icon={Wallet} label="ETH Balance" value={ethVal} suffix="ETH" accent="var(--green)" note="On Hemi" />
+            <Stat index={1} icon={Trophy} label="Multiplier" value={`${Number(multiplier).toFixed(2)}×`} accent="var(--orange)" />
+            <Stat index={2} icon={Star} label="Total Points" value={points ?? 0} suffix="HP" accent="var(--purple)" />
           </motion.div>
 
           {/* Quests */}
-          <section style={{ marginBottom:52 }}>
+          <section style={{ marginBottom: 52 }}>
             <div className="s-head">
               <h2 className="s-title">Active Quests</h2>
               <span className="s-tag">Earn Rewards</span>
@@ -324,7 +383,7 @@ export default function Dashboard() {
           <section>
             <div className="s-head">
               <h2 className="s-title">Arcade Games</h2>
-              <span className="s-tag">Season 5</span>
+              <span className="s-tag">Season 6</span>
             </div>
             <div className="g-grid">
               {GAMES.map((g, i) => <GameCard key={g.id} game={g} index={i} />)}

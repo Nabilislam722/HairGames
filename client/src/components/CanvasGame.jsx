@@ -1,13 +1,13 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import { GameEngine } from '../game/GameEngine';
 
-export default function CanvasGame({ gameState, setGameState, setStats }) {
+const CanvasGame = forwardRef(function CanvasGame({ gameState, setGameState, setStats }, ref) {
   const canvasRef = useRef(null);
   const engineRef = useRef(null);
 
   useEffect(() => {
     if (!canvasRef.current) return;
-    
+
     if (!engineRef.current) {
       engineRef.current = new GameEngine(canvasRef.current, setGameState, setStats);
     }
@@ -27,12 +27,19 @@ export default function CanvasGame({ gameState, setGameState, setStats }) {
     }
   }, [gameState]);
 
+  useImperativeHandle(ref, () => ({
+    setMoveVector(x, y) {
+      if (engineRef.current) engineRef.current.setMoveVector(x, y);
+    },
+  }));
+
   return (
-    <canvas 
+    <canvas
       ref={canvasRef}
-      width={1280} 
-      height={800} 
-      className="block w-full h-full bg-[#0CA4FF] object-contain"
+      className="block w-full h-full bg-[#0CA4FF]"
+      style={{ touchAction: 'none' }}
     />
   );
-}
+});
+
+export default CanvasGame;

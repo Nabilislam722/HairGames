@@ -1,4 +1,3 @@
-// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
@@ -7,32 +6,39 @@ import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
+contract SpaceHuggersGame is Ownable2Step, Pausable, ReentrancyGuard {
+
     using ECDSA for bytes32;
 
     // ─────────────────────────────────────────────────────────────────────────
     // State
     // ─────────────────────────────────────────────────────────────────────────
 
+    /// @notice Backend wallet whose signature authorises every score submission.
     address public trustedSigner;
+
+    /// @notice Fee (in wei) required with every submitLevelScore call.
     uint256 public submissionFee;
 
-    struct GameSession {
-        uint256 startTime;
-        bool isActive;
-    }
+    /// @notice Per-player sequential nonce — prevents replay attacks.
+    mapping(address => uint256) public userNonces;
 
-    mapping(address => GameSession) public activeSessions;
-    mapping(address => uint256) public playerTotalScore;
-    mapping(address => uint256) public playerTotalFishCaught;
-    mapping(address => uint256) public userNonces; 
+    /// @notice Cumulative verified on-chain score per player.
+    mapping(address => uint256) public playerTotalPoints;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Events
     // ─────────────────────────────────────────────────────────────────────────
 
-    event GameStarted(address indexed player, uint256 startTime);
-    event GameCompleted(address indexed player, uint256 finalScore, uint256 totalFish, uint256 feePaid);
+    event ScoreSubmitted(
+        address indexed player,
+        uint256 indexed level,
+        uint256 kills,
+        uint256 points,
+        uint256 totalPoints,
+        uint256 feePaid
+    );
+
     event TrustedSignerUpdated(address indexed oldSigner, address indexed newSigner);
     event SubmissionFeeUpdated(uint256 oldFee, uint256 newFee);
     event FeesWithdrawn(address indexed to, uint256 amount);
@@ -41,46 +47,46 @@ contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
     // Constructor
     // ─────────────────────────────────────────────────────────────────────────
 
-    constructor(address _trustedSigner, uint256 _submissionFee) Ownable(msg.sender) {
-        require(_trustedSigner != address(0), "FishingGame: zero signer");
-        trustedSigner = _trustedSigner;
-        submissionFee = _submissionFee;
+    constructor(
+        address _trustedSigner,
+        uint256 _submissionFee
+    )
+        Ownable(msg.sender)
+    {
+        _setTrustedSigner(_trustedSigner);
+        _setSubmissionFee(_submissionFee);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Core Gameplay Logic
+    // Core — score submission
     // ─────────────────────────────────────────────────────────────────────────
 
-    function startGame() external whenNotPaused {
-        require(!activeSessions[msg.sender].isActive, "Session already in progress");
-
-        activeSessions[msg.sender] = GameSession({
-            startTime: block.timestamp,
-            isActive: true
-        });
-
-        emit GameStarted(msg.sender, block.timestamp);
-    }
-
-    function submitGameResult(
-        uint256 finalScore,
-        uint256 totalFish,
+    function submitLevelScore(
+        uint256 level,
+        uint256 kills,
+        uint256 points,
         uint256 nonce,
         bytes calldata signature
-    ) external payable whenNotPaused nonReentrant {
-        require(activeSessions[msg.sender].isActive, "No active session");
-        require(msg.value == submissionFee, "FishingGame: incorrect fee");
-        require(nonce == userNonces[msg.sender], "FishingGame: invalid nonce");
-        
-        // Increment nonce immediately to prevent replay attacks
+    )
+        external
+        payable
+        whenNotPaused
+        nonReentrant
+    {
+        // ── 1. Fee gate ───────────────────────────────────────────────────────
+        require(msg.value == submissionFee, "SpaceHuggers: incorrect fee");
+
+        // ── 2. Nonce check ────────────────────────────────────────────────────
+        require(nonce == userNonces[msg.sender], "SpaceHuggers: invalid nonce");
         userNonces[msg.sender]++;
 
-        // The backend must sign: keccak256(player, score, fish, nonce, contract, chainid)
+        // ── 3. Reconstruct and verify the backend signature ───────────────────
         bytes32 structHash = keccak256(
             abi.encodePacked(
                 msg.sender,
-                finalScore,
-                totalFish,
+                level,
+                kills,
+                points,
                 nonce,
                 address(this),
                 block.chainid
@@ -89,16 +95,19 @@ contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
 
         bytes32 ethSignedHash = MessageHashUtils.toEthSignedMessageHash(structHash);
         address signer = ethSignedHash.recover(signature);
-        require(signer == trustedSigner, "FishingGame: invalid signature");
+        require(signer == trustedSigner, "SpaceHuggers: invalid signature");
 
-        // ── 2. State update ───────────────────────────────────────────────────
-        activeSessions[msg.sender].isActive = false;
+        // ── 4. State update ───────────────────────────────────────────────────
+        playerTotalPoints[msg.sender] += points;
 
-        // Add the verified backend stats to the player's on-chain totals
-        playerTotalScore[msg.sender] += finalScore;
-        playerTotalFishCaught[msg.sender] += totalFish;
-
-        emit GameCompleted(msg.sender, finalScore, totalFish, msg.value);
+        emit ScoreSubmitted(
+            msg.sender,
+            level,
+            kills,
+            points,
+            playerTotalPoints[msg.sender],
+            msg.value
+        );
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -106,12 +115,12 @@ contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     function claimFees(address payable _to) external onlyOwner nonReentrant {
-        require(_to != address(0), "FishingGame: zero address");
+        require(_to != address(0), "SpaceHuggers: zero address");
         uint256 balance = address(this).balance;
-        require(balance > 0, "FishingGame: nothing to claim");
+        require(balance > 0, "SpaceHuggers: nothing to claim");
 
         (bool success, ) = _to.call{value: balance}("");
-        require(success, "FishingGame: transfer failed");
+        require(success, "SpaceHuggers: transfer failed");
 
         emit FeesWithdrawn(_to, balance);
     }
@@ -121,15 +130,14 @@ contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
     }
 
     function setTrustedSigner(address _newSigner) external onlyOwner {
-        require(_newSigner != address(0), "FishingGame: zero signer");
         address old = trustedSigner;
-        trustedSigner = _newSigner;
+        _setTrustedSigner(_newSigner);
         emit TrustedSignerUpdated(old, _newSigner);
     }
 
     function setSubmissionFee(uint256 _newFee) external onlyOwner {
         uint256 old = submissionFee;
-        submissionFee = _newFee;
+        _setSubmissionFee(_newFee);
         emit SubmissionFeeUpdated(old, _newFee);
     }
 
@@ -139,5 +147,22 @@ contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
 
     function unpause() external onlyOwner {
         _unpause();
+    }
+
+    function _setTrustedSigner(address _signer) internal {
+        require(_signer != address(0), "SpaceHuggers: zero signer");
+        trustedSigner = _signer;
+    }
+
+    function _setSubmissionFee(uint256 _fee) internal {
+        submissionFee = _fee;
+    }
+
+    receive() external payable {
+        revert("SpaceHuggers: use submitLevelScore");
+    }
+
+    fallback() external payable {
+        revert("SpaceHuggers: unknown function");
     }
 }
