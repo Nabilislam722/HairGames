@@ -10,6 +10,9 @@ const CanvasGame = forwardRef(function CanvasGame({ gameState, setGameState, set
 
     if (!engineRef.current) {
       engineRef.current = new GameEngine(canvasRef.current, setGameState, setStats);
+      
+      const isMobileDevice = window.innerWidth <= 768 || 'ontouchstart' in window;
+      engineRef.current.setIsMobile(isMobileDevice);
     }
 
     return () => {
@@ -19,7 +22,7 @@ const CanvasGame = forwardRef(function CanvasGame({ gameState, setGameState, set
         engineRef.current = null;
       }
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (engineRef.current) {

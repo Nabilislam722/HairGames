@@ -238,7 +238,7 @@ export function initAssets() {
     loadPngAsset("crab", "/Hooded.png", 2.5);             // Standard Enemy (2.5x Size)
     loadPngAsset("shark", "/phishingPhone.png", 3.0);      // Mid-tier Enemy (3.0x Size)
     loadPngAsset("pirate", "/SunglassesGuy.png", 4.5);     // Boss 1 (4.5x Giant Size)
-    loadPngAsset("kraken", "evilCoin.png", 5.0);           // Boss 2 (5.0x Mega Size)
+    loadPngAsset("kraken", "/evilCoin.png", 5.0);           // Boss 2 (5.0x Mega Size)
 
 
     // ==========================================

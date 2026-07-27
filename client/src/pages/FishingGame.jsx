@@ -46,7 +46,12 @@ export default function FishingGame() {
   const [submitError, setSubmitError] = useState("");
   const [pointsAwarded, setPointsAwarded] = useState(0);
   const [txHash, setTxHash] = useState(null);
-  const [isDisabled, setIsDisabled] = useState(false);
+  // True only once the round that just ended is fully settled — either the
+  // on-chain tx + DB sync both succeeded, or the user explicitly chose to
+  // continue without syncing. Gates the Try Again / Play Again buttons so a
+  // new round can't be started while the previous one's result is still in
+  // flight.
+  const [scoreSecured, setScoreSecured] = useState(false);
   // Set when handleStart reverts with "Session already in progress". While
   // true, the Start Game button clears the dangling session instead of
   // retrying startGame() (which would just revert again).
@@ -202,6 +207,7 @@ export default function FishingGame() {
       setClearStatus("idle");
       setSubmitStatus("idle");
       setPointsAwarded(0);
+      setScoreSecured(false); // new round in flight — lock Try Again until it settles
       setGameState("PLAYING");
 
     } catch (err) {
@@ -265,7 +271,6 @@ export default function FishingGame() {
 
       // NOTE: submitGameResult is payable — clearing a stuck session still
       // sends the entry fee unless the contract exempts 0-score submissions.
-      setIsDisabled(true);
       const tx = await contract.submitGameResult(
         BigInt(finalScore),
         BigInt(totalFish),
@@ -273,7 +278,6 @@ export default function FishingGame() {
         signature,
         { value: ethers.parseEther(GAME_COST_ETH) }
       );
-      
 
       const receipt = await tx.wait();
       if (!receipt || receipt.status !== 1) {
@@ -284,6 +288,10 @@ export default function FishingGame() {
       setSubmitStatus("idle");
       setSubmitError("");
       setClearStatus("idle");
+
+      // Session is now closed on-chain — continue straight into starting a
+      // new game instead of leaving the user to click a second time.
+      await handleStart();
     } catch (err) {
       console.error("Clear stuck session failed:", err);
       setSubmitError(err.reason || err.message || "Failed to clear the stuck session.");
@@ -314,7 +322,6 @@ export default function FishingGame() {
 
     const claimData = await claimResponse.json();
     return claimData.added ?? finalScore;
-    setIsDisabled(false);
   };
 
   // ── SCORE SUBMISSION: End of Game ─────────────────────────────────────
@@ -407,6 +414,7 @@ export default function FishingGame() {
       const added = await syncScoreToBackend(lastSubmissionRef.current);
       setPointsAwarded(added);
       setSubmitStatus("success");
+      setScoreSecured(true);
     } catch (err) {
       // Chain succeeded, only the DB write failed. Route to a dedicated
       // screen instead of "error" — retrying handleSubmitScore here would
@@ -435,12 +443,11 @@ export default function FishingGame() {
       const added = await syncScoreToBackend(lastSubmissionRef.current);
       setPointsAwarded(added);
       setSubmitStatus("success");
-      setIsDisabled(false);
+      setScoreSecured(true);
     } catch (err) {
       console.error("Retry sync failed:", err);
       setSubmitError(err.message || "Sync failed again. Your score is still safely recorded on-chain.");
       setSubmitStatus("syncFailed");
-      setIsDisabled(true);
     } finally {
       setIsSubmitting(false);
     }
@@ -459,8 +466,9 @@ export default function FishingGame() {
   }, []);
 
   const bottomControlSpace = gameState === "PLAYING" && isPortrait ? 140 : 0;
+  const topStatsSpace = gameState === "PLAYING" && isPortrait ? 64 : 0;
 
-  const startButtonLabel = () => {
+  const startButtonLabel = (idleLabel = "START GAME") => {
     if (isStuckSession) {
       if (clearStatus === "requesting") return "REQUESTING CLEAR SIGNATURE...";
       if (clearStatus === "clearing") return "CLEARING SESSION...";
@@ -469,7 +477,7 @@ export default function FishingGame() {
     if (submitStatus === "connecting") return "CONNECTING WALLET...";
     if (submitStatus === "initializing_session") return "APPROVE TX...";
     if (submitStatus === "waiting_session_confirm") return "REGISTERING ON HEMI...";
-    return "START GAME";
+    return idleLabel;
   };
 
   const startButtonDisabled =
@@ -478,6 +486,12 @@ export default function FishingGame() {
     submitStatus === "waiting_session_confirm" ||
     clearStatus === "requesting" ||
     clearStatus === "clearing";
+
+  // Stays locked until the round that just ended is fully settled. Once
+  // secured, it stays unlocked through any later start-flow error (stuck
+  // session or otherwise) — that error is surfaced via the label/message
+  // instead of re-locking the button.
+  const tryAgainDisabled = !scoreSecured || startButtonDisabled;
 
   return (
     <div
@@ -506,13 +520,25 @@ export default function FishingGame() {
         </div>
       )}
 
+      {/* Portrait Stats Bar (outside canvas, phone only) */}
+      {gameState === "PLAYING" && isPortrait && (
+        <div
+          className="relative w-full flex justify-center shrink-0 z-20 px-2 pb-2"
+          style={{ maxWidth: `min(100vw, calc((100vh - ${bottomControlSpace + topStatsSpace}px) * 1.6))` }}
+        >
+          <div className="w-full rounded-xl overflow-hidden border border-white/10">
+            <HUD stats={stats} variant="bar" />
+          </div>
+        </div>
+      )}
+
       {/* Game Canvas Container */}
       <div
         className="relative shadow-2xl bg-black overflow-hidden shrink-0 rounded-xl border border-white/10 transition-all duration-300 z-0"
         style={{
           aspectRatio: "16/10",
-          width: `min(100vw, calc((100vh - ${bottomControlSpace}px) * 1.6))`,
-          height: `min(calc(100vh - ${bottomControlSpace}px), 62.5vw)`,
+          width: `min(100vw, calc((100vh - ${bottomControlSpace + topStatsSpace}px) * 1.6))`,
+          height: `min(calc(100vh - ${bottomControlSpace + topStatsSpace}px), 62.5vw)`,
         }}
       >
         <CanvasGame
@@ -524,7 +550,7 @@ export default function FishingGame() {
 
         {gameState === "PLAYING" && (
           <>
-            <HUD stats={stats} />
+            {!isPortrait && <HUD stats={stats} />}
             {!isPortrait && (
               <div className="absolute inset-0 flex flex-col justify-end items-center pb-6 pointer-events-none z-20">
                 <div className="pointer-events-auto">
@@ -542,7 +568,7 @@ export default function FishingGame() {
           className="relative w-full flex items-center justify-center shrink-0 overflow-hidden"
           style={{ height: `${bottomControlSpace}px` }}
         >
-          <div className="relative flex justify-center w-full max-w-sm pt-30 z-20">
+          <div className="relative flex justify-center w-full max-w-sm pt-52 z-20">
             <TouchControls onMove={handleJoystickMove} />
           </div>
         </div>
@@ -601,8 +627,8 @@ export default function FishingGame() {
               onMouseEnter={playHoverSound}
               disabled={startButtonDisabled}
               className={`px-8 py-3 md:px-12 md:py-4 text-white font-bold rounded-full transition-all duration-300 text-sm md:text-xl tracking-wide hover:-translate-y-1 active:translate-y-0 disabled:opacity-80 ${isStuckSession
-                  ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 shadow-[0_0_20px_rgba(245,158,11,0.5)] hover:shadow-[0_0_30px_rgba(245,158,11,0.8)]"
-                  : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.5)] hover:shadow-[0_0_30px_rgba(59,130,246,0.8)]"
+                ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 shadow-[0_0_20px_rgba(245,158,11,0.5)] hover:shadow-[0_0_30px_rgba(245,158,11,0.8)]"
+                : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.5)] hover:shadow-[0_0_30px_rgba(59,130,246,0.8)]"
                 }`}
               style={{ touchAction: "manipulation" }}
             >
@@ -681,7 +707,7 @@ export default function FishingGame() {
                 )}
                 <div className="flex gap-2 w-full mt-1">
                   <button
-                    onClick={() => setSubmitStatus("success")}
+                    onClick={() => { setSubmitStatus("success"); setScoreSecured(true); }}
                     className="flex-1 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-semibold uppercase tracking-wide"
                   >
                     Continue Without Syncing
@@ -697,7 +723,7 @@ export default function FishingGame() {
               </div>
             )}
 
-            {submitStatus !== "success" && submitStatus !== "syncFailed" && (
+            {submitStatus !== "success" && submitStatus !== "syncFailed" && submitStatus !== "error_starting" && (
               <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center gap-3">
                 {submitStatus === "generating" && <div className="text-xs text-blue-300 animate-pulse font-semibold">Step 1: Requesting Server Signature...</div>}
                 {submitStatus === "signing" && <div className="text-xs text-indigo-300 animate-pulse font-semibold">Step 2: Sign score submission tx to Hemi...</div>}
@@ -721,14 +747,25 @@ export default function FishingGame() {
             )}
           </div>
 
+          {submitStatus === "error_starting" && (
+            <div className="text-xs text-red-400 font-bold max-w-md bg-red-950/40 p-3 rounded-lg border border-red-500/20 mb-4 text-center">
+              🚫 Session Registration Error: {submitError}
+            </div>
+          )}
+
           <button
-            onClick={handleStart}
+            onClick={isStuckSession ? handleClearStuckSession : handleStart}
             onMouseEnter={playHoverSound}
-            disabled={isDisabled}
-            className="px-8 py-3 cursor-pointer bg-white/10 hover:bg-white/20 text-white border border-white/30 font-bold rounded-full transition-all duration-300 text-xs uppercase tracking-widest hover:-translate-y-1 active:translate-y-0"
+            disabled={tryAgainDisabled}
+            className="px-8 py-3 cursor-pointer bg-white/10 hover:bg-white/20 text-white border border-white/30 font-bold rounded-full transition-all duration-300 text-xs uppercase tracking-widest hover:-translate-y-1 active:translate-y-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:translate-y-0"
           >
-            Try Again
+            {startButtonLabel("Try Again")}
           </button>
+          {!scoreSecured && (
+            <p className="text-[10px] text-zinc-500 mt-2 tracking-wide">
+              Locked until your score finishes submitting
+            </p>
+          )}
         </div>
       )}
 
@@ -803,7 +840,7 @@ export default function FishingGame() {
                 )}
                 <div className="flex gap-2 w-full mt-1">
                   <button
-                    onClick={() => setSubmitStatus("success")}
+                    onClick={() => { setSubmitStatus("success"); setScoreSecured(true); }}
                     className="flex-1 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-semibold uppercase tracking-wide"
                   >
                     Continue Without Syncing
@@ -819,7 +856,7 @@ export default function FishingGame() {
               </div>
             )}
 
-            {submitStatus !== "success" && submitStatus !== "syncFailed" && (
+            {submitStatus !== "success" && submitStatus !== "syncFailed" && submitStatus !== "error_starting" && (
               <div className="bg-black/20 border border-yellow-500/20 rounded-2xl p-4 flex flex-col items-center justify-center gap-3">
                 {submitStatus === "generating" && <div className="text-xs text-blue-300 animate-pulse font-semibold">Step 1: Requesting Server Signature...</div>}
                 {submitStatus === "signing" && <div className="text-xs text-indigo-300 animate-pulse font-semibold">Step 2: Sign score submission tx to Hemi...</div>}
@@ -843,13 +880,25 @@ export default function FishingGame() {
             )}
           </div>
 
+          {submitStatus === "error_starting" && (
+            <div className="text-xs text-red-400 font-bold max-w-md bg-red-950/40 p-3 rounded-lg border border-red-500/20 mb-4 text-center">
+              🚫 Session Registration Error: {submitError}
+            </div>
+          )}
+
           <button
-            onClick={handleStart}
+            onClick={isStuckSession ? handleClearStuckSession : handleStart}
             onMouseEnter={playHoverSound}
-            className="px-8 py-3 bg-yellow-400 hover:bg-yellow-300 text-blue-950 font-black rounded-full transition-all duration-300 text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(250,204,21,0.4)] hover:shadow-[0_0_30px_rgba(250,204,21,0.6)] hover:-translate-y-1 active:translate-y-0"
+            disabled={tryAgainDisabled}
+            className="px-8 py-3 bg-yellow-400 hover:bg-yellow-300 text-blue-950 font-black rounded-full transition-all duration-300 text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(250,204,21,0.4)] hover:shadow-[0_0_30px_rgba(250,204,21,0.6)] hover:-translate-y-1 active:translate-y-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:translate-y-0"
           >
-            Play Again
+            {startButtonLabel("Play Again")}
           </button>
+          {!scoreSecured && (
+            <p className="text-[10px] text-blue-300/60 mt-2 tracking-wide">
+              Locked until your score finishes submitting
+            </p>
+          )}
         </div>
       )}
     </div>

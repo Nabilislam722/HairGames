@@ -11,7 +11,7 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-  origin: ["https://game.hairtoken.xyz"],
+  origin: ["https://game.hairtoken.xyz", "http://localhost:5173"],
   methods: ['GET', 'POST'],
   credentials: true
 }));

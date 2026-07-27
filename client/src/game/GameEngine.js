@@ -27,6 +27,9 @@ export class GameEngine {
     this.lastTime = 0;
     this.keys = {};
     this.moveVector = { x: 0, y: 0 };
+    
+    this.isMobile = false; // Track mobile state
+
     this.level = 1;
     this.lives = 3;
     this.score = 0;
@@ -62,9 +65,15 @@ export class GameEngine {
     this.loop = this.loop.bind(this);
   }
 
+  setIsMobile(isMobile) {
+    this.isMobile = isMobile;
+  }
+
   setMoveVector(x, y) {
-    this.moveVector.x = x;
-    this.moveVector.y = y;
+    // Boost movement speed by 30% if on mobile to compensate for joystick feel
+    const speedBoost = this.isMobile ? 1.3 : 1.0;
+    this.moveVector.x = x * speedBoost;
+    this.moveVector.y = y * speedBoost;
   }
 
   destroy() {
@@ -141,6 +150,7 @@ export class GameEngine {
       };
     };
 
+    // Obstacles always spawn normally
     for (let i = 0; i < cfg.r; i++) {
       let pt = findSpawn(48, 48);
       this.obstacles.push(new Obstacle(pt.x, pt.y, "ROCK"));
@@ -153,22 +163,36 @@ export class GameEngine {
       let pt = findSpawn(48, 48);
       this.obstacles.push(new Obstacle(pt.x, pt.y, "CORAL"));
     }
-    for (let i = 0; i < cfg.g; i++) {
+
+    // Reduces enemy count by 50% on mobile, guarantees at least 1 spawns if config > 0
+    const getEnemyCount = (count) => {
+      if (!this.isMobile || count === 0) return count;
+      return Math.max(1, Math.floor(count * 0.8));
+    };
+
+    const gCount = getEnemyCount(cfg.g);
+    const cCount = getEnemyCount(cfg.c);
+    const pCount = getEnemyCount(cfg.p);
+    const sCount = getEnemyCount(cfg.s);
+
+    for (let i = 0; i < gCount; i++) {
       let pt = findSpawn(36, 30);
       this.enemies.push(new GreenFish(pt.x, pt.y));
     }
-    for (let i = 0; i < cfg.c; i++) {
+    for (let i = 0; i < cCount; i++) {
       let pt = findSpawn(30, 24);
       this.enemies.push(new Crab(pt.x, pt.y));
     }
-    for (let i = 0; i < cfg.p; i++) {
+    for (let i = 0; i < pCount; i++) {
       let pt = findSpawn(46, 46);
       this.enemies.push(new PirateBoat(pt.x, pt.y));
     }
-    for (let i = 0; i < cfg.s; i++) {
+    for (let i = 0; i < sCount; i++) {
       let pt = findSpawn(54, 27);
       this.enemies.push(new Shark(pt.x, pt.y));
     }
+
+    // Fish targets stay at 100% capacity
     for (let i = 0; i < cfg.fishCount; i++) {
       let pt = findSpawn(32, 24);
       this.targets.push(new FishTarget(pt.x, pt.y, cfg.fishType, cfg.fishPts));
@@ -205,22 +229,45 @@ export class GameEngine {
     this.lastTime = time;
     if (dt > 0.1) dt = 0.1;
 
+    // Slow down enemies by 25% on mobile
+    let enemyDt = this.isMobile ? dt * 0.75 : dt;
+
     this.player.update(dt, this);
     for (let o of this.obstacles) o.update();
-    if (this.boss) this.boss.update(dt, this);
+    
+    // Apply slow time to Boss
+    if (this.boss) this.boss.update(enemyDt, this);
+
+    // Dynamically shrink the player's physical hitbox by 40% on mobile
+    let playerHitbox = this.player.getRect();
+    if (this.isMobile) {
+      let shrinkX = playerHitbox.w * 0.2;
+      let shrinkY = playerHitbox.h * 0.2;
+      playerHitbox = {
+        x: playerHitbox.x + shrinkX,
+        y: playerHitbox.y + shrinkY,
+        w: playerHitbox.w - (shrinkX * 2),
+        h: playerHitbox.h - (shrinkY * 2)
+      };
+    }
 
     for (let i = this.enemies.length - 1; i >= 0; i--) {
       let en = this.enemies[i];
-      en.update(dt, this);
+      
+      // Apply slow time to standard enemies
+      en.update(enemyDt, this);
+      
       if (en.dead) {
         this.enemies.splice(i, 1);
         continue;
       }
+
+      // Check collision against the responsive playerHitbox
       if (
         en.damage > 0 &&
         this.player.invulnTimer <= 0 &&
         this.player.activePowerUps.shield <= 0 &&
-        checkCol(en.getRect(), this.player.getRect())
+        checkCol(en.getRect(), playerHitbox)
       ) {
         if (en instanceof KrakenTentacle && !en.solid) continue; // safety for tentacle warning state
         this.player.invulnTimer = 2.0;
