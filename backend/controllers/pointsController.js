@@ -125,6 +125,16 @@ export const addPoints = async (req, res) => {
       const decodedData = abiCoder.decode(['uint256', 'uint256', 'uint256', 'bytes'], '0x' + inputData.slice(10));
       onChainScore = Number(decodedData[0]); // Decodes finalScore
 
+    } else if (gameId === "fruit_ninja") {
+      // FruitNinja.submitGameResult(finalScore, levelReached, fruitsSliced, nonce, signature) —
+      // one more uint256 than fishing_party's submitGameResult, so it's a distinct selector.
+      const FRUIT_NINJA_SELECTOR = ethers.id("submitGameResult(uint256,uint256,uint256,uint256,bytes)").slice(0, 10);
+      if (!inputData.startsWith(FRUIT_NINJA_SELECTOR)) {
+        return res.status(400).json({ error: 'Transaction did not call submitGameResult' });
+      }
+      const decodedData = abiCoder.decode(['uint256', 'uint256', 'uint256', 'uint256', 'bytes'], '0x' + inputData.slice(10));
+      onChainScore = Number(decodedData[0]); // Decodes finalScore
+
     } else if (gameId === "space_huggers") {
       if (!inputData.startsWith(SUBMIT_LEVEL_SCORE_SELECTOR)) {
         return res.status(400).json({ error: 'Transaction did not call submitLevelScore' });

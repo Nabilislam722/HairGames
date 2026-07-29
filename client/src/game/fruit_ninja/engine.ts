@@ -18,20 +18,21 @@ const GRAVITY = 0.42;
 const FLY_GRAVITY = 0.06;
 
 const FRENZY_DURATION = 6;
+const FRENZY_GRACE_DURATION = 1.5;
 const POINT_LOCK_DURATION = 10;
 const MULTIPLIER_DURATION = 8;
 
 const LEVELS: LevelConfig[] = [
   { level: 1, label: "Orchard", targetScore: 200, spawnIntervalStart: 1.25, maxDifficulty: 2, bombChanceMax: 0.05, abilityChance: 0, allowFrenzy: false, allowGlitch: false },
-  { level: 2, label: "Citrus Grove", targetScore: 280, spawnIntervalStart: 1.1, maxDifficulty: 3.5, bombChanceMax: 0.08, abilityChance: 0, allowFrenzy: false, allowGlitch: false },
+  { level: 2, label: "Citrus Grove", targetScore: 300, spawnIntervalStart: 1.1, maxDifficulty: 3.5, bombChanceMax: 0.08, abilityChance: 0, allowFrenzy: false, allowGlitch: false },
   { level: 3, label: "Tropic Storm", targetScore: 500, spawnIntervalStart: 0.95, maxDifficulty: 5, bombChanceMax: 0.11, abilityChance: 0.04, allowFrenzy: false, allowGlitch: false },
   { level: 4, label: "Berry Blitz", targetScore: 700, spawnIntervalStart: 0.82, maxDifficulty: 6.5, bombChanceMax: 0.13, abilityChance: 0.05, allowFrenzy: false, allowGlitch: false },
-  { level: 5, label: "Dragon's Den", targetScore: 1500, spawnIntervalStart: 0.72, maxDifficulty: 8, bombChanceMax: 0.15, abilityChance: 0.1, allowFrenzy: true, allowGlitch: true },
-  { level: 6, label: "Mango Mayhem", targetScore: 980, spawnIntervalStart: 0.66, maxDifficulty: 9, bombChanceMax: 0.16, abilityChance: 0.07, allowFrenzy: true, allowGlitch: true },
-  { level: 7, label: "Pomelo Paradise", targetScore: 1280, spawnIntervalStart: 0.6, maxDifficulty: 10, bombChanceMax: 0.17, abilityChance: 0.08, allowFrenzy: true, allowGlitch: true },
-  { level: 8, label: "Lychee Labyrinth", targetScore: 1620, spawnIntervalStart: 0.56, maxDifficulty: 11, bombChanceMax: 0.18, abilityChance: 0.08, allowFrenzy: true, allowGlitch: true },
-  { level: 9, label: "Coconut Cove", targetScore: 2000, spawnIntervalStart: 0.52, maxDifficulty: 12, bombChanceMax: 0.19, abilityChance: 0.09, allowFrenzy: true, allowGlitch: true },
-  { level: 10, label: "Fruit Frenzy", targetScore: 2500, spawnIntervalStart: 0.48, maxDifficulty: 13, bombChanceMax: 0.2, abilityChance: 0.1, allowFrenzy: true, allowGlitch: true },
+  { level: 5, label: "Dragon's Den", targetScore: 1500, spawnIntervalStart: 0.72, maxDifficulty: 8, bombChanceMax: 0.15, abilityChance: 0.2, allowFrenzy: true, allowGlitch: true },
+  { level: 6, label: "Mango Mayhem", targetScore: 980, spawnIntervalStart: 0.3, maxDifficulty: 9, bombChanceMax: 0.17, abilityChance: 0.07, allowFrenzy: true, allowGlitch: true },
+  { level: 7, label: "Pomelo Paradise", targetScore: 1280, spawnIntervalStart: 0.6, maxDifficulty: 11, bombChanceMax: 0.2, abilityChance: 0.08, allowFrenzy: true, allowGlitch: true },
+  { level: 8, label: "Lychee Labyrinth", targetScore: 1620, spawnIntervalStart: 0.56, maxDifficulty: 11, bombChanceMax: 0.21, abilityChance: 0.08, allowFrenzy: true, allowGlitch: true },
+  { level: 9, label: "Coconut Cove", targetScore: 2000, spawnIntervalStart: 0.52, maxDifficulty: 12, bombChanceMax: 0.25, abilityChance: 0.1, allowFrenzy: true, allowGlitch: true },
+  { level: 10, label: "Fruit Frenzy", targetScore: 2500, spawnIntervalStart: 0.48, maxDifficulty: 13, bombChanceMax: 0.2, abilityChance: 0.2, allowFrenzy: true, allowGlitch: true },
 ];
 
 export function getLevelConfig(level: number): LevelConfig {
@@ -46,6 +47,7 @@ export function createInitialState(best: number): GameState {
   return {
     phase: "menu",
     score: 0,
+    fruitsSliced: 0,
     best,
     lives: 3,
     combo: 0,
@@ -63,6 +65,7 @@ export function createInitialState(best: number): GameState {
     levelScore: 0,
     frenzyTimer: 0,
     frenzySpawner: 0,
+    frenzyGraceTimer: 0,
     pointLockTimer: 0,
     multiplier: 1,
     multiplierTimer: 0,
@@ -77,6 +80,7 @@ export function resetForPlay(s: GameState): GameState {
     ...s,
     phase: "playing",
     score: 0,
+    fruitsSliced: 0,
     lives: 3,
     combo: 0,
     comboTimer: 0,
@@ -93,6 +97,7 @@ export function resetForPlay(s: GameState): GameState {
     levelScore: 0,
     frenzyTimer: 0,
     frenzySpawner: 0,
+    frenzyGraceTimer: 0,
     pointLockTimer: 0,
     multiplier: 1,
     multiplierTimer: 0,
@@ -118,6 +123,7 @@ export function continueAfterLevelUp(s: GameState): GameState {
     levelScore: 0,
     frenzyTimer: 0,
     frenzySpawner: 0,
+    frenzyGraceTimer: 0,
     pointLockTimer: 0,
     multiplier: 1,
     multiplierTimer: 0,
@@ -158,8 +164,13 @@ function spawnTrajectory(w: number, h: number) {
 function spawnObject(s: GameState, w: number, h: number): FlyingObject {
   const cfg = getLevelConfig(s.level);
   const bombChance = Math.min(cfg.bombChanceMax, 0.04 + s.difficulty * 0.015);
-  // No bombs at all while Frenzy is active — it's meant to be a safe, all-fruit bonus window.
-  const isBomb = s.frenzyTimer <= 0 && Math.random() < bombChance && s.elapsed > 2.5;
+  // No bombs while Frenzy is active OR during its grace tail — the shower's
+  // clutter is exactly when a surprise bomb would be least fair to punish.
+  const isBomb =
+    s.frenzyTimer <= 0 &&
+    s.frenzyGraceTimer <= 0 &&
+    Math.random() < bombChance &&
+    s.elapsed > 2.5;
   const traj = spawnTrajectory(w, h);
   const sizeScale = getSizeScale(w);
 
@@ -386,7 +397,7 @@ function sliceObject(s: GameState, o: FlyingObject, sliceDir: Vec2) {
     s.best = Math.max(s.best, s.score);
     return;
   }
-
+  s.fruitsSliced += 1;
   const k = o.kind as { color: string; points: number };
   spawnJuice(s, o.pos.x, o.pos.y, k.color, 14);
 
@@ -573,12 +584,17 @@ export function updateGame(
     if (s.frenzyTimer <= 0) {
       s.frenzyTimer = 0;
       removeAbilityActive(s, "frenzy");
+      // Shower just stopped — start the grace window rather than cutting
+      // forgiveness off immediately (see FRENZY_GRACE_DURATION).
+      s.frenzyGraceTimer = FRENZY_GRACE_DURATION;
       // Target was already hit during the frenzy window — advance now that it's over.
       if (s.levelScore >= cfg.targetScore && s.phase === "playing") {
         s.phase = "levelup";
         s.best = Math.max(s.best, s.score);
       }
     }
+  } else if (s.frenzyGraceTimer > 0) {
+    s.frenzyGraceTimer = Math.max(0, s.frenzyGraceTimer - dt);
   }
 
   if (s.pointLockTimer > 0) {
@@ -652,8 +668,14 @@ export function updateGame(
       o.pos.x > w + 100 ||
       o.pos.y < -100;
     if (offScreen) {
-      // frenzy fruits and ability fruits (frenzy/glitch/multiplier/golden) don't damage on miss
-      if (!o.sliced && !o.isBomb && !o.frenzy && !o.isAbility) {
+      // Frenzy (plus its grace tail) is a fully safe window. Forgive a miss
+      // if: the object is shower fruit (o.frenzy — still falling even after
+      // the timer hit 0), OR frenzy is *currently* active, OR we're still
+      // inside the post-shower grace period. That last case is what fixes
+      // the instant-death-right-after-shower bug: leftover shower fruit and
+      // clutter get a beat to clear before misses start costing lives again.
+      const frenzyForgiven = o.frenzy || s.frenzyTimer > 0 || s.frenzyGraceTimer > 0;
+      if (!o.sliced && !o.isBomb && !o.isAbility && !frenzyForgiven) {
         s.lives -= 1;
         s.shake = 0.4;
         addFloat(s, w / 2, h * 0.7, "Missed!", "#ff5252");

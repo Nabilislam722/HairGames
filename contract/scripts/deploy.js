@@ -4,9 +4,9 @@ async function main() {
   const trustedSigner = "0x37cEf88183448E28dE0c11Fe0F224676c4fEa199"; 
   const submissionFee = hre.ethers.parseEther("0.000012");
 
-  console.log("Deploying FishingGame...");
+  console.log("Deploying FruitNinja...");
 
-  const SpaceHuggers = await hre.ethers.getContractFactory("FishingGame");
+  const SpaceHuggers = await hre.ethers.getContractFactory("FruitNinja");
   const contract = await SpaceHuggers.deploy(trustedSigner, submissionFee);
 
   await contract.waitForDeployment();

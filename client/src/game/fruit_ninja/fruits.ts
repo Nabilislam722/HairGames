@@ -3,8 +3,8 @@ import type { FruitKind, AbilityKind } from "./types";
 // Adjust these two import paths to wherever you drop the logo assets in
 // your project (e.g. src/assets/fruit-ninja/). Vite will resolve them to a
 // URL string, which is what AbilityKind.iconSrc expects.
-import hairIcon from "../../assets/hair.png";
-import hemiIcon from "../../assets/hemi.png";
+import hairIcon from "/hair.png";
+import hemiIcon from "/hemi.png";
 
 function rad(deg: number) {
   return (deg * Math.PI) / 180;

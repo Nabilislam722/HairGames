@@ -4,7 +4,8 @@ import profileRouter from "./profile.js";
 import {
     getRaceConfig,
     generateRaceSignature,
-    generateFishingSignature
+    generateFishingSignature,
+    generateFruitNinjaSignature
 } from "../controllers/gameController.js";
 
 import {
@@ -21,21 +22,22 @@ import {
 
 const router = express.Router();
 
-// ── Profile Sub-Router ───────────────────────────────────────────────────
+// Profile Sub-Router 
 router.use("/profile", profileRouter);
 
-// ── Game Signatures & Configs ────────────────────────────────────────────
+// Game Signatures & Configs 
 router.get("/race/config", getRaceConfig);
 router.post("/race/signature", generateRaceSignature);
 router.post("/fishing/signature", generateFishingSignature);
+router.post("/fruitninja/signature", generateFruitNinjaSignature);
 
-// ── Points Management ────────────────────────────────────────────────────
+// Points Management 
 router.post("/points/verify", verifyPoints);
 router.post("/points/add", addPoints);
 router.get("/points/get", getPoints);
 router.post("/points/claim", claimTask);
 
-// ── Leaderboards & Events ────────────────────────────────────────────────
+// Leaderboards & Events 
 router.get("/leaderboard", getGlobalLeaderboard);
 router.get("/event/leaderboard", getEventLeaderboard);
 

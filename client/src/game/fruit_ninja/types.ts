@@ -119,4 +119,6 @@ export interface GameState {
   multiplierTimer: number;
   activeAbilities: ActiveAbility[];
   glitchFlash: number;
+  fruitsSliced: number;
+  frenzyGraceTimer: number;
 }

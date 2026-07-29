@@ -14,6 +14,8 @@ import { motion } from "framer-motion";
 import "../index.css";
 import "../components/dashboard.css";
 import FishingLogo from "/game_assets/fishing.png";
+import FruitLogo from "/game_assets/fruitlogo.png"
+import FruitBanner from "/game_assets/FruitBanner.png"
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -50,6 +52,20 @@ const QUESTS = [
 ];
 
 const GAMES = [
+   {
+    id: "max_fruitninja",
+    title: "Max Fruit Slicer 200",
+    description: "Slash some Fruits... But You have to be careful like a ninja",
+    entryFee: `${GAME_COST_ETH} ETH (~$0.02)`,
+    image: FruitBanner,
+    logo: FruitLogo,
+    icon: Gamepad2,
+    category: "Fishing",
+    accent: "#ff964f",
+    status: "active",
+    difficulty: "Easy",
+    isHighlighted: true,
+  },
   {
     id: "space_shooter",
     title: "Void Striker",
@@ -101,7 +117,7 @@ const GAMES = [
     accent: "#34d399",
     status: "active",
     difficulty: "HARD",
-    isHighlighted: true,
+    isHighlighted: false,
   },
 ];
 
@@ -383,7 +399,7 @@ export default function Dashboard() {
           <section>
             <div className="s-head">
               <h2 className="s-title">Arcade Games</h2>
-              <span className="s-tag">Season 6</span>
+              <span className="s-tag">Season 7</span>
             </div>
             <div className="g-grid">
               {GAMES.map((g, i) => <GameCard key={g.id} game={g} index={i} />)}

@@ -21,7 +21,7 @@ function Router() {
         <Route path="/dashboard" component={Dashboard} />
         <Route path="/game/space_huggers" component={SpaceHuggersGame} />
         <Route path="/game/space_shooter" component={Game} />
-        <Route path="/game/fruitninja" component={fruitninja}/>
+        <Route path="/game/max_fruitninja" component={fruitninja}/>
         <Route path="/game/race_car" component={RacingGamePage} />
         <Route path="/game/fishing_game" component={FishingGame}/>
         <Route path="/leaderboard" component={Leaderboard} />

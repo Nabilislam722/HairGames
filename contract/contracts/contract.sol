@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
+contract FruitNinja is Ownable2Step, Pausable, ReentrancyGuard {
     using ECDSA for bytes32;
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -24,15 +24,24 @@ contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
 
     mapping(address => GameSession) public activeSessions;
     mapping(address => uint256) public playerTotalScore;
-    mapping(address => uint256) public playerTotalFishCaught;
-    mapping(address => uint256) public userNonces; 
+    mapping(address => uint256) public playerBestScore;
+    mapping(address => uint256) public playerTotalFruitsSliced;
+    mapping(address => uint256) public playerHighestLevel;
+    mapping(address => uint256) public userNonces;
 
     // ─────────────────────────────────────────────────────────────────────────
     // Events
     // ─────────────────────────────────────────────────────────────────────────
 
     event GameStarted(address indexed player, uint256 startTime);
-    event GameCompleted(address indexed player, uint256 finalScore, uint256 totalFish, uint256 feePaid);
+    event GameCompleted(
+        address indexed player,
+        uint256 finalScore,
+        uint256 levelReached,
+        uint256 fruitsSliced,
+        uint256 feePaid
+    );
+    event NewBestScore(address indexed player, uint256 newBest);
     event TrustedSignerUpdated(address indexed oldSigner, address indexed newSigner);
     event SubmissionFeeUpdated(uint256 oldFee, uint256 newFee);
     event FeesWithdrawn(address indexed to, uint256 amount);
@@ -42,7 +51,7 @@ contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     constructor(address _trustedSigner, uint256 _submissionFee) Ownable(msg.sender) {
-        require(_trustedSigner != address(0), "FishingGame: zero signer");
+        require(_trustedSigner != address(0), "FruitSlashGame: zero signer");
         trustedSigner = _trustedSigner;
         submissionFee = _submissionFee;
     }
@@ -64,23 +73,25 @@ contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
 
     function submitGameResult(
         uint256 finalScore,
-        uint256 totalFish,
+        uint256 levelReached,
+        uint256 fruitsSliced,
         uint256 nonce,
         bytes calldata signature
     ) external payable whenNotPaused nonReentrant {
         require(activeSessions[msg.sender].isActive, "No active session");
-        require(msg.value == submissionFee, "FishingGame: incorrect fee");
-        require(nonce == userNonces[msg.sender], "FishingGame: invalid nonce");
-        
+        require(msg.value == submissionFee, "FruitSlashGame: incorrect fee");
+        require(nonce == userNonces[msg.sender], "FruitSlashGame: invalid nonce");
+
         // Increment nonce immediately to prevent replay attacks
         userNonces[msg.sender]++;
 
-        // The backend must sign: keccak256(player, score, fish, nonce, contract, chainid)
+        // The backend must sign: keccak256(player, score, level, fruits, nonce, contract, chainid)
         bytes32 structHash = keccak256(
             abi.encodePacked(
                 msg.sender,
                 finalScore,
-                totalFish,
+                levelReached,
+                fruitsSliced,
                 nonce,
                 address(this),
                 block.chainid
@@ -89,16 +100,24 @@ contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
 
         bytes32 ethSignedHash = MessageHashUtils.toEthSignedMessageHash(structHash);
         address signer = ethSignedHash.recover(signature);
-        require(signer == trustedSigner, "FishingGame: invalid signature");
+        require(signer == trustedSigner, "FruitSlashGame: invalid signature");
 
-        // ── 2. State update ───────────────────────────────────────────────────
+        // ── State update ────────────────────────────────────────────────────
         activeSessions[msg.sender].isActive = false;
 
-        // Add the verified backend stats to the player's on-chain totals
         playerTotalScore[msg.sender] += finalScore;
-        playerTotalFishCaught[msg.sender] += totalFish;
+        playerTotalFruitsSliced[msg.sender] += fruitsSliced;
 
-        emit GameCompleted(msg.sender, finalScore, totalFish, msg.value);
+        if (levelReached > playerHighestLevel[msg.sender]) {
+            playerHighestLevel[msg.sender] = levelReached;
+        }
+
+        if (finalScore > playerBestScore[msg.sender]) {
+            playerBestScore[msg.sender] = finalScore;
+            emit NewBestScore(msg.sender, finalScore);
+        }
+
+        emit GameCompleted(msg.sender, finalScore, levelReached, fruitsSliced, msg.value);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -106,12 +125,12 @@ contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     function claimFees(address payable _to) external onlyOwner nonReentrant {
-        require(_to != address(0), "FishingGame: zero address");
+        require(_to != address(0), "FruitSlashGame: zero address");
         uint256 balance = address(this).balance;
-        require(balance > 0, "FishingGame: nothing to claim");
+        require(balance > 0, "FruitSlashGame: nothing to claim");
 
         (bool success, ) = _to.call{value: balance}("");
-        require(success, "FishingGame: transfer failed");
+        require(success, "FruitSlashGame: transfer failed");
 
         emit FeesWithdrawn(_to, balance);
     }
@@ -121,7 +140,7 @@ contract FishingGame is Ownable2Step, Pausable, ReentrancyGuard {
     }
 
     function setTrustedSigner(address _newSigner) external onlyOwner {
-        require(_newSigner != address(0), "FishingGame: zero signer");
+        require(_newSigner != address(0), "FruitSlashGame: zero signer");
         address old = trustedSigner;
         trustedSigner = _newSigner;
         emit TrustedSignerUpdated(old, _newSigner);
