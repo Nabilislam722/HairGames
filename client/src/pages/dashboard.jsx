@@ -60,7 +60,7 @@ const GAMES = [
     image: FruitBanner,
     logo: FruitLogo,
     icon: Gamepad2,
-    category: "Fishing",
+    category: "Slicer",
     accent: "#ff964f",
     status: "active",
     difficulty: "Easy",

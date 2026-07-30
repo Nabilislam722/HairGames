@@ -192,7 +192,7 @@ function spawnObject(s: GameState, w: number, h: number): FlyingObject {
   // ability fruit roll
   if (cfg.abilityChance > 0 && Math.random() < cfg.abilityChance && s.elapsed > 4) {
     const pool = ABILITY_FRUITS.filter((a) => {
-      if (a.ability === "frenzy") return cfg.allowFrenzy;
+      if (a.ability === "frenzy") return cfg.allowFrenzy && s.frenzyTimer <= 0 && s.frenzyGraceTimer <= 0;
       if (a.ability === "glitch") return cfg.allowGlitch;
       return true; // golden, multiplier, hair, hemi always allowed once abilities are on
     });
