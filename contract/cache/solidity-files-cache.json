@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "O:\\Projects\\HairGames\\contract\\contracts\\contract.sol": {
-      "lastModificationDate": 1785173746502,
-      "contentHash": "e04a40784a5b52d379ba44f566a06ce5",
+      "lastModificationDate": 1787720128085,
+      "contentHash": "c458a33f27f15c01ae50b428cb241e85",
       "sourceName": "contracts/contract.sol",
       "solcConfig": {
         "version": "0.8.24",
@@ -30,8 +30,6 @@
         }
       },
       "imports": [
-        "@openzeppelin/contracts/utils/cryptography/ECDSA.sol",
-        "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol",
         "@openzeppelin/contracts/access/Ownable2Step.sol",
         "@openzeppelin/contracts/utils/Pausable.sol",
         "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
@@ -40,43 +38,7 @@
         "^0.8.24"
       ],
       "artifacts": [
-        "FruitNinja"
-      ]
-    },
-    "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\cryptography\\ECDSA.sol": {
-      "lastModificationDate": 1779297457280,
-      "contentHash": "b038f3665d2262af34fe6009e3cd78dd",
-      "sourceName": "@openzeppelin/contracts/utils/cryptography/ECDSA.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "cancun",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "ECDSA"
+        "BestGameVoting"
       ]
     },
     "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\access\\Ownable2Step.sol": {
@@ -153,44 +115,6 @@
       ],
       "artifacts": [
         "ReentrancyGuard"
-      ]
-    },
-    "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\cryptography\\MessageHashUtils.sol": {
-      "lastModificationDate": 1779297457546,
-      "contentHash": "fab97298382d4c32182a66ec35255b71",
-      "sourceName": "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "cancun",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "../Strings.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.24"
-      ],
-      "artifacts": [
-        "MessageHashUtils"
       ]
     },
     "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\Pausable.sol": {
@@ -341,6 +265,122 @@
         "StorageSlot"
       ]
     },
+    "O:\\Projects\\HairGames\\contract\\contracts\\SpaceHuggersGame.sol": {
+      "lastModificationDate": 1785174484898,
+      "contentHash": "d0b58ae1f8d3835724f4ab1ea5da3f18",
+      "sourceName": "contracts/SpaceHuggersGame.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "cancun",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/utils/cryptography/ECDSA.sol",
+        "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol",
+        "@openzeppelin/contracts/access/Ownable2Step.sol",
+        "@openzeppelin/contracts/utils/Pausable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "SpaceHuggersGame"
+      ]
+    },
+    "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\cryptography\\MessageHashUtils.sol": {
+      "lastModificationDate": 1779297457546,
+      "contentHash": "fab97298382d4c32182a66ec35255b71",
+      "sourceName": "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "cancun",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../Strings.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "MessageHashUtils"
+      ]
+    },
+    "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\cryptography\\ECDSA.sol": {
+      "lastModificationDate": 1779297457280,
+      "contentHash": "b038f3665d2262af34fe6009e3cd78dd",
+      "sourceName": "@openzeppelin/contracts/utils/cryptography/ECDSA.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "cancun",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "ECDSA"
+      ]
+    },
     "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\Strings.sol": {
       "lastModificationDate": 1779297457619,
       "contentHash": "d2fa243e766a193585b7e9bf36898d80",
@@ -382,10 +422,10 @@
         "Strings"
       ]
     },
-    "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\math\\Math.sol": {
-      "lastModificationDate": 1779297457522,
-      "contentHash": "5b8c6935ac52b7494df19d6feb38f5cc",
-      "sourceName": "@openzeppelin/contracts/utils/math/Math.sol",
+    "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\math\\SignedMath.sol": {
+      "lastModificationDate": 1779297457603,
+      "contentHash": "ae3528afb8bdb0a7dcfba5b115ee8074",
+      "sourceName": "@openzeppelin/contracts/utils/math/SignedMath.sol",
       "solcConfig": {
         "version": "0.8.24",
         "settings": {
@@ -411,14 +451,13 @@
         }
       },
       "imports": [
-        "../Panic.sol",
         "./SafeCast.sol"
       ],
       "versionPragmas": [
         "^0.8.20"
       ],
       "artifacts": [
-        "Math"
+        "SignedMath"
       ]
     },
     "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\Bytes.sol": {
@@ -459,44 +498,6 @@
         "Bytes"
       ]
     },
-    "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\math\\SignedMath.sol": {
-      "lastModificationDate": 1779297457603,
-      "contentHash": "ae3528afb8bdb0a7dcfba5b115ee8074",
-      "sourceName": "@openzeppelin/contracts/utils/math/SignedMath.sol",
-      "solcConfig": {
-        "version": "0.8.24",
-        "settings": {
-          "evmVersion": "cancun",
-          "optimizer": {
-            "enabled": true,
-            "runs": 200
-          },
-          "outputSelection": {
-            "*": {
-              "*": [
-                "abi",
-                "evm.bytecode",
-                "evm.deployedBytecode",
-                "evm.methodIdentifiers",
-                "metadata"
-              ],
-              "": [
-                "ast"
-              ]
-            }
-          }
-        }
-      },
-      "imports": [
-        "./SafeCast.sol"
-      ],
-      "versionPragmas": [
-        "^0.8.20"
-      ],
-      "artifacts": [
-        "SignedMath"
-      ]
-    },
     "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\math\\SafeCast.sol": {
       "lastModificationDate": 1779297457593,
       "contentHash": "f28a38cd37f4225d0a91fb5405dd850f",
@@ -533,6 +534,45 @@
         "SafeCast"
       ]
     },
+    "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\math\\Math.sol": {
+      "lastModificationDate": 1779297457522,
+      "contentHash": "5b8c6935ac52b7494df19d6feb38f5cc",
+      "sourceName": "@openzeppelin/contracts/utils/math/Math.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "cancun",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "../Panic.sol",
+        "./SafeCast.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "Math"
+      ]
+    },
     "O:\\Projects\\HairGames\\contract\\node_modules\\@openzeppelin\\contracts\\utils\\Panic.sol": {
       "lastModificationDate": 1779297457574,
       "contentHash": "2133dc13536b4a6a98131e431fac59e1",
@@ -567,6 +607,132 @@
       ],
       "artifacts": [
         "Panic"
+      ]
+    },
+    "O:\\Projects\\HairGames\\contract\\contracts\\racinggame.sol": {
+      "lastModificationDate": 1785174487462,
+      "contentHash": "18787fd8b61727a28354180eee0c7aa7",
+      "sourceName": "contracts/racinggame.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "cancun",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/utils/cryptography/ECDSA.sol",
+        "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol",
+        "@openzeppelin/contracts/access/Ownable2Step.sol",
+        "@openzeppelin/contracts/utils/Pausable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "NeedForHair"
+      ]
+    },
+    "O:\\Projects\\HairGames\\contract\\contracts\\fruitninja.sol": {
+      "lastModificationDate": 1787650035777,
+      "contentHash": "e04a40784a5b52d379ba44f566a06ce5",
+      "sourceName": "contracts/fruitninja.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "cancun",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/utils/cryptography/ECDSA.sol",
+        "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol",
+        "@openzeppelin/contracts/access/Ownable2Step.sol",
+        "@openzeppelin/contracts/utils/Pausable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "FruitNinja"
+      ]
+    },
+    "O:\\Projects\\HairGames\\contract\\contracts\\FishingGame.sol": {
+      "lastModificationDate": 1785174489893,
+      "contentHash": "2bbf1d1312cfef4dcd66c2039fb0e430",
+      "sourceName": "contracts/FishingGame.sol",
+      "solcConfig": {
+        "version": "0.8.24",
+        "settings": {
+          "evmVersion": "cancun",
+          "optimizer": {
+            "enabled": true,
+            "runs": 200
+          },
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/utils/cryptography/ECDSA.sol",
+        "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol",
+        "@openzeppelin/contracts/access/Ownable2Step.sol",
+        "@openzeppelin/contracts/utils/Pausable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.24"
+      ],
+      "artifacts": [
+        "FishingGame"
       ]
     }
   }

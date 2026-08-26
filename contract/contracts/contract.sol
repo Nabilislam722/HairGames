@@ -1,162 +1,250 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-contract FruitNinja is Ownable2Step, Pausable, ReentrancyGuard {
-    using ECDSA for bytes32;
+/// @title BestGameVoting
+/// @notice Daily "Best Game Award" voting. All vote counters are keyed by a
+///         rolling day index derived from block.timestamp, so counts reset
+///         automatically for every user at the same instant — 00:01:00 UTC —
+///         with no keeper, cron job, or owner transaction required.
+contract BestGameVoting is Ownable2Step, Pausable, ReentrancyGuard {
+    /*  Constants  */
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // State
-    // ─────────────────────────────────────────────────────────────────────────
+    uint256 public constant SECONDS_PER_DAY = 1 days;
+    /// @dev Shifts the day boundary from 00:00:00 UTC to 00:01:00 UTC.
+    uint256 public constant RESET_OFFSET = 1 minutes;
+    uint256 public constant MAX_VOTES_PER_DAY = 10;
 
-    address public trustedSigner;
-    uint256 public submissionFee;
+    /*  Storage  */
 
-    struct GameSession {
-        uint256 startTime;
-        bool isActive;
+    struct Game {
+        string key;   // off-chain identifier, e.g. "space_shooter"
+        bool active;
     }
 
-    mapping(address => GameSession) public activeSessions;
-    mapping(address => uint256) public playerTotalScore;
-    mapping(address => uint256) public playerBestScore;
-    mapping(address => uint256) public playerTotalFruitsSliced;
-    mapping(address => uint256) public playerHighestLevel;
-    mapping(address => uint256) public userNonces;
+    Game[] private _games;
+    mapping(string => uint256) private _gameIdByKey; // 1-based; 0 = unregistered
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Events
-    // ─────────────────────────────────────────────────────────────────────────
+    // day => gameId => total votes cast for that game
+    mapping(uint256 => mapping(uint256 => uint256)) private _gameVotesByDay;
+    // day => user => gameId => votes that user cast for that game
+    mapping(uint256 => mapping(address => mapping(uint256 => uint256))) private _userGameVotesByDay;
+    // day => user => total votes that user has cast (across all games)
+    mapping(uint256 => mapping(address => uint256)) private _userVotesToday;
+    // gameId => total votes ever cast for that game — persists across day resets
+    mapping(uint256 => uint256) private _gameVotesAllTime;
 
-    event GameStarted(address indexed player, uint256 startTime);
-    event GameCompleted(
-        address indexed player,
-        uint256 finalScore,
-        uint256 levelReached,
-        uint256 fruitsSliced,
-        uint256 feePaid
+    /*  Events  */
+
+    event GameAdded(uint256 indexed gameId, string key);
+    event GameActiveSet(uint256 indexed gameId, bool active);
+    event Voted(
+        address indexed voter,
+        uint256 indexed gameId,
+        uint256 indexed day,
+        uint256 userVotesToday,
+        uint256 gameVotesToday
     );
-    event NewBestScore(address indexed player, uint256 newBest);
-    event TrustedSignerUpdated(address indexed oldSigner, address indexed newSigner);
-    event SubmissionFeeUpdated(uint256 oldFee, uint256 newFee);
-    event FeesWithdrawn(address indexed to, uint256 amount);
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Constructor
-    // ─────────────────────────────────────────────────────────────────────────
+    /*  Errors  */
 
-    constructor(address _trustedSigner, uint256 _submissionFee) Ownable(msg.sender) {
-        require(_trustedSigner != address(0), "FruitSlashGame: zero signer");
-        trustedSigner = _trustedSigner;
-        submissionFee = _submissionFee;
+    error EmptyKey();
+    error GameKeyTaken();
+    error GameNotFound();
+    error GameInactive();
+    error DailyLimitReached();
+
+    constructor(address initialOwner) Ownable(initialOwner) {}
+
+    /*  Day math  */
+
+    /// @notice Current voting day index. Increments at 00:01:00 UTC.
+    function currentVotingDay() public view returns (uint256) {
+        if (block.timestamp < RESET_OFFSET) return 0;
+        return (block.timestamp - RESET_OFFSET) / SECONDS_PER_DAY;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Core Gameplay Logic
-    // ─────────────────────────────────────────────────────────────────────────
-
-    function startGame() external whenNotPaused {
-        require(!activeSessions[msg.sender].isActive, "Session already in progress");
-
-        activeSessions[msg.sender] = GameSession({
-            startTime: block.timestamp,
-            isActive: true
-        });
-
-        emit GameStarted(msg.sender, block.timestamp);
+    /// @notice Absolute UNIX timestamp of the next 00:01:00 UTC reset.
+    function nextResetTimestamp() public view returns (uint256) {
+        return (currentVotingDay() + 1) * SECONDS_PER_DAY + RESET_OFFSET;
     }
 
-    function submitGameResult(
-        uint256 finalScore,
-        uint256 levelReached,
-        uint256 fruitsSliced,
-        uint256 nonce,
-        bytes calldata signature
-    ) external payable whenNotPaused nonReentrant {
-        require(activeSessions[msg.sender].isActive, "No active session");
-        require(msg.value == submissionFee, "FruitSlashGame: incorrect fee");
-        require(nonce == userNonces[msg.sender], "FruitSlashGame: invalid nonce");
+    /// @notice Seconds remaining until the next reset.
+    function timeUntilReset() external view returns (uint256) {
+        return nextResetTimestamp() - block.timestamp;
+    }
 
-        // Increment nonce immediately to prevent replay attacks
-        userNonces[msg.sender]++;
+    /*  Game registry (owner-managed)  */
 
-        // The backend must sign: keccak256(player, score, level, fruits, nonce, contract, chainid)
-        bytes32 structHash = keccak256(
-            abi.encodePacked(
-                msg.sender,
-                finalScore,
-                levelReached,
-                fruitsSliced,
-                nonce,
-                address(this),
-                block.chainid
-            )
-        );
+    function addGame(string calldata key) external onlyOwner returns (uint256 gameId) {
+        if (bytes(key).length == 0) revert EmptyKey();
+        if (_gameIdByKey[key] != 0) revert GameKeyTaken();
 
-        bytes32 ethSignedHash = MessageHashUtils.toEthSignedMessageHash(structHash);
-        address signer = ethSignedHash.recover(signature);
-        require(signer == trustedSigner, "FruitSlashGame: invalid signature");
+        _games.push(Game({ key: key, active: true }));
+        gameId = _games.length - 1;
+        _gameIdByKey[key] = gameId + 1;
 
-        // ── State update ────────────────────────────────────────────────────
-        activeSessions[msg.sender].isActive = false;
+        emit GameAdded(gameId, key);
+    }
 
-        playerTotalScore[msg.sender] += finalScore;
-        playerTotalFruitsSliced[msg.sender] += fruitsSliced;
+    function setGameActive(uint256 gameId, bool active) external onlyOwner {
+        _requireGameExists(gameId);
+        _games[gameId].active = active;
+        emit GameActiveSet(gameId, active);
+    }
 
-        if (levelReached > playerHighestLevel[msg.sender]) {
-            playerHighestLevel[msg.sender] = levelReached;
+    function gameCount() external view returns (uint256) {
+        return _games.length;
+    }
+
+    function getGame(uint256 gameId) external view returns (string memory key, bool active) {
+        _requireGameExists(gameId);
+        Game storage g = _games[gameId];
+        return (g.key, g.active);
+    }
+
+    function gameIdForKey(string calldata key) external view returns (uint256) {
+        uint256 stored = _gameIdByKey[key];
+        if (stored == 0) revert GameNotFound();
+        return stored - 1;
+    }
+
+    /// @notice Every registered game, for building an id<->key map client-side.
+    function getGames()
+        external
+        view
+        returns (uint256[] memory gameIds, string[] memory keys, bool[] memory active)
+    {
+        uint256 n = _games.length;
+        gameIds = new uint256[](n);
+        keys = new string[](n);
+        active = new bool[](n);
+        for (uint256 i = 0; i < n; i++) {
+            gameIds[i] = i;
+            keys[i] = _games[i].key;
+            active[i] = _games[i].active;
+        }
+    }
+
+    /*  Voting  */
+
+    /// @notice Cast one vote for `gameId` for the current voting day.
+    function vote(uint256 gameId) external whenNotPaused nonReentrant {
+        _requireGameExists(gameId);
+        if (!_games[gameId].active) revert GameInactive();
+
+        uint256 day = currentVotingDay();
+        uint256 usedToday = _userVotesToday[day][msg.sender];
+        if (usedToday >= MAX_VOTES_PER_DAY) revert DailyLimitReached();
+
+        _userVotesToday[day][msg.sender] = usedToday + 1;
+        _userGameVotesByDay[day][msg.sender][gameId] += 1;
+        uint256 newGameTotal = _gameVotesByDay[day][gameId] + 1;
+        _gameVotesByDay[day][gameId] = newGameTotal;
+        _gameVotesAllTime[gameId] += 1;
+
+        emit Voted(msg.sender, gameId, day, usedToday + 1, newGameTotal);
+    }
+
+    /*  Reads  */
+
+    /// @notice Votes `user` has left before hitting today's cap.
+    function votesRemaining(address user) public view returns (uint256) {
+        uint256 used = _userVotesToday[currentVotingDay()][user];
+        return used >= MAX_VOTES_PER_DAY ? 0 : MAX_VOTES_PER_DAY - used;
+    }
+
+    /// @notice Per-game breakdown of votes `user` cast today, plus totals.
+    function getUserVotes(address user)
+        external
+        view
+        returns (
+            uint256[] memory gameIds,
+            string[] memory keys,
+            uint256[] memory votesPerGame,
+            uint256 votesUsedToday,
+            uint256 votesLeftToday
+        )
+    {
+        uint256 day = currentVotingDay();
+        uint256 n = _games.length;
+        gameIds = new uint256[](n);
+        keys = new string[](n);
+        votesPerGame = new uint256[](n);
+
+        for (uint256 i = 0; i < n; i++) {
+            gameIds[i] = i;
+            keys[i] = _games[i].key;
+            votesPerGame[i] = _userGameVotesByDay[day][user][i];
         }
 
-        if (finalScore > playerBestScore[msg.sender]) {
-            playerBestScore[msg.sender] = finalScore;
-            emit NewBestScore(msg.sender, finalScore);
+        votesUsedToday = _userVotesToday[day][user];
+        votesLeftToday = votesUsedToday >= MAX_VOTES_PER_DAY ? 0 : MAX_VOTES_PER_DAY - votesUsedToday;
+    }
+
+    /// @notice Today's vote tally for every registered game.
+    function getAllVotes()
+        external
+        view
+        returns (
+            uint256[] memory gameIds,
+            string[] memory keys,
+            uint256[] memory votes,
+            uint256 totalVotes
+        )
+    {
+        uint256 day = currentVotingDay();
+        uint256 n = _games.length;
+        gameIds = new uint256[](n);
+        keys = new string[](n);
+        votes = new uint256[](n);
+
+        for (uint256 i = 0; i < n; i++) {
+            gameIds[i] = i;
+            keys[i] = _games[i].key;
+            uint256 v = _gameVotesByDay[day][i];
+            votes[i] = v;
+            totalVotes += v;
         }
-
-        emit GameCompleted(msg.sender, finalScore, levelReached, fruitsSliced, msg.value);
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // Treasury & Admin Controls
-    // ─────────────────────────────────────────────────────────────────────────
+    /// @notice All-time vote tally for every registered game — never reset,
+    ///         unlike getAllVotes() which only reflects the current day.
+    function getAllTimeVotes()
+        external
+        view
+        returns (
+            uint256[] memory gameIds,
+            string[] memory keys,
+            uint256[] memory votes,
+            uint256 totalVotes
+        )
+    {
+        uint256 n = _games.length;
+        gameIds = new uint256[](n);
+        keys = new string[](n);
+        votes = new uint256[](n);
 
-    function claimFees(address payable _to) external onlyOwner nonReentrant {
-        require(_to != address(0), "FruitSlashGame: zero address");
-        uint256 balance = address(this).balance;
-        require(balance > 0, "FruitSlashGame: nothing to claim");
-
-        (bool success, ) = _to.call{value: balance}("");
-        require(success, "FruitSlashGame: transfer failed");
-
-        emit FeesWithdrawn(_to, balance);
+        for (uint256 i = 0; i < n; i++) {
+            gameIds[i] = i;
+            keys[i] = _games[i].key;
+            uint256 v = _gameVotesAllTime[i];
+            votes[i] = v;
+            totalVotes += v;
+        }
     }
 
-    function contractBalance() external view returns (uint256) {
-        return address(this).balance;
+    /*  Internal  */
+
+    function _requireGameExists(uint256 gameId) internal view {
+        if (gameId >= _games.length) revert GameNotFound();
     }
 
-    function setTrustedSigner(address _newSigner) external onlyOwner {
-        require(_newSigner != address(0), "FruitSlashGame: zero signer");
-        address old = trustedSigner;
-        trustedSigner = _newSigner;
-        emit TrustedSignerUpdated(old, _newSigner);
-    }
+    /*  Admin  */
 
-    function setSubmissionFee(uint256 _newFee) external onlyOwner {
-        uint256 old = submissionFee;
-        submissionFee = _newFee;
-        emit SubmissionFeeUpdated(old, _newFee);
-    }
-
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    function unpause() external onlyOwner {
-        _unpause();
-    }
+    function pause() external onlyOwner { _pause(); }
+    function unpause() external onlyOwner { _unpause(); }
 }

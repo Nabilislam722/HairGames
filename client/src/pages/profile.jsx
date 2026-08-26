@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { MdLocalFireDepartment } from "react-icons/md";
 import { HiMiniTrophy } from "react-icons/hi2";
+import { FaXTwitter, FaDiscord } from "react-icons/fa6";
 
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -23,7 +24,7 @@ const NFT_IMAGE_FALLBACK = "https://amaranth-imperial-otter-134.mypinata.cloud/i
 
 
 /* Helpers */
-function shortenAddr(addr) {
+function shortenAddr(addr) { 
   if (!addr) return "";
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
@@ -112,7 +113,9 @@ export default function Profile() {
     nftHoldings: [],
     multiplier: 1.0,
     completedTasks: [],
-    rank: null
+    rank: null,
+    twitter: null,
+    discord: null
   });
   const [loading, setLoading] = useState(true);
   const [copied, setCopied] = useState(false);
@@ -134,7 +137,9 @@ export default function Profile() {
           nftHoldings: data.nftHoldings || [],
           multiplier: data.multiplier ?? 1.0,
           completedTasks: data.completedTasks || [],
-          rank: data.rank ?? null
+          rank: data.rank ?? null,
+          twitter: data.twitter ?? null,
+          discord: data.discord ?? null
         });
       } catch (error) {
         console.error("Failed syncing profile metadata parameters:", error);
@@ -150,6 +155,14 @@ export default function Profile() {
     navigator.clipboard.writeText(address ?? "");
     setCopied(true);
     setTimeout(() => setCopied(false), 1800);
+  };
+
+  const connectTwitter = () => {
+    window.location.href = `${API_BASE}/api/auth/twitter?wallet=${address}`;
+  };
+
+  const connectDiscord = () => {
+    window.location.href = `${API_BASE}/api/auth/discord?wallet=${address}`;
   };
 
   /* ── Not connected ── */
@@ -177,7 +190,7 @@ export default function Profile() {
     );
   }
 
-  const { points, nftHoldings, multiplier, rank } = profile;
+  const { points, nftHoldings, multiplier, rank, twitter, discord } = profile;
   const lvlInfo = getLevelInfo(points);
 
   return (
@@ -236,6 +249,31 @@ export default function Profile() {
               >
                 {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
               </button>
+
+              <button
+                onClick={twitter ? () => window.open(`https://x.com/${twitter}`, "_blank") : connectTwitter}
+                title={twitter ? `@${twitter}` : "Connect X"}
+                className={`w-6 h-6 rounded-md border flex items-center justify-center transition-colors ${
+                  twitter
+                    ? "bg-sky-500/15 border-sky-500/30 text-sky-400"
+                    : "bg-white/6 border-white/10 text-white/40 hover:text-white"
+                }`}
+              >
+                <FaXTwitter className="w-3 h-3" />
+              </button>
+
+              <button
+                onClick={discord ? undefined : connectDiscord}
+                title={discord ? discord : "Connect Discord"}
+                className={`w-6 h-6 rounded-md border flex items-center justify-center transition-colors ${
+                  discord
+                    ? "bg-indigo-500/15 border-indigo-500/30 text-indigo-400 cursor-default"
+                    : "bg-white/6 border-white/10 text-white/40 hover:text-white"
+                }`}
+              >
+                <FaDiscord className="w-3 h-3" />
+              </button>
+
               {rank && rank <= 10 && (
                 <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/15 border border-amber-500/30">
                   <Crown className="w-3 h-3 text-amber-400" />

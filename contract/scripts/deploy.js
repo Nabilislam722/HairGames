@@ -1,16 +1,16 @@
 import hre from 'hardhat';
 
 async function main() {
-  const trustedSigner = "0x37cEf88183448E28dE0c11Fe0F224676c4fEa199"; 
+  const owner = "0xd3C008B48Db16c16309717d592C270310561c4fA"; 
   const submissionFee = hre.ethers.parseEther("0.000012");
 
-  console.log("Deploying FruitNinja...");
+  console.log("Deploying...");
 
-  const SpaceHuggers = await hre.ethers.getContractFactory("FruitNinja");
-  const contract = await SpaceHuggers.deploy(trustedSigner, submissionFee);
+  const contract = await hre.ethers.getContractFactory("BestGameVoting");
+  const status = await contract.deploy(owner);
 
-  await contract.waitForDeployment();
-  console.log(`Contract deployed to: ${await contract.getAddress()}`);
+  await status.waitForDeployment();
+  console.log(`Contract deployed to: ${await status.getAddress()}`);
 }
 
 main().catch((error) => {

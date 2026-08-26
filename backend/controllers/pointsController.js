@@ -9,6 +9,16 @@ import {
 } from "../config/constants.js";
 import { provider, getServerWallet } from "../config/provider.js";
 
+// BestGameVoting.vote(uint256) — selector only.
+const VOTE_SELECTOR = ethers.id("vote(uint256)").slice(0, 10);
+const VOTE_REWARD_POINTS = 5000;
+const MAX_VOTES_PER_DAY = 10;
+// Matches BestGameVoting's RESET_OFFSET (1 minute) so the server's daily
+// counter rolls over at the same 00:01:00 UTC instant as the contract.
+const VOTE_RESET_OFFSET_SECONDS = 60;
+const SECONDS_PER_DAY = 86400;
+const VOTING_CONTRACT_ADDRESS = process.env.VOTING_CONTRACTADDRESS || "0x79e42F91c7Df1ee23EEd5404748631F3472fdC4C";
+
 // Helper function to sign the verification payload
 async function generateCryptoSignature(level, kills, points, nonce, walletAddress, targetAddress, chainId) {
   const serverWallet = getServerWallet();
@@ -197,6 +207,111 @@ export const addPoints = async (req, res) => {
   } catch (err) {
     console.error('/api/points/add error:', err);
     return res.status(500).json({ error: 'Internal server error' });
+  }
+};
+
+/**
+ * POST /api/points/vote
+ * Verifies a BestGameVoting.vote() transaction on-chain and credits HP for
+ * it. The contract already caps votes at 10/day per wallet, but this route
+ * enforces the same cap independently (day boundary aligned to the
+ * contract's 00:01 UTC reset) so the reward path can't be replayed beyond
+ * what a legitimate day of voting would earn.
+ */
+export const addVotePoints = async (req, res) => {
+  const { wallet, txHash } = req.body;
+
+  try {
+    if (!wallet || !txHash) {
+      return res.status(400).json({ error: "Missing wallet or txHash" });
+    }
+
+    const walletLower = wallet.toLowerCase();
+
+    const alreadyProcessed = await UserProfile.findOne({ processedHashes: txHash });
+    if (alreadyProcessed) {
+      return res.status(400).json({ error: "Transaction already processed" });
+    }
+
+    const receipt = await provider.waitForTransaction(txHash);
+    if (!receipt || receipt.status !== 1) {
+      return res.status(400).json({ error: "Transaction failed or not found" });
+    }
+    if (receipt.to?.toLowerCase() !== VOTING_CONTRACT_ADDRESS.toLowerCase()) {
+      return res.status(400).json({ error: "Transaction not sent to voting contract" });
+    }
+
+    const tx = await provider.getTransaction(txHash);
+    if (!tx) {
+      return res.status(400).json({ error: "Transaction not found" });
+    }
+    if (tx.from.toLowerCase() !== walletLower) {
+      return res.status(400).json({ error: "Transaction sender does not match wallet" });
+    }
+
+    const inputData = tx.data;
+    if (!inputData.startsWith(VOTE_SELECTOR)) {
+      return res.status(400).json({ error: "Transaction did not call vote()" });
+    }
+    const abiCoder = new ethers.AbiCoder();
+    const [onChainGameId] = abiCoder.decode(["uint256"], "0x" + inputData.slice(10));
+
+    const block = await provider.getBlock(receipt.blockNumber);
+    const voteDay = Math.floor(Math.max(block.timestamp - VOTE_RESET_OFFSET_SECONDS, 0) / SECONDS_PER_DAY);
+
+    const profileForMultiplier = await UserProfile.findOne({ wallet: walletLower });
+    const userMultiplier = profileForMultiplier?.multiplier || 1.0;
+    const pointsToAdd = Math.round(VOTE_REWARD_POINTS * userMultiplier);
+
+    // Same-day path: only succeeds if still under today's cap.
+    let updatedUser = await UserProfile.findOneAndUpdate(
+      { wallet: walletLower, voteDay, votesToday: { $lt: MAX_VOTES_PER_DAY } },
+      {
+        $inc: { points: pointsToAdd, votesToday: 1 },
+        $push: { processedHashes: txHash },
+        $set: { lastSyncedAt: new Date() },
+      },
+      { new: true }
+    );
+
+    if (!updatedUser) {
+      // New day (or brand-new user) path: resets the counter to 1.
+      updatedUser = await UserProfile.findOneAndUpdate(
+        { wallet: walletLower, voteDay: { $ne: voteDay } },
+        {
+          $inc: { points: pointsToAdd },
+          $push: { processedHashes: txHash },
+          $set: { lastSyncedAt: new Date(), voteDay, votesToday: 1 },
+        },
+        { upsert: true, new: true }
+      );
+    }
+
+    if (!updatedUser) {
+      return res.status(400).json({ error: "Daily vote reward limit reached" });
+    }
+
+    await EventProfile.findOneAndUpdate(
+      { wallet: walletLower },
+      {
+        $inc: { points: pointsToAdd },
+        $set: { lastSyncedAt: new Date() },
+      },
+      { upsert: true }
+    );
+
+    return res.json({
+      wallet: updatedUser.wallet,
+      points: updatedUser.points,
+      gameId: onChainGameId.toString(),
+      votesToday: updatedUser.votesToday,
+      votesLeftToday: MAX_VOTES_PER_DAY - updatedUser.votesToday,
+      added: pointsToAdd,
+      txHash,
+    });
+  } catch (err) {
+    console.error("/api/points/vote error:", err);
+    return res.status(500).json({ error: "Internal server error" });
   }
 };
 

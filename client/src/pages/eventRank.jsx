@@ -183,7 +183,7 @@ export default function EventRank() {
             </h1>
             <p className="font-mono text-[10px] uppercase tracking-widest mt-0.5"
               style={{ color: "rgba(251,146,60,0.55)" }}>
-              NeedForHair Racing · Top scores reset each week
+              Top scores reset each week
             </p>
           </div>
 
@@ -208,7 +208,7 @@ export default function EventRank() {
         </div>
       </motion.div>
 
-      {/* ── User stats banner ─────────────────────────────────────── */}
+      {/*  User stats banner  */}
       <motion.div
         initial={{ opacity: 0, y: 12 }}
         animate={{ opacity: 1, y: 0 }}
@@ -365,7 +365,7 @@ export default function EventRank() {
           style={{ borderTop: "1px solid rgba(255,255,255,0.04)" }}
         >
           <p className="font-mono text-[9px] uppercase tracking-widest text-white/18">
-            Cleared every Monday · Race more to climb
+            Earn more HP to climb
           </p>
         </div>
       </motion.div>

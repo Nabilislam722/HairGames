@@ -23,16 +23,11 @@ const POINT_LOCK_DURATION = 10;
 const MULTIPLIER_DURATION = 8;
 
 const LEVELS: LevelConfig[] = [
-  { level: 1, label: "Orchard", targetScore: 200, spawnIntervalStart: 1.25, maxDifficulty: 2, bombChanceMax: 0.05, abilityChance: 0, allowFrenzy: false, allowGlitch: false },
-  { level: 2, label: "Citrus Grove", targetScore: 300, spawnIntervalStart: 1.1, maxDifficulty: 3.5, bombChanceMax: 0.08, abilityChance: 0, allowFrenzy: false, allowGlitch: false },
-  { level: 3, label: "Tropic Storm", targetScore: 500, spawnIntervalStart: 0.95, maxDifficulty: 5, bombChanceMax: 0.11, abilityChance: 0.04, allowFrenzy: false, allowGlitch: false },
-  { level: 4, label: "Berry Blitz", targetScore: 700, spawnIntervalStart: 0.82, maxDifficulty: 6.5, bombChanceMax: 0.13, abilityChance: 0.05, allowFrenzy: false, allowGlitch: false },
-  { level: 5, label: "Dragon's Den", targetScore: 1500, spawnIntervalStart: 0.72, maxDifficulty: 8, bombChanceMax: 0.15, abilityChance: 0.2, allowFrenzy: true, allowGlitch: true },
-  { level: 6, label: "Mango Mayhem", targetScore: 980, spawnIntervalStart: 0.3, maxDifficulty: 9, bombChanceMax: 0.17, abilityChance: 0.07, allowFrenzy: true, allowGlitch: true },
-  { level: 7, label: "Pomelo Paradise", targetScore: 1280, spawnIntervalStart: 0.6, maxDifficulty: 11, bombChanceMax: 0.2, abilityChance: 0.08, allowFrenzy: true, allowGlitch: true },
-  { level: 8, label: "Lychee Labyrinth", targetScore: 1620, spawnIntervalStart: 0.56, maxDifficulty: 11, bombChanceMax: 0.21, abilityChance: 0.08, allowFrenzy: true, allowGlitch: true },
-  { level: 9, label: "Coconut Cove", targetScore: 2000, spawnIntervalStart: 0.52, maxDifficulty: 12, bombChanceMax: 0.25, abilityChance: 0.1, allowFrenzy: true, allowGlitch: true },
-  { level: 10, label: "Fruit Frenzy", targetScore: 2500, spawnIntervalStart: 0.48, maxDifficulty: 13, bombChanceMax: 0.2, abilityChance: 0.2, allowFrenzy: true, allowGlitch: true },
+  { level: 1, label: "Orchard", targetScore: 500, spawnIntervalStart: 1.2, maxDifficulty: 3, bombChanceMax: 0.07, abilityChance: 0, allowFrenzy: false, allowGlitch: false },
+  { level: 2, label: "Citrus Grove", targetScore: 1000, spawnIntervalStart: 1.1, maxDifficulty: 7, bombChanceMax: 0.08, abilityChance: 0.02, allowFrenzy: false, allowGlitch: false },
+  { level: 3, label: "Lychee Labyrinth", targetScore: 2000, spawnIntervalStart: 0.8, maxDifficulty: 8, bombChanceMax: 0.1, abilityChance: 0.1, allowFrenzy: false, allowGlitch: false },
+  { level: 4, label: "Berry Blitz", targetScore: 3000, spawnIntervalStart: 0.75, maxDifficulty: 9, bombChanceMax: 0.15, abilityChance: 0.1, allowFrenzy: false, allowGlitch: true },
+  { level: 5, label: "Fruit Frenzy", targetScore: 4000, spawnIntervalStart: 0.65, maxDifficulty: 10, bombChanceMax: 0.2, abilityChance: 0.2, allowFrenzy: true, allowGlitch: true },
 ];
 
 export function getLevelConfig(level: number): LevelConfig {
@@ -132,12 +127,8 @@ export function continueAfterLevelUp(s: GameState): GameState {
   };
 }
 
-// Fruit art (radii in fruits.ts) was sized for a wide desktop canvas. On a
-// narrow phone canvas that same pixel radius eats a much bigger share of the
-// screen, so we scale it down below a reference width — and never scale up,
-// so desktop rendering (which is already correct) is untouched.
 const SIZE_REFERENCE_WIDTH = 640;
-const MIN_SIZE_SCALE = 0.6;
+const MIN_SIZE_SCALE = 0.7;
 
 function getSizeScale(w: number) {
   return Math.min(1, Math.max(MIN_SIZE_SCALE, w / SIZE_REFERENCE_WIDTH));
@@ -155,7 +146,12 @@ function spawnTrajectory(w: number, h: number) {
   const targetX = cx + (Math.random() - 0.5) * w * 0.35;
   const targetY = cy + (Math.random() - 0.5) * h * 0.35;
   const dist = Math.hypot(targetX - x, targetY - y);
-  const tFlight = Math.max(80, Math.min(120, dist / 5));
+  
+  // Balance tweak: Slower initial float for phone (1.4 multiplier gives longer flight time)
+  const isMobile = w < 768;
+  const speedModifier = isMobile ? 1.4 : 0.85; 
+
+  const tFlight = Math.max(80, Math.min(120, dist / 5)) * speedModifier;
   const vx = (targetX - x) / tFlight;
   const vy = (targetY - y - 0.5 * FLY_GRAVITY * tFlight * tFlight) / tFlight;
   return { x, y, vx, vy };
@@ -163,14 +159,19 @@ function spawnTrajectory(w: number, h: number) {
 
 function spawnObject(s: GameState, w: number, h: number): FlyingObject {
   const cfg = getLevelConfig(s.level);
-  const bombChance = Math.min(cfg.bombChanceMax, 0.04 + s.difficulty * 0.015);
-  // No bombs while Frenzy is active OR during its grace tail — the shower's
-  // clutter is exactly when a surprise bomb would be least fair to punish.
+  
+  // Balance tweak: Significantly reduced bomb chance on mobile (0.25x rate & 50% max cap)
+  const isMobile = w < 768;
+  const bombMultiplier = isMobile ? 0.25 : 1.35;
+  const maxBombLimit = isMobile ? cfg.bombChanceMax * 0.5 : cfg.bombChanceMax * 1.5;
+  const bombChance = Math.min(maxBombLimit, (0.04 + s.difficulty * 0.015) * bombMultiplier);
+
   const isBomb =
     s.frenzyTimer <= 0 &&
     s.frenzyGraceTimer <= 0 &&
     Math.random() < bombChance &&
     s.elapsed > 2.5;
+    
   const traj = spawnTrajectory(w, h);
   const sizeScale = getSizeScale(w);
 
@@ -194,7 +195,7 @@ function spawnObject(s: GameState, w: number, h: number): FlyingObject {
     const pool = ABILITY_FRUITS.filter((a) => {
       if (a.ability === "frenzy") return cfg.allowFrenzy && s.frenzyTimer <= 0 && s.frenzyGraceTimer <= 0;
       if (a.ability === "glitch") return cfg.allowGlitch;
-      return true; // golden, multiplier, hair, hemi always allowed once abilities are on
+      return true;
     });
     if (pool.length > 0) {
       const k = pool[Math.floor(Math.random() * pool.length)];
@@ -346,9 +347,6 @@ function triggerGolden(s: GameState, x: number, y: number, points: number) {
   }
 }
 
-// Instant flat-bonus ability fruits, same shape as triggerGolden — no timed
-// effect, just points + a themed burst. Adjust point values / copy in
-// fruits.ts (ABILITY_FRUITS) if you want these to feel bigger or smaller.
 function triggerHairBonus(s: GameState, x: number, y: number, points: number) {
   addFloat(s, x, y - 40, `+${points} $HAIR!`, "#FF9800", true);
   for (let i = 0; i < 24; i++) {
@@ -398,7 +396,7 @@ function sliceObject(s: GameState, o: FlyingObject, sliceDir: Vec2) {
     return;
   }
   s.fruitsSliced += 1;
-  const k = o.kind as { color: string; points: number };
+  const k = o.kind as { color: string; points: number; radius: number };
   spawnJuice(s, o.pos.x, o.pos.y, k.color, 14);
 
   const perp = { x: -sliceDir.y, y: sliceDir.x };
@@ -421,9 +419,13 @@ function sliceObject(s: GameState, o: FlyingObject, sliceDir: Vec2) {
     },
   };
 
-  // Ability fruit effects
+  const isMobile = (o.radius / k.radius) < 0.95;
+  const platformScoreMultiplier = isMobile ? 1.5 : 1.0;
+
   if (o.isAbility) {
     const ak = o.kind as { ability: AbilityType; points: number };
+    const visuallyBoostedPoints = Math.round(ak.points * platformScoreMultiplier);
+    
     switch (ak.ability) {
       case "frenzy":
         triggerFrenzy(s);
@@ -435,13 +437,13 @@ function sliceObject(s: GameState, o: FlyingObject, sliceDir: Vec2) {
         triggerMultiplier(s, o.pos.x, o.pos.y);
         break;
       case "golden":
-        triggerGolden(s, o.pos.x, o.pos.y, ak.points);
+        triggerGolden(s, o.pos.x, o.pos.y, visuallyBoostedPoints);
         break;
       case "hair":
-        triggerHairBonus(s, o.pos.x, o.pos.y, ak.points);
+        triggerHairBonus(s, o.pos.x, o.pos.y, visuallyBoostedPoints);
         break;
       case "hemi":
-        triggerHemiBoost(s, o.pos.x, o.pos.y, ak.points);
+        triggerHemiBoost(s, o.pos.x, o.pos.y, visuallyBoostedPoints);
         break;
     }
   }
@@ -451,16 +453,14 @@ function sliceObject(s: GameState, o: FlyingObject, sliceDir: Vec2) {
   const base = k.points;
   let gained = base;
   if (s.combo >= 2) gained += s.combo;
-  gained = Math.round(gained * s.multiplier);
+  
+  gained = Math.round(gained * s.multiplier * platformScoreMultiplier);
 
-  // point lock: score doesn't increase
   if (s.pointLockTimer > 0) {
     gained = 0;
   }
 
   s.score += gained;
-  // Frenzy-shower fruit is a pure bonus: it pads the score but never counts
-  // toward the current level's target, so it can't be used to rush a level up.
   if (!o.frenzy) {
     s.levelScore += gained;
   }
@@ -472,9 +472,6 @@ function sliceObject(s: GameState, o: FlyingObject, sliceDir: Vec2) {
   }
 
   const cfg = getLevelConfig(s.level);
-  // Don't cut a Frenzy shower short — if the target's already hit mid-frenzy,
-  // the level-up fires once the timer runs out instead (see updateGame),
-  // so the player gets the full window to farm bonus fruit.
   if (s.levelScore >= cfg.targetScore && s.phase === "playing" && s.frenzyTimer <= 0) {
     s.phase = "levelup";
     s.best = Math.max(s.best, s.score);
@@ -522,7 +519,10 @@ export function updateGame(
   w: number,
   h: number,
 ): GameState {
-  // particles/floats/segments always update
+  const isMobile = w < 768;
+  // Balance tweak: Lower gravity scale on mobile makes objects fall slower during descent
+  const mobileGravityScale = isMobile ? 0.7 : 1.0;
+
   const updateCosmetics = () => {
     s.particles = s.particles.filter((p) => {
       p.vel.y += GRAVITY * dt * 30 * (p.kind === "smoke" ? -0.3 : 1);
@@ -554,12 +554,10 @@ export function updateGame(
   s.difficulty = Math.min(cfg.maxDifficulty, s.elapsed / 10);
   s.spawnInterval = Math.max(0.4, cfg.spawnIntervalStart - s.difficulty * 0.06);
 
-  // ability timers
   if (s.frenzyTimer > 0) {
     s.frenzyTimer -= dt;
     s.frenzySpawner -= dt;
     if (s.frenzySpawner <= 0) {
-      // shower of fruits — no damage on miss during frenzy, and no bombs (see spawnObject)
       const n = 2 + Math.floor(Math.random() * 2);
       const sizeScale = getSizeScale(w);
       for (let i = 0; i < n; i++) {
@@ -584,10 +582,7 @@ export function updateGame(
     if (s.frenzyTimer <= 0) {
       s.frenzyTimer = 0;
       removeAbilityActive(s, "frenzy");
-      // Shower just stopped — start the grace window rather than cutting
-      // forgiveness off immediately (see FRENZY_GRACE_DURATION).
       s.frenzyGraceTimer = FRENZY_GRACE_DURATION;
-      // Target was already hit during the frenzy window — advance now that it's over.
       if (s.levelScore >= cfg.targetScore && s.phase === "playing") {
         s.phase = "levelup";
         s.best = Math.max(s.best, s.score);
@@ -615,7 +610,6 @@ export function updateGame(
     }
   }
 
-  // update activeAbilities timers
   for (const a of s.activeAbilities) {
     a.timeLeft = Math.max(0, a.timeLeft - dt);
   }
@@ -657,7 +651,8 @@ export function updateGame(
       continue;
     }
 
-    o.vel.y += FLY_GRAVITY * dt * 60;
+    // Apply reduced mobile gravity here for slower falling
+    o.vel.y += FLY_GRAVITY * mobileGravityScale * dt * 60;
     o.pos.x += o.vel.x * dt * 60;
     o.pos.y += o.vel.y * dt * 60;
     o.angle += o.spin * dt * 60;
@@ -668,12 +663,6 @@ export function updateGame(
       o.pos.x > w + 100 ||
       o.pos.y < -100;
     if (offScreen) {
-      // Frenzy (plus its grace tail) is a fully safe window. Forgive a miss
-      // if: the object is shower fruit (o.frenzy — still falling even after
-      // the timer hit 0), OR frenzy is *currently* active, OR we're still
-      // inside the post-shower grace period. That last case is what fixes
-      // the instant-death-right-after-shower bug: leftover shower fruit and
-      // clutter get a beat to clear before misses start costing lives again.
       const frenzyForgiven = o.frenzy || s.frenzyTimer > 0 || s.frenzyGraceTimer > 0;
       if (!o.sliced && !o.isBomb && !o.isAbility && !frenzyForgiven) {
         s.lives -= 1;

@@ -12,7 +12,8 @@ import {
     verifyPoints,
     addPoints,
     getPoints,
-    claimTask
+    claimTask,
+    addVotePoints
 } from "../controllers/pointsController.js";
 
 import {
@@ -36,6 +37,7 @@ router.post("/points/verify", verifyPoints);
 router.post("/points/add", addPoints);
 router.get("/points/get", getPoints);
 router.post("/points/claim", claimTask);
+router.post("/points/vote", addVotePoints);
 
 // Leaderboards & Events 
 router.get("/leaderboard", getGlobalLeaderboard);
