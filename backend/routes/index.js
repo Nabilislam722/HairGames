@@ -21,6 +21,15 @@ import {
     getEventLeaderboard,
 } from "../controllers/statsController.js";
 
+import {
+    startTwitterAuth,
+    twitterCallback,
+    startDiscordAuth,
+    discordCallback,
+    getTwitterStatus,
+    getDiscordStatus
+} from "../controllers/Authcontroller.js";
+
 const router = express.Router();
 
 // Profile Sub-Router 
@@ -42,5 +51,13 @@ router.post("/points/vote", addVotePoints);
 // Leaderboards & Events 
 router.get("/leaderboard", getGlobalLeaderboard);
 router.get("/event/leaderboard", getEventLeaderboard);
+
+// Social
+router.get("/auth/twitter", startTwitterAuth);
+router.get("/auth/twitter/callback", twitterCallback);
+router.get("/auth/discord", startDiscordAuth);
+router.get("/auth/discord/callback", discordCallback);
+router.get("/status/x", getTwitterStatus);
+router.get("/status/discord", getDiscordStatus);
 
 export default router;

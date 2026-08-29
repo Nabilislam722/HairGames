@@ -3,10 +3,11 @@ import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { motion } from "framer-motion";
 import {
-  Zap, Layers, Star, Shield, Crown, ChevronRight, Copy, Check
+  Layers, Star, Shield, Crown, ChevronRight, Copy, Check,
+  Sprout, Zap, Flame, Gem, Trophy
 } from "lucide-react";
 import { MdLocalFireDepartment } from "react-icons/md";
-import { HiMiniTrophy } from "react-icons/hi2";
+import { RiCopperCoinFill } from "react-icons/ri";
 import { FaXTwitter, FaDiscord } from "react-icons/fa6";
 
 
@@ -22,28 +23,86 @@ const NFT_IMAGE_MAP = {
 const NFT_IMAGE_FALLBACK = "https://amaranth-imperial-otter-134.mypinata.cloud/ipfs/bafybeicdxf6wh2i7jtkinytziitfhv4nagmkvmzaraoy5b2ris27jiu7ae";
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Single source of truth for level thresholds — shared by getLevelInfo() and
+// the roadmap list below, instead of keeping two copies in sync by hand.
+const LEVELS = [
+  { level: 1, title: "Rookie",   min: 0,        max: 5000,     color: "#94a3b8", icon: Sprout },
+  { level: 2, title: "Player",   min: 50000,    max: 15000,    color: "#34d399", icon: Zap },
+  { level: 3, title: "Veteran",  min: 150000,   max: 400000,   color: "#38bdf8", icon: Flame },
+  { level: 4, title: "Elite",    min: 4000000,  max: 1000000,  color: "#a78bfa", icon: Gem },
+  { level: 5, title: "Legend",   min: 10000000, max: 25000000, color: "#fb923c", icon: Crown },
+  { level: 6, title: "Immortal", min: 25000000, max: 99999999, color: "#f43f5e", icon: Trophy },
+];
 
 /* Helpers */
-function shortenAddr(addr) { 
+function shortenAddr(addr) {
   if (!addr) return "";
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
 function getLevelInfo(points) {
-  const levels = [
-    { level: 1, title: "Rookie",   min: 0,        max: 5000,     color: "#94a3b8", emoji: "🌱" },
-    { level: 2, title: "Player",   min: 50000,    max: 15000,    color: "#34d399", emoji: "⚡" },
-    { level: 3, title: "Veteran",  min: 150000,   max: 400000,   color: "#38bdf8", emoji: "🔥" },
-    { level: 4, title: "Elite",    min: 4000000,  max: 1000000,  color: "#a78bfa", emoji: "💎" },
-    { level: 5, title: "Legend",   min: 10000000, max: 25000000, color: "#fb923c", emoji: "👑" },
-    { level: 6, title: "Immortal", min: 25000000, max: 99999999, color: "#f43f5e", emoji: "🏆" },
-  ];
-  const current = levels.findLast(l => points >= l.min) ?? levels[0];
+  const current = LEVELS.findLast(l => points >= l.min) ?? LEVELS[0];
   const pct = Math.min(100, Math.round(((points - current.min) / (current.max - current.min)) * 100));
   return { ...current, pct };
 }
 
+// Deterministic string hash + seeded PRNG — no crypto needed, just needs to
+// produce the same pattern for the same address every time.
+function hashCode(str) {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = (hash << 5) - hash + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return hash;
+}
+
+function mulberry32(seed) {
+  let t = seed >>> 0;
+  return function () {
+    t = (t + 0x6d2b79f5) | 0;
+    let r = Math.imul(t ^ (t >>> 15), 1 | t);
+    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
+    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 /* ── Sub-components ───────────────────────────────────────────── */
+
+// Deterministic, symmetric pixel-pattern identicon generated from the
+// wallet address — same wallet always renders the same pattern, no image
+// upload or external avatar service needed.
+function AddressAvatar({ address, className = "" }) {
+  const size = 96;
+  const grid = 6;
+  const cell = size / grid;
+  const rand = mulberry32(hashCode((address || "").toLowerCase()));
+  const hue = Math.floor(rand() * 360);
+  const bg = `hsl(${hue}, 60%, 15%)`;
+  const fg = `hsl(${(hue + 45) % 360}, 78%, 58%)`;
+
+  const half = Math.ceil(grid / 2);
+  const cells = [];
+  for (let y = 0; y < grid; y++) {
+    for (let x = 0; x < half; x++) {
+      if (rand() > 0.58) {
+        cells.push([x, y]);
+        const mirrorX = grid - 1 - x;
+        if (mirrorX !== x) cells.push([mirrorX, y]);
+      }
+    }
+  }
+
+  return (
+    <svg viewBox={`0 0 ${size} ${size}`} width="100%" height="100%" className={className}>
+      <rect width={size} height={size} fill={bg} />
+      {cells.map(([x, y], i) => (
+        <rect key={i} x={x * cell} y={y * cell} width={cell} height={cell} fill={fg} />
+      ))}
+    </svg>
+  );
+}
+
 function StatCard({ icon: Icon, label, value, sub, color, delay = 0 }) {
   return (
     <motion.div
@@ -128,9 +187,16 @@ export default function Profile() {
 
     async function fetchProfile() {
       try {
-        const res = await fetch(`${API_BASE}/api/profile/${address}`);
-        if (!res.ok) throw new Error("Network profile sync failure");
-        const data = await res.json();
+        const [profileRes, xRes, discordRes] = await Promise.all([
+          fetch(`${API_BASE}/api/profile/${address}`),
+          fetch(`${API_BASE}/api/status/x?wallet=${address}`),
+          fetch(`${API_BASE}/api/status/discord?wallet=${address}`),
+        ]);
+        if (!profileRes.ok) throw new Error("Network profile sync failure");
+
+        const data = await profileRes.json();
+        const xStatus = xRes.ok ? await xRes.json() : { connected: false, handle: null };
+        const discordStatus = discordRes.ok ? await discordRes.json() : { connected: false, handle: null };
 
         setProfile({
           points: data.points ?? 0,
@@ -138,8 +204,8 @@ export default function Profile() {
           multiplier: data.multiplier ?? 1.0,
           completedTasks: data.completedTasks || [],
           rank: data.rank ?? null,
-          twitter: data.twitter ?? null,
-          discord: data.discord ?? null
+          twitter: xStatus.connected ? xStatus.handle : null,
+          discord: discordStatus.connected ? discordStatus.handle : null
         });
       } catch (error) {
         console.error("Failed syncing profile metadata parameters:", error);
@@ -158,7 +224,7 @@ export default function Profile() {
   };
 
   const connectTwitter = () => {
-    window.location.href = `${API_BASE}/api/auth/twitter?wallet=${address}`;
+    window.location.href = ``;
   };
 
   const connectDiscord = () => {
@@ -181,7 +247,7 @@ export default function Profile() {
     );
   }
 
-  /* ── Loading ── */
+  /*  Loading  */
   if (loading) {
     return (
       <div className="min-h-[60vh] flex items-center justify-center">
@@ -196,20 +262,13 @@ export default function Profile() {
   return (
     <div className="w-full max-w-5xl mx-auto px-2 sm:px-4 py-6 space-y-6">
 
-      {/* ══ Hero / Identity Card ══════════════════════════════════ */}
+      {/* Identity Card  */}
       <motion.div
         initial={{ opacity: 0, y: -16 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5, ease: "easeOut" }}
         className="relative rounded-3xl border border-white/8 bg-white/3 overflow-hidden"
       >
-        <div
-          className="absolute inset-0 opacity-[0.03]"
-          style={{
-            backgroundImage: "repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(255,255,255,1) 2px, rgba(255,255,255,1) 3px)",
-            backgroundSize: "100% 3px"
-          }}
-        />
         <div
           className="absolute top-0 right-0 w-64 h-64 opacity-10 blur-3xl"
           style={{ background: `radial-gradient(circle, ${lvlInfo.color}, transparent 70%)` }}
@@ -220,14 +279,13 @@ export default function Profile() {
           {/* Avatar */}
           <div className="relative flex-shrink-0">
             <div
-              className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl flex items-center justify-center text-3xl font-black"
+              className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden"
               style={{
-                background: `linear-gradient(135deg, ${lvlInfo.color}30, ${lvlInfo.color}10)`,
                 border: `2px solid ${lvlInfo.color}50`,
                 boxShadow: `0 0 32px ${lvlInfo.color}20`
               }}
             >
-              {address.slice(2, 4).toUpperCase()}
+              <AddressAvatar address={address} />
             </div>
             <div
               className="absolute -bottom-2 -right-2 w-7 h-7 rounded-lg flex items-center justify-center font-mono font-black text-[11px]"
@@ -251,27 +309,29 @@ export default function Profile() {
               </button>
 
               <button
-                onClick={twitter ? () => window.open(`https://x.com/${twitter}`, "_blank") : connectTwitter}
-                title={twitter ? `@${twitter}` : "Connect X"}
-                className={`w-6 h-6 rounded-md border flex items-center justify-center transition-colors ${
+                onClick={connectTwitter}
+                disabled={!!twitter}
+                title={twitter ? `@${twitter} — connected` : "Connect X"}
+                className={`w-8 h-8 rounded-md border flex items-center justify-center transition-colors ${
                   twitter
-                    ? "bg-sky-500/15 border-sky-500/30 text-sky-400"
-                    : "bg-white/6 border-white/10 text-white/40 hover:text-white"
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400 cursor-not-allowed"
+                    : "bg-white/6 border-white/10 text-white/40 hover:text-white cursor-pointer"
                 }`}
               >
-                <FaXTwitter className="w-3 h-3" />
+                <FaXTwitter className="w-5 h-5" />
               </button>
 
               <button
-                onClick={discord ? undefined : connectDiscord}
-                title={discord ? discord : "Connect Discord"}
-                className={`w-6 h-6 rounded-md border flex items-center justify-center transition-colors ${
+                onClick={connectDiscord}
+                disabled={!!discord}
+                title={discord ? `${discord} — connected` : "Connect Discord"}
+                className={`w-8 h-8 rounded-md border flex items-center justify-center transition-colors ${
                   discord
-                    ? "bg-indigo-500/15 border-indigo-500/30 text-indigo-400 cursor-default"
-                    : "bg-white/6 border-white/10 text-white/40 hover:text-white"
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400 cursor-not-allowed"
+                    : "bg-white/6 border-white/10 text-white/40 hover:text-white cursor-pointer"
                 }`}
               >
-                <FaDiscord className="w-3 h-3" />
+                <FaDiscord className="w-5 h-5" />
               </button>
 
               {rank && rank <= 10 && (
@@ -337,7 +397,7 @@ export default function Profile() {
       {/* ══ Live Stat Cards ═══════════════════════════════════════════ */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <StatCard
-          icon={HiMiniTrophy} label="Total Points" value={points.toLocaleString()}
+          icon={RiCopperCoinFill} label="Total Points" value={points.toLocaleString()}
           sub="Hair Points" color="#fb923c" delay={0.1}
         />
         <StatCard
@@ -397,17 +457,11 @@ export default function Profile() {
           <Zap className="w-3.5 h-3.5 text-yellow-400" /> Level Roadmap
         </h3>
         <div className="space-y-2">
-          {[
-            { level: 1, title: "Rookie",   min: 0,        max: 5000,     color: "#94a3b8", emoji: "🌱" },
-            { level: 2, title: "Player",   min: 50000,    max: 15000,    color: "#34d399", emoji: "⚡" },
-            { level: 3, title: "Veteran",  min: 150000,   max: 400000,   color: "#38bdf8", emoji: "🔥" },
-            { level: 4, title: "Elite",    min: 4000000,  max: 1000000,  color: "#a78bfa", emoji: "💎" },
-            { level: 5, title: "Legend",   min: 10000000, max: 25000000, color: "#fb923c", emoji: "👑" },
-            { level: 6, title: "Immortal", min: 25000000, max: 99999999, color: "#f43f5e", emoji: "🏆" },
-          ].map(l => {
+          {LEVELS.map(l => {
             const isActive = points >= l.min && points < l.max;
             const isPassed = points >= l.max;
             const rowPct = isPassed ? 100 : isActive ? Math.round(((points - l.min) / (l.max - l.min)) * 100) : 0;
+            const litUp = isPassed || isActive;
             return (
               <div
                 key={l.level}
@@ -417,9 +471,17 @@ export default function Profile() {
                   : { background: "transparent", borderColor: "rgba(255,255,255,0.04)" }
                 }
               >
-                <span className="text-base w-6 text-center flex-shrink-0">{l.emoji}</span>
+                <div
+                  className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                  style={{
+                    background: litUp ? `${l.color}18` : "rgba(255,255,255,0.04)",
+                    border: `1px solid ${litUp ? `${l.color}30` : "rgba(255,255,255,0.06)"}`,
+                  }}
+                >
+                  <l.icon className="w-3.5 h-3.5" style={{ color: litUp ? l.color : "rgba(255,255,255,0.25)" }} />
+                </div>
                 <div className="w-14 flex-shrink-0">
-                  <p className="font-mono text-[10px] font-bold uppercase tracking-widest" style={{ color: isPassed || isActive ? l.color : "rgba(255,255,255,0.25)" }}>
+                  <p className="font-mono text-[10px] font-bold uppercase tracking-widest" style={{ color: litUp ? l.color : "rgba(255,255,255,0.25)" }}>
                     {l.title}
                   </p>
                   <p className="font-mono text-[8px] text-white/20">{l.min.toLocaleString()} HP</p>

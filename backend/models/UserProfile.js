@@ -16,10 +16,10 @@ const userProfileSchema = new mongoose.Schema({
   completedTasks: { type: [String], default: [] },
   nftHoldings: { type: [nftHoldingSchema], default: [] },
   multiplier: { type: Number, default: 1.0 },
+  social: [{ platform: { type: String, enum: ["twitter", "discord"], required: true }, handle: { type: String, required: true }, connectedAt: { type: Date, default: Date.now }}],
   voteDay: { type: Number, default: 0 },
   votesToday: { type: Number, default: 0 },
   lastSyncedAt: { type: Date, default: Date.now },
-
   rank: { type: Number }
 }, { timestamps: true });
 
