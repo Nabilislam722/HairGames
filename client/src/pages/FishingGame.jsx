@@ -5,7 +5,7 @@ import HUD from "../components/HUD";
 import TouchControls from "../components/TouchControls";
 import { initAudio, playClickSound, playHoverSound } from "../game/audio";
 
-// ── Web3 & Endpoint Constants ───────────────────────────────────────────
+// Web3 & Endpoint Constants 
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const FISHING_CONTRACT_ADDRESS = "0x45cee112Ba2EbDE8224a1fA14D329f6AB190a7eA";
 const HEMI_CHAIN_ID = "0xa867";

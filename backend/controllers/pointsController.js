@@ -13,8 +13,6 @@ import { provider, getServerWallet } from "../config/provider.js";
 const VOTE_SELECTOR = ethers.id("vote(uint256)").slice(0, 10);
 const VOTE_REWARD_POINTS = 5000;
 const MAX_VOTES_PER_DAY = 10;
-// Matches BestGameVoting's RESET_OFFSET (1 minute) so the server's daily
-// counter rolls over at the same 00:01:00 UTC instant as the contract.
 const VOTE_RESET_OFFSET_SECONDS = 60;
 const SECONDS_PER_DAY = 86400;
 const VOTING_CONTRACT_ADDRESS = process.env.VOTING_CONTRACTADDRESS || "0x79e42F91c7Df1ee23EEd5404748631F3472fdC4C";
@@ -31,7 +29,6 @@ async function generateCryptoSignature(level, kills, points, nonce, walletAddres
 
 /**
  * POST /api/points/verify
- * Generates backend signature for submitting score to on-chain legacy games
  */
 export const verifyPoints = async (req, res) => {
   try {
@@ -75,7 +72,6 @@ export const verifyPoints = async (req, res) => {
 
 /**
  * POST /api/points/add
- * Validates the on-chain transaction data and indexes points to User database
  */
 export const addPoints = async (req, res) => {
   const { wallet, txHash, score, gameId } = req.body;
@@ -133,17 +129,15 @@ export const addPoints = async (req, res) => {
         return res.status(400).json({ error: 'Transaction did not call submitGameResult' });
       }
       const decodedData = abiCoder.decode(['uint256', 'uint256', 'uint256', 'bytes'], '0x' + inputData.slice(10));
-      onChainScore = Number(decodedData[0]); // Decodes finalScore
+      onChainScore = Number(decodedData[0]);
 
     } else if (gameId === "fruit_ninja") {
-      // FruitNinja.submitGameResult(finalScore, levelReached, fruitsSliced, nonce, signature) —
-      // one more uint256 than fishing_party's submitGameResult, so it's a distinct selector.
       const FRUIT_NINJA_SELECTOR = ethers.id("submitGameResult(uint256,uint256,uint256,uint256,bytes)").slice(0, 10);
       if (!inputData.startsWith(FRUIT_NINJA_SELECTOR)) {
         return res.status(400).json({ error: 'Transaction did not call submitGameResult' });
       }
       const decodedData = abiCoder.decode(['uint256', 'uint256', 'uint256', 'uint256', 'bytes'], '0x' + inputData.slice(10));
-      onChainScore = Number(decodedData[0]); // Decodes finalScore
+      onChainScore = Number(decodedData[0]);
 
     } else if (gameId === "space_huggers") {
       if (!inputData.startsWith(SUBMIT_LEVEL_SCORE_SELECTOR)) {
@@ -175,7 +169,6 @@ export const addPoints = async (req, res) => {
     const userMultiplier = profile?.multiplier || 1.0;
     const pointsToAdd = Math.round(onChainScore * userMultiplier);
 
-    // 1. Update Global/Permanent Highscore
     const user = await UserProfile.findOneAndUpdate(
       { wallet: walletLower },
       {
@@ -186,7 +179,6 @@ export const addPoints = async (req, res) => {
       { upsert: true, new: true }
     );
 
-    // 2. Update Weekly Active Event Highscore
     await EventProfile.findOneAndUpdate(
       { wallet: walletLower },
       {
@@ -212,11 +204,6 @@ export const addPoints = async (req, res) => {
 
 /**
  * POST /api/points/vote
- * Verifies a BestGameVoting.vote() transaction on-chain and credits HP for
- * it. The contract already caps votes at 10/day per wallet, but this route
- * enforces the same cap independently (day boundary aligned to the
- * contract's 00:01 UTC reset) so the reward path can't be replayed beyond
- * what a legitimate day of voting would earn.
  */
 export const addVotePoints = async (req, res) => {
   const { wallet, txHash } = req.body;
@@ -259,31 +246,54 @@ export const addVotePoints = async (req, res) => {
     const block = await provider.getBlock(receipt.blockNumber);
     const voteDay = Math.floor(Math.max(block.timestamp - VOTE_RESET_OFFSET_SECONDS, 0) / SECONDS_PER_DAY);
 
-    const profileForMultiplier = await UserProfile.findOne({ wallet: walletLower });
-    const userMultiplier = profileForMultiplier?.multiplier || 1.0;
+    // Ensure the UserProfile exists safely without conditional upserts
+    let user = await UserProfile.findOne({ wallet: walletLower });
+    if (!user) {
+      try {
+        user = await UserProfile.findOneAndUpdate(
+          { wallet: walletLower },
+          { $setOnInsert: { wallet: walletLower, points: 0, votesToday: 0, voteDay: -1 } },
+          { upsert: true, new: true }
+        );
+      } catch (e) {
+        if (e.code === 11000) {
+          user = await UserProfile.findOne({ wallet: walletLower });
+        } else {
+          throw e;
+        }
+      }
+    }
+
+    const userMultiplier = user?.multiplier || 1.0;
     const pointsToAdd = Math.round(VOTE_REWARD_POINTS * userMultiplier);
 
-    // Same-day path: only succeeds if still under today's cap.
-    let updatedUser = await UserProfile.findOneAndUpdate(
-      { wallet: walletLower, voteDay, votesToday: { $lt: MAX_VOTES_PER_DAY } },
-      {
-        $inc: { points: pointsToAdd, votesToday: 1 },
-        $push: { processedHashes: txHash },
-        $set: { lastSyncedAt: new Date() },
-      },
-      { new: true }
-    );
+    let updatedUser;
 
-    if (!updatedUser) {
-      // New day (or brand-new user) path: resets the counter to 1.
+    if (user.voteDay !== voteDay) {
+      // Reset counter for new day
       updatedUser = await UserProfile.findOneAndUpdate(
-        { wallet: walletLower, voteDay: { $ne: voteDay } },
+        { wallet: walletLower },
         {
           $inc: { points: pointsToAdd },
           $push: { processedHashes: txHash },
           $set: { lastSyncedAt: new Date(), voteDay, votesToday: 1 },
         },
-        { upsert: true, new: true }
+        { new: true }
+      );
+    } else {
+      // Same day path: verify daily cap before updating
+      if (user.votesToday >= MAX_VOTES_PER_DAY) {
+        return res.status(400).json({ error: "Daily vote reward limit reached" });
+      }
+
+      updatedUser = await UserProfile.findOneAndUpdate(
+        { wallet: walletLower, voteDay, votesToday: { $lt: MAX_VOTES_PER_DAY } },
+        {
+          $inc: { points: pointsToAdd, votesToday: 1 },
+          $push: { processedHashes: txHash },
+          $set: { lastSyncedAt: new Date() },
+        },
+        { new: true }
       );
     }
 
@@ -317,7 +327,6 @@ export const addVotePoints = async (req, res) => {
 
 /**
  * GET /api/points/get
- * Retrieves points and completed quest statuses for a wallet
  */
 export const getPoints = async (req, res) => {
   const { wallet } = req.query;
@@ -338,7 +347,6 @@ export const getPoints = async (req, res) => {
 
 /**
  * POST /api/points/claim
- * Checks quest limits and updates user database with reward balance
  */
 export const claimTask = async (req, res) => {
   const { wallet, task } = req.body;

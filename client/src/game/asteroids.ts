@@ -16,7 +16,7 @@ export function spawnAsteroidWave(wave: number): Asteroid[] {
 
 export function createAsteroid(wave: number): Asteroid {
   const size = 18 + Math.random() * 36;
-  const side = Math.floor(Math.random() * 3); // 0=top, 1=left, 2=right
+  const side = Math.floor(Math.random() * 3);
   let x: number, y: number, vx: number, vy: number;
 
   if (side === 0) {

@@ -99,8 +99,8 @@ function paintShockwaves(ctx, list) {
     ctx.shadowColor = '#ffaa00'; ctx.shadowBlur = 22; ctx.stroke();
     if (r > 30) {
       ctx.beginPath(); ctx.arc(sw.x, sw.y, r * 0.55, 0, Math.PI * 2);
-      ctx.strokeStyle = `rgba(255,80,0,${a*0.5})`; ctx.lineWidth = 3*(1-p); ctx.shadowBlur = 8; 
-      ctx.stroke(); // <-- Fixed: Added 'ctx.' prefix here
+      ctx.strokeStyle = `rgba(255,80,0,${a*0.5})`; ctx.lineWidth = 3*(1-p); ctx.shadowBlur = 8;
+      ctx.stroke();
     }
     ctx.restore();
   }
@@ -127,7 +127,7 @@ function paintBigWen(ctx, age, maxAge) {
   ctx.restore();
 }
 
-// Score Submit Toast 
+// Score Submit Toast
 
 function ScoreToast({ status, score, error, onDismiss }) {
   const cols = { pending:'#ffdd00', success:'#00ffcc', error:'#ff4466' };
@@ -239,7 +239,7 @@ function LevelCompleteOverlay({ level, score, isConnected, submitStatus, submitE
           <div style={{ color:'#fff',fontSize:34,fontWeight:800,letterSpacing:1,marginBottom:16, textShadow:'0 2px 10px rgba(255,255,255,0.1)' }}>
             {score?.toLocaleString()}
           </div>
-          
+
           <motion.div
             initial={{ opacity:0,y:4 }} animate={{ opacity:1,y:0 }} transition={{ delay:0.85,duration:0.3 }}
             style={{ fontSize:12, fontWeight: 500, letterSpacing:'0.5px',marginBottom:28, padding: '8px 14px', borderRadius: 10, background: 'rgba(255,255,255,0.02)', display: 'inline-block',
@@ -372,7 +372,7 @@ function GameCanvas({ startLevel, onBackToMap }) {
     if (hasSubmittedRef.current) return;
     hasSubmittedRef.current = true;
 
-    const points = Math.min(Math.round(score), 65535);  
+    const points = Math.min(Math.round(score), 65535);
     setSubmitStatus('pending'); setSubmitError(null);
     try {
       const receipt = await submitGuess(points);
@@ -549,19 +549,84 @@ function GameCanvas({ startLevel, onBackToMap }) {
   );
 }
 
+// Virtual joystick
+
+const JOYSTICK_BASE = 116;
+const JOYSTICK_KNOB = 50;
+const JOYSTICK_MAX_DIST = 42;
+const JOYSTICK_DEAD_ZONE = 12;
+
+function Joystick({ inputRef }) {
+  const baseRef    = useRef(null);
+  const originRef  = useRef({ x: 0, y: 0 });
+  const activeRef  = useRef(false);
+  const [knob, setKnob] = useState({ x: 0, y: 0 });
+
+  const applyInput = (kx, ky) => {
+    inputRef.current.left  = kx < -JOYSTICK_DEAD_ZONE;
+    inputRef.current.right = kx > JOYSTICK_DEAD_ZONE;
+    inputRef.current.up    = ky < -JOYSTICK_DEAD_ZONE;
+    inputRef.current.down  = ky > JOYSTICK_DEAD_ZONE;
+  };
+
+  const updateFromPoint = (clientX, clientY) => {
+    const dx = clientX - originRef.current.x;
+    const dy = clientY - originRef.current.y;
+    const dist  = Math.min(Math.hypot(dx, dy), JOYSTICK_MAX_DIST);
+    const angle = Math.atan2(dy, dx);
+    const kx = Math.cos(angle) * dist;
+    const ky = Math.sin(angle) * dist;
+    setKnob({ x: kx, y: ky });
+    applyInput(kx, ky);
+  };
+
+  const onTouchStart = (e) => {
+    const rect = baseRef.current.getBoundingClientRect();
+    originRef.current = { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+    activeRef.current = true;
+    updateFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+  };
+
+  const onTouchMove = (e) => {
+    if (!activeRef.current) return;
+    updateFromPoint(e.touches[0].clientX, e.touches[0].clientY);
+  };
+
+  const onTouchEnd = () => {
+    activeRef.current = false;
+    setKnob({ x: 0, y: 0 });
+    inputRef.current.left = false; inputRef.current.right = false;
+    inputRef.current.up = false;   inputRef.current.down = false;
+  };
+
+  return (
+    <div ref={baseRef} onTouchStart={onTouchStart} onTouchMove={onTouchMove}
+      onTouchEnd={onTouchEnd} onTouchCancel={onTouchEnd}
+      style={{
+        width: JOYSTICK_BASE, height: JOYSTICK_BASE, borderRadius: '50%',
+        background: 'rgba(255,255,255,0.06)', backdropFilter: 'blur(4px)',
+        border: '1px solid rgba(255,255,255,0.15)', position: 'relative',
+        touchAction: 'none', pointerEvents: 'all',
+      }}
+    >
+      <motion.div animate={{ x: knob.x, y: knob.y }} transition={{ type: 'tween', duration: 0 }}
+        style={{
+          position: 'absolute', top: '50%', left: '50%',
+          width: JOYSTICK_KNOB, height: JOYSTICK_KNOB,
+          marginTop: -JOYSTICK_KNOB/2, marginLeft: -JOYSTICK_KNOB/2,
+          borderRadius: '50%', background: 'rgba(0,204,255,0.35)',
+          border: '1px solid rgba(0,204,255,0.6)', boxShadow: '0 0 16px rgba(0,204,255,0.35)',
+        }}
+      />
+    </div>
+  );
+}
+
 // Mobile controls
 
 function MobileControls({ inputRef, stateRef, wenTextsRef, shockwavesRef, bigWenRef }) {
   if (!('ontouchstart' in window)) return null;
   const press = (k, v) => { inputRef.current[k]=v; };
-  const dpad = (label, key) => (
-    <motion.button whileTap={{ scale:0.85, opacity:0.6 }}
-      style={{ background:'rgba(255,255,255,0.06)', backdropFilter:'blur(4px)', border:'1px solid rgba(255,255,255,0.15)', borderRadius:16,color:'#fff',
-        fontFamily: FONT_STACK, fontSize:22, padding:'14px 18px', touchAction:'none',
-        userSelect:'none', WebkitUserSelect:'none', cursor:'pointer' }}
-      onTouchStart={()=>press(key,true)} onTouchEnd={()=>press(key,false)}
-    >{label}</motion.button>
-  );
   const fireWen = () => {
     const st = stateRef.current;
     if (st?.player?.bombCount>0) {
@@ -574,11 +639,8 @@ function MobileControls({ inputRef, stateRef, wenTextsRef, shockwavesRef, bigWen
   };
   return (
     <div style={{ position:'fixed',bottom:24,left:0,right:0,display:'flex',
-      justifyContent:'space-between',padding:'0 24px',pointerEvents:'none',zIndex:10000 }}>
-      <div style={{ display:'grid',gridTemplateColumns:'repeat(3,58px)',gridTemplateRows:'repeat(2,58px)',gap:8,pointerEvents:'all' }}>
-        <div/>{dpad('▲','up')}<div/>
-        {dpad('◀','left')}{dpad('▼','down')}{dpad('▶','right')}
-      </div>
+      justifyContent:'space-between',alignItems:'flex-end',padding:'0 24px',pointerEvents:'none',zIndex:10000 }}>
+      <Joystick inputRef={inputRef} />
       <div style={{ display:'flex',flexDirection:'column',gap:12,pointerEvents:'all' }}>
         <motion.button whileTap={{ scale:0.85 }}
           style={{ background:'rgba(255, 68, 0, 0.3)', backdropFilter:'blur(4px)', border:'1px solid rgba(255,68,0,0.5)', borderRadius:16,color:'#fff',

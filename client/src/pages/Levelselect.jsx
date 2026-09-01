@@ -31,7 +31,7 @@ function getHighScore() {
   return parseInt(localStorage.getItem('voidStrikerHighScore') ?? '0');
 }
 
-// ─── Starfield (GSAP twinkle) ─────────────────────────────────────────────────
+//  Starfield (GSAP twinkle) 
 
 function Starfield() {
   const containerRef = useRef(null);
@@ -71,7 +71,7 @@ function Starfield() {
   );
 }
 
-// ─── Level card ───────────────────────────────────────────────────────────────
+//  Level card 
 
 function LevelCard({ level, info, unlocked, completed, onClick, index }) {
   const [hovered, setHovered] = useState(false);
@@ -182,7 +182,7 @@ function LevelCard({ level, info, unlocked, completed, onClick, index }) {
   );
 }
 
-// ─── Main LevelSelect ─────────────────────────────────────────────────────────
+// Main LevelSelect 
 
 export default function LevelSelect({ onSelectLevel }) {
   const [completed, setCompleted] = useState([]);

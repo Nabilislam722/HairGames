@@ -19,7 +19,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#ef5350",
     seed: "#1b1b1b",
     radius: 58,
-    points: 40,
+    points: 30,
   },
   {
     id: "orange",
@@ -29,7 +29,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#ffb74d",
     seed: "#e65100",
     radius: 46,
-    points: 30,
+    points: 25,
   },
   {
     id: "apple",
@@ -191,7 +191,7 @@ export const ABILITY_FRUITS: AbilityKind[] = [
     inner: "#fff8e1",
     seed: "#ff6f00",
     radius: 42,
-    points: 500,
+    points: 400,
     ability: "golden",
     glow: "#ffca28",
   },
