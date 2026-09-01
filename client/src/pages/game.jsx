@@ -25,7 +25,7 @@ import {
 } from '../game/renderer';
 import { drawAsteroid } from '../game/asteroids';
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// Constants
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const WEN_PHRASES  = ['WEN', 'WEN!', 'W E N', '🚀 WEN', 'WEN 💥', 'ser WEN?', '‼ WEN ‼', 'SOON™'];
 const CONFETTI_CFG = Array.from({ length: 55 }, (_, i) => ({
@@ -127,7 +127,7 @@ function paintBigWen(ctx, age, maxAge) {
   ctx.restore();
 }
 
-// ─── Score Submit Toast ───────────────────────────────────────────────────────
+// Score Submit Toast 
 
 function ScoreToast({ status, score, error, onDismiss }) {
   const cols = { pending:'#ffdd00', success:'#00ffcc', error:'#ff4466' };
@@ -161,7 +161,7 @@ function ScoreToast({ status, score, error, onDismiss }) {
   );
 }
 
-// ─── Level Complete Overlay ───────────────────────────────────────────────────
+// Level Complete Overlay
 
 function LevelCompleteOverlay({ level, score, isConnected, submitStatus, submitError, onContinue }) {
   const refs = useRef([]);
@@ -262,7 +262,7 @@ function LevelCompleteOverlay({ level, score, isConnected, submitStatus, submitE
   );
 }
 
-// ─── Loading / ESC ────────────────────────────────────────────────────────────
+// Loading / ESC
 
 function LoadingScreen() {
   return (
@@ -293,7 +293,7 @@ function EscHint() {
   );
 }
 
-// ─── Main wrapper ─────────────────────────────────────────────────────────────
+// Main wrapper
 
 export default function GameWrapper() {
   const [screen,     setScreen]     = useState('levelSelect');
@@ -316,7 +316,7 @@ export default function GameWrapper() {
   );
 }
 
-// ─── Canvas game ──────────────────────────────────────────────────────────────
+// Canvas game
 
 function GameCanvas({ startLevel, onBackToMap }) {
   const { address, isConnected, submitGuess } = useWeb3();
@@ -341,7 +341,7 @@ function GameCanvas({ startLevel, onBackToMap }) {
   const [showLevelComplete, setShowLevelComplete] = useState(false);
   const [completedLevel,    setCompletedLevel]    = useState(null);
   const [completedScore,    setCompletedScore]    = useState(0);
-  const [submitStatus,      setSubmitStatus]      = useState(null);  // null|pending|success|error
+  const [submitStatus,      setSubmitStatus]      = useState(null);
   const [submitError,       setSubmitError]       = useState(null);
   const [toast,             setToast]             = useState(null);
 
@@ -365,15 +365,14 @@ function GameCanvas({ startLevel, onBackToMap }) {
     hasSubmittedRef.current = false; // Reset submission execution lock barrier
   }, []);
 
-  // ── On-chain score submission ────────────────────────────────────────────────
+  // On-chain score submission
   const submitScore = useCallback(async (score) => {
     if (!isConnected || !address) return;
-    
-    // Sync block guard mechanism against Double Execution race conditions
+
     if (hasSubmittedRef.current) return;
     hasSubmittedRef.current = true;
 
-    const points = Math.min(Math.round(score), 65535);   // uint16 max
+    const points = Math.min(Math.round(score), 65535);  
     setSubmitStatus('pending'); setSubmitError(null);
     try {
       const receipt = await submitGuess(points);
@@ -550,7 +549,7 @@ function GameCanvas({ startLevel, onBackToMap }) {
   );
 }
 
-// ─── Mobile controls ──────────────────────────────────────────────────────────
+// Mobile controls
 
 function MobileControls({ inputRef, stateRef, wenTextsRef, shockwavesRef, bigWenRef }) {
   if (!('ontouchstart' in window)) return null;

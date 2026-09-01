@@ -7,7 +7,7 @@ import BackgroundImg from "../assets/bg.jpg";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import "../index.css";
 
-/* ─── Particle Canvas ────────────────────────────────────────────────────── */
+/* Particle Canvas */
 function ParticleField() {
   const canvasRef = useRef(null);
   useEffect(() => {
@@ -50,7 +50,7 @@ function ParticleField() {
   return <canvas ref={canvasRef} className="absolute inset-0 w-full h-full" />;
 }
 
-/* ─── Count-up ───────────────────────────────────────────────────────────── */
+/* Count-up */
 function Counter({ to, suffix = "" }) {
   const [val, setVal] = useState(0);
   const ref = useRef(null);
@@ -69,7 +69,7 @@ function Counter({ to, suffix = "" }) {
   return <span ref={ref}>{val}{suffix}</span>;
 }
 
-/* ─── Reveal ─────────────────────────────────────────────────────────────── */
+/* Reveal */
 function Reveal({ children, delay = 0, className = "", from = "bottom" }) {
   const ref = useRef(null);
   const inView = useInView(ref, { once: true, margin: "-50px" });
@@ -90,7 +90,7 @@ function Reveal({ children, delay = 0, className = "", from = "bottom" }) {
   );
 }
 
-/* ─── SVG: Circuit Board graphic ─────────────────────────────────────────── */
+/* SVG: Circuit Board graphic  */
 function CircuitGraphic() {
   return (
     <svg viewBox="0 0 400 300" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full">
@@ -145,7 +145,7 @@ function CircuitGraphic() {
   );
 }
 
-/* ─── SVG: HP Orb graphic ────────────────────────────────────────────────── */
+/* SVG: HP Orb graphic  */
 function HpGraphic() {
   return (
     <svg viewBox="0 0 280 280" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full max-w-[240px]">
@@ -191,7 +191,7 @@ function HpGraphic() {
   );
 }
 
-/* ─── SVG: Shield / Fair graphic ────────────────────────────────────────── */
+/* SVG: Shield / Fair graphic  */
 function FairGraphic() {
   return (
     <svg viewBox="0 0 240 260" fill="none" xmlns="http://www.w3.org/2000/svg" className="w-full h-full max-w-[200px]">
@@ -341,7 +341,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════════ WHY HEMI — split panel with circuit graphic */}
+      {/* WHY HEMI — split panel with circuit graphic */}
       <section className="py-10 container mx-auto px-4">
         <div className="relative rounded-3xl border border-white/8 overflow-hidden bg-card/30 min-h-[380px]">
           {/* grid bg */}
@@ -384,7 +384,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════════ HP SECTION — centered orb + stacked text */}
+      {/*  HP SECTION — centered orb + stacked text */}
       <section className="py-10 container mx-auto px-4">
         <div className="relative rounded-3xl border border-white/8 overflow-hidden">
           {/* dark bg + radial glow */}
@@ -430,7 +430,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════════ FEATURES — vertical numbered list */}
+      {/*  FEATURES — vertical numbered list */}
       <section className="py-16 container mx-auto px-4">
         <Reveal className="mb-14">
           <div className="flex items-center gap-4">
@@ -492,7 +492,7 @@ export default function Home() {
         </div>
       </section>
 
-      {/* ═══════════════════════════════════════════ BOTTOM CTA */}
+      {/*  BOTTOM CTA */}
       <section className="py-28 container mx-auto px-4 text-center">
         <Reveal>
           <h2 className="font-display text-4xl md:text-6xl font-bold text-white mb-5 leading-tight">

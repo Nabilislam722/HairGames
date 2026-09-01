@@ -10,9 +10,9 @@ const CONTRACT_ADDRESS = "0x3E0784ffE4e036bCc1859CA124dF327e8B866E29";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 
-const DEFAULT_POINTS_CONFIG = { initialPoints: 13000, decrementPerSecond: 90 };
+const DEFAULT_POINTS_CONFIG = { initialPoints: 30000, decrementPerSecond: 90 };
 
-// ── FIXED ABI: Matched your contract modifiers exactly ──────────────────
+
 const RACING_GAME_ABI = [
   "function startGame() external",
   "function submitRaceResult(uint256 timeTakenMs, uint256 nonce, bytes calldata signature) external payable"
@@ -28,13 +28,13 @@ export default function RacingGamePage() {
 
   const timerRef = useRef(null);
   const startTimeRef = useRef(0);
-  const finalTimeRef = useRef(null); // FIX: prevents time inflation on TX retry
+  const finalTimeRef = useRef(null);
   const pointsConfigRef = useRef(DEFAULT_POINTS_CONFIG);
   // Holds everything needed to retry JUST the DB sync after a successful
   // on-chain race, without ever touching submitRaceResult again.
   const lastSubmissionRef = useRef(null);
 
-  // ── Pull the point economy ────────────────────────────────────────────────
+  // Pull the point economy
   useEffect(() => {
     fetch(`${API_BASE}/api/race/config`)
       .then((res) => (res.ok ? res.json() : Promise.reject(new Error("Bad config response"))))
@@ -49,7 +49,7 @@ export default function RacingGamePage() {
       });
   }, []);
 
-  // ── 1. Points Countdown Mechanism ──────────────────────────────────────────
+  // Points Countdown Mechanism 
   useEffect(() => {
     if (timerRef.current) clearInterval(timerRef.current);
 
@@ -74,7 +74,7 @@ export default function RacingGamePage() {
     };
   }, [gameStatus]);
 
-  // ── 2. Handle Game Entry (First TX - No ETH Sent Here anymore) ────────────
+  // Handle Game Entry (First TX - No ETH Sent Here anymore) 
   const handleGameStart = async () => {
     setErrorMessage(null);
     setTxHash(null);

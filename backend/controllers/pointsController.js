@@ -40,7 +40,7 @@ export const verifyPoints = async (req, res) => {
 
     let points = 0;
     if (gameId === "space_huggers") {
-      points = Math.min(Math.round((Number(kills) * 40) + (Number(livesRemaining) * 5)), 65535) || 0;
+      points = Math.min(Math.round((Number(kills) * 100) + (Number(livesRemaining) * 100)), 65535) || 0;
     } else {
       points = Number(req.body.score) || 0;
     }

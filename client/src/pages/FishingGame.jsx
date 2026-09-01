@@ -1,33 +1,16 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import { Contract, ethers } from "ethers";
-import {
-  Play,
-  RotateCcw,
-  Scissors,
-  Trophy,
-  ChevronRight,
-  Sparkles,
-  Wallet,
-  Loader2,
-  ExternalLink,
-} from "lucide-react";
-import GameCanvas from "../game/fruit_ninja/GameCanvas";
-import HUD, { BombLegend } from "../game/fruit_ninja/HUD";
-import {
-  createInitialState,
-  resetForPlay,
-  continueAfterLevelUp,
-  getLevelConfig,
-  getTotalLevels,
-} from "../game/fruit_ninja/engine";
+import React, { useState, useRef, useCallback, useEffect } from "react";
+import { ethers } from "ethers";
+import CanvasGame from "../components/CanvasGame";
+import HUD from "../components/HUD";
+import TouchControls from "../components/TouchControls";
+import { initAudio, playClickSound, playHoverSound } from "../game/audio";
 
-const BEST_KEY = "fruit-slash-best";
-
+// ── Web3 & Endpoint Constants ───────────────────────────────────────────
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
-const FRUIT_NINJA_CONTRACT_ADDRESS = "0x1f2a78Ce71aFbac323bEDc3404d206E7F94D8CFd";
+const FISHING_CONTRACT_ADDRESS = "0x45cee112Ba2EbDE8224a1fA14D329f6AB190a7eA";
 const HEMI_CHAIN_ID = "0xa867";
-const GAME_COST_ETH = "0.000012";
+const GAME_COST_ETH = "0.00001";
+
 
 const HEMI_CHAIN_DETAILS = {
   chainId: HEMI_CHAIN_ID,
@@ -41,67 +24,73 @@ const HEMI_CHAIN_DETAILS = {
   blockExplorerUrls: ["https://explorer.hemi.xyz"],
 };
 
-const CONTRACT_ABI = [
-  "function startGame() external",
-  "function submitGameResult(uint256 finalScore, uint256 levelReached, uint256 fruitsSliced, uint256 nonce, bytes signature) external",
-];
+// States: "idle" | "connecting" | "initializing_session" | "waiting_session_confirm" | "error_starting"
+//       | "generating" | "signing" | "indexing" | "success" | "error" | "syncFailed"
+export default function Mxfishing() {
+  const [gameState, setGameState] = useState("START");
+  const [isPortrait, setIsPortrait] = useState(false);
+  const [stats, setStats] = useState({
+    level: 1,
+    lives: 3,
+    score: 0,
+    fishCollected: 0,
+    fishRequired: 20,
+    totalFish: 0,
+    maxLevelReached: 1,
+  });
 
-const bentoContainer = {
-  hidden: {},
-  show: { transition: { staggerChildren: 0.06, delayChildren: 0.05 } },
-};
-const bentoItem = {
-  hidden: { opacity: 0, y: 16, scale: 0.96 },
-  show: { opacity: 1, y: 0, scale: 1 },
-};
-const CTA_FOCUS = "focus-visible:outline-none focus-visible:ring-4 focus-visible:ring-white/70";
-
-function shortAddr(addr) {
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-}
-
-export default function fruitninja() {
-  const [phase, setPhase] = useState("menu");
-  const [, force] = useState(0);
-  const rerender = useCallback(() => force((n) => n + 1), []);
-
-  const stateRef = useRef(
-    createInitialState(Number(localStorage.getItem(BEST_KEY) || 0)),
-  );
-
-  // ── Web3 session (start) state
+  // ── Web3 Connection States ──────────────────────────────────────────────
   const [walletAddress, setWalletAddress] = useState("");
-  const [sessionStatus, setSessionStatus] = useState("idle");
-  const [sessionError, setSessionError] = useState("");
-  const [isStuckSession, setIsStuckSession] = useState(false);
-  const [clearStatus, setClearStatus] = useState("idle");
-
-  // ── Web3 submission (end of run) state 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitStatus, setSubmitStatus] = useState("idle");
   const [submitError, setSubmitError] = useState("");
   const [pointsAwarded, setPointsAwarded] = useState(0);
   const [txHash, setTxHash] = useState(null);
-  const [scoreSecured, setScoreSecured] = useState(false);
+  const [isDisabled, setIsDisabled] = useState(false);
+  // Set when handleStart reverts with "Session already in progress". While
+  // true, the Start Game button clears the dangling session instead of
+  // retrying startGame() (which would just revert again).
+  const [isStuckSession, setIsStuckSession] = useState(false);
+  const [clearStatus, setClearStatus] = useState("idle"); // idle | requesting | clearing | error
 
+  const gameRef = useRef(null);
   // Holds everything needed to retry JUST the DB sync after a successful
   // on-chain submission, without ever touching submitGameResult again.
   const lastSubmissionRef = useRef(null);
-  // Guards against the auto-submit effect firing twice for the same run.
-  const submittedRunRef = useRef(false);
 
-  // ── Wallet connection bootstrap ─────────────────────────────────────────
+  // Check for portrait orientation dynamically
+  useEffect(() => {
+    const checkOrientation = () => {
+      setIsPortrait(window.innerHeight > window.innerWidth);
+    };
+
+    checkOrientation();
+    window.addEventListener("resize", checkOrientation);
+    window.addEventListener("orientationchange", checkOrientation);
+
+    return () => {
+      window.removeEventListener("resize", checkOrientation);
+      window.removeEventListener("orientationchange", checkOrientation);
+    };
+  }, []);
+
+  // Check if wallet is already connected on page load
   useEffect(() => {
     if (window.ethereum) {
-      window.ethereum
-        .request({ method: "eth_accounts" })
+      window.ethereum.request({ method: "eth_accounts" })
         .then((accounts) => {
-          if (accounts && accounts.length > 0) setWalletAddress(accounts[0]);
+          if (accounts && accounts.length > 0) {
+            setWalletAddress(accounts[0]);
+          }
         })
         .catch((err) => console.error("Error fetching accounts:", err));
 
       const handleAccountsChanged = (accounts) => {
-        setWalletAddress(accounts.length > 0 ? accounts[0] : "");
+        if (accounts.length > 0) {
+          setWalletAddress(accounts[0]);
+        } else {
+          setWalletAddress("");
+        }
       };
 
       window.ethereum.on("accountsChanged", handleAccountsChanged);
@@ -119,29 +108,35 @@ export default function fruitninja() {
       return null;
     }
     try {
-      setSessionStatus("connecting");
+      setSubmitStatus("connecting");
       const accounts = await window.ethereum.request({ method: "eth_requestAccounts" });
       const address = accounts[0];
       setWalletAddress(address);
       return address;
     } catch (err) {
       console.error("Wallet connection failed:", err);
-      setSessionError("Failed to connect wallet: " + err.message);
-      setSessionStatus("error_starting");
+      setSubmitError("Failed to connect wallet: " + err.message);
+      setSubmitStatus("error_starting");
       return null;
     }
   };
-  // START: on-chain session, then reset the local sim
-  const start = useCallback(async () => {
-    setSessionError("");
+
+  // ── START GAME: On-Chain Session Initialization ────────────────────────
+  const handleStart = async () => {
+    initAudio();
+    playClickSound();
+    setSubmitError("");
+
     try {
+      // 1. Ensure Wallet Connection
       let currentWallet = walletAddress;
       if (!currentWallet) {
         currentWallet = await handleConnectWallet();
         if (!currentWallet) return;
       }
 
-      setSessionStatus("connecting");
+      // 2. Switch/Add Hemi Network
+      setSubmitStatus("connecting");
       const provider = new ethers.BrowserProvider(window.ethereum);
       const network = await provider.getNetwork();
       if (network.chainId !== 43111n && network.chainId !== 43111) {
@@ -162,45 +157,73 @@ export default function fruitninja() {
         }
       }
 
-      setSessionStatus("initializing_session");
+      // 3. Trigger Game-Start session on-chain
+      setSubmitStatus("initializing_session");
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(FRUIT_NINJA_CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+
+      const contract = new ethers.Contract(
+        FISHING_CONTRACT_ADDRESS,
+        [
+          "function startGame() external",
+          "function submitGameResult(uint256 finalScore, uint256 totalFish, uint256 nonce, bytes signature) external"
+        ],
+        signer
+      );
 
       const tx = await contract.startGame();
-      setSessionStatus("waiting_session_confirm");
+
+      setSubmitStatus("waiting_session_confirm");
       await tx.wait();
 
-      stateRef.current = resetForPlay(stateRef.current);
-      submittedRunRef.current = false;
+      // 4. Request Fullscreen
+      try {
+        const el = document.documentElement;
+        if (el.requestFullscreen) {
+          await el.requestFullscreen();
+        }
+      } catch (error) {
+        console.warn("Fullscreen denied/unsupported:", error);
+      }
+
+      // Reset local gameplay + submission state
+      setStats({
+        level: 1,
+        lives: 3,
+        score: 0,
+        fishCollected: 0,
+        fishRequired: 20,
+        totalFish: 0,
+        maxLevelReached: 1,
+      });
+
       lastSubmissionRef.current = null;
       setTxHash(null);
       setIsStuckSession(false);
       setClearStatus("idle");
       setSubmitStatus("idle");
-      setSubmitError("");
       setPointsAwarded(0);
-      setScoreSecured(false); // run now in flight — locks Play Again until it settles
-      setSessionStatus("idle");
-      setPhase("playing");
-      rerender();
+      setGameState("PLAYING");
+
     } catch (err) {
-      console.error("Session initialization failed:", err);
-      const isStuck =
-        err.reason === "Session already in progress" ||
-        err.message?.includes("Session already in progress");
+      console.error("Session Initialization Failed:", err);
+      const isStuck = err.reason === "Session already in progress" || err.message?.includes("Session already in progress");
       if (isStuck) {
         setIsStuckSession(true);
-        setSessionError("You have an unresolved session on-chain. Click again to clear it, then start a new game.");
+        setSubmitError("You have an unresolved session on-chain. Click again to clear it, then start a new game.");
       } else {
-        setSessionError(err.reason || err.message || "Failed to start an on-chain session on Hemi.");
+        setSubmitError(err.reason || err.message || "Failed to secure an active game session on Hemi Ledger.");
       }
-      setSessionStatus("error_starting");
+      setSubmitStatus("error_starting");
     }
-  }, [walletAddress, rerender]);
+  };
 
+  // Closes out a dangling on-chain session by submitting a 0-score result.
+  // Only reachable from the "stuck session" error state — never called as
+  // part of the normal start flow.
   const handleClearStuckSession = async () => {
-    setSessionError("");
+    setSubmitError("");
     setClearStatus("requesting");
+
     try {
       let currentWallet = walletAddress;
       if (!currentWallet) {
@@ -212,53 +235,66 @@ export default function fruitninja() {
       }
 
       const provider = new ethers.BrowserProvider(window.ethereum);
-      const sigResponse = await fetch(`${API_BASE_URL}/api/fruitninja/signature`, {
+
+      const sigResponse = await fetch(`${API_BASE_URL}/api/fishing/signature`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           player: currentWallet,
           finalScore: 0,
-          levelReached: 0,
-          fruitsSliced: 0,
+          totalFish: 0,
         }),
       });
+
       if (!sigResponse.ok) {
         const errorData = await sigResponse.json().catch(() => ({}));
         throw new Error(errorData.error || "Failed to generate clear-session signature");
       }
-      const { finalScore, levelReached, fruitsSliced, nonce, signature } = await sigResponse.json();
+
+      const { finalScore, totalFish, nonce, signature } = await sigResponse.json();
 
       setClearStatus("clearing");
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(FRUIT_NINJA_CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const contract = new ethers.Contract(
+        FISHING_CONTRACT_ADDRESS,
+        [
+          "function submitGameResult(uint256 finalScore, uint256 totalFish, uint256 nonce, bytes signature) external"
+        ],
+        signer
+      );
 
+      // NOTE: submitGameResult is payable — clearing a stuck session still
+      // sends the entry fee unless the contract exempts 0-score submissions.
+      setIsDisabled(true);
       const tx = await contract.submitGameResult(
         BigInt(finalScore),
-        BigInt(levelReached),
-        BigInt(fruitsSliced),
+        BigInt(totalFish),
         BigInt(nonce),
         signature,
-        { value: ethers.parseEther(GAME_COST_ETH) },
+        { value: ethers.parseEther(GAME_COST_ETH) }
       );
+      
+
       const receipt = await tx.wait();
       if (!receipt || receipt.status !== 1) {
         throw new Error("Clear-session transaction failed on-chain");
       }
 
       setIsStuckSession(false);
-      setSessionStatus("idle");
-      setSessionError("");
+      setSubmitStatus("idle");
+      setSubmitError("");
       setClearStatus("idle");
-
-      // Session is now closed on-chain — continue straight into a new game.
-      await start();
     } catch (err) {
       console.error("Clear stuck session failed:", err);
-      setSessionError(err.reason || err.message || "Failed to clear the stuck session.");
+      setSubmitError(err.reason || err.message || "Failed to clear the stuck session.");
       setClearStatus("error");
     }
   };
 
+  // Posts an already-confirmed run to the backend. Pulled out on its own so
+  // it can be re-run from the "syncFailed" screen WITHOUT calling
+  // submitGameResult again — by that point the on-chain session is already
+  // closed, so a second submission would just revert.
   const syncScoreToBackend = async ({ wallet, finalScore, txHash: confirmedTxHash }) => {
     const claimResponse = await fetch(`${API_BASE_URL}/api/points/add`, {
       method: "POST",
@@ -267,34 +303,36 @@ export default function fruitninja() {
         wallet,
         txHash: confirmedTxHash,
         score: finalScore,
-        gameId: "fruit_ninja",
+        gameId: "fishing_party"
       }),
     });
+
     if (!claimResponse.ok) {
       const errorData = await claimResponse.json().catch(() => ({}));
       throw new Error(errorData.error || "Failed to link points to your profile");
     }
+
     const claimData = await claimResponse.json();
     return claimData.added ?? finalScore;
+    setIsDisabled(false);
   };
 
-  const submitRun = useCallback(async () => {
-    if (isSubmitting || submittedRunRef.current) return;
-    submittedRunRef.current = true;
+  // ── SCORE SUBMISSION: End of Game ─────────────────────────────────────
+  const handleSubmitScore = async () => {
+    if (isSubmitting) return;
     setIsSubmitting(true);
     setSubmitStatus("generating");
     setSubmitError("");
 
-    const runState = stateRef.current;
     let currentWallet = walletAddress;
     let confirmedTxHash;
     let finalScore;
+    let totalFish;
 
     try {
       if (!currentWallet) {
         currentWallet = await handleConnectWallet();
         if (!currentWallet) {
-          submittedRunRef.current = false;
           setIsSubmitting(false);
           setSubmitStatus("idle");
           return;
@@ -303,36 +341,46 @@ export default function fruitninja() {
 
       const provider = new ethers.BrowserProvider(window.ethereum);
 
-      const sigResponse = await fetch(`${API_BASE_URL}/api/fruitninja/signature`, {
+      // Request backend signature
+      const sigResponse = await fetch(`${API_BASE_URL}/api/fishing/signature`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           player: currentWallet,
-          finalScore: runState.score,
-          levelReached: runState.level,
-          fruitsSliced: runState.fruitsSliced,
+          finalScore: stats.score,
+          totalFish: stats.totalFish,
         }),
       });
+
       if (!sigResponse.ok) {
         const errorData = await sigResponse.json().catch(() => ({}));
         throw new Error(errorData.error || "Failed to generate server signature");
       }
+
       const sigData = await sigResponse.json();
       finalScore = sigData.finalScore;
-      const { levelReached, fruitsSliced, nonce, signature } = sigData;
+      totalFish = sigData.totalFish;
+      const { nonce, signature } = sigData;
 
+      // Submit on-chain with validated signature
       setSubmitStatus("signing");
       const signer = await provider.getSigner();
-      const contract = new ethers.Contract(FRUIT_NINJA_CONTRACT_ADDRESS, CONTRACT_ABI, signer);
+      const contract = new ethers.Contract(
+        FISHING_CONTRACT_ADDRESS,
+        [
+          "function submitGameResult(uint256 finalScore, uint256 totalFish, uint256 nonce, bytes signature) external"
+        ],
+        signer
+      );
 
       const tx = await contract.submitGameResult(
         BigInt(finalScore),
-        BigInt(levelReached),
-        BigInt(fruitsSliced),
+        BigInt(totalFish),
         BigInt(nonce),
         signature,
-        { value: ethers.parseEther(GAME_COST_ETH) },
+        { value: ethers.parseEther(GAME_COST_ETH) }
       );
+
       confirmedTxHash = tx.hash;
       setTxHash(tx.hash);
 
@@ -342,118 +390,115 @@ export default function fruitninja() {
         throw new Error("On-chain transaction execution failed");
       }
     } catch (err) {
+      // Everything up to here happens BEFORE the chain accepts the result,
+      // so a plain retry (re-running this function from scratch) is safe.
       console.error("On-chain submission failed:", err);
       setSubmitError(err.reason || err.message || "An unexpected transaction error occurred.");
       setSubmitStatus("error");
       setIsSubmitting(false);
-      submittedRunRef.current = false; // chain never accepted it — safe to retry
       return;
     }
 
+    // The result is settled on-chain no matter what happens next — keep
+    // what's needed to retry just the DB write without resubmitting to chain.
     lastSubmissionRef.current = { wallet: currentWallet, finalScore, txHash: confirmedTxHash };
 
     try {
       const added = await syncScoreToBackend(lastSubmissionRef.current);
       setPointsAwarded(added);
       setSubmitStatus("success");
-      setScoreSecured(true);
     } catch (err) {
+      // Chain succeeded, only the DB write failed. Route to a dedicated
+      // screen instead of "error" — retrying handleSubmitScore here would
+      // call submitGameResult again and revert (session already closed).
       console.error("DB sync failed after successful on-chain submission:", err);
       setSubmitError(err.message || "Your score was confirmed on-chain, but saving it to your profile failed.");
       setSubmitStatus("syncFailed");
     } finally {
       setIsSubmitting(false);
     }
-  }, [isSubmitting, walletAddress]);
+  };
 
+  // Retries ONLY the database write for a score that already succeeded
+  // on-chain. Never touches the contract.
   const handleRetrySync = async () => {
     if (!lastSubmissionRef.current) {
       setSubmitError("Nothing to retry — please play a new game.");
       setSubmitStatus("error");
       return;
     }
+
     setIsSubmitting(true);
     setSubmitStatus("indexing");
+
     try {
       const added = await syncScoreToBackend(lastSubmissionRef.current);
       setPointsAwarded(added);
       setSubmitStatus("success");
-      setScoreSecured(true);
+      setIsDisabled(false);
     } catch (err) {
       console.error("Retry sync failed:", err);
       setSubmitError(err.message || "Sync failed again. Your score is still safely recorded on-chain.");
       setSubmitStatus("syncFailed");
+      setIsDisabled(true);
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const nextLevel = useCallback(() => {
-    stateRef.current = continueAfterLevelUp(stateRef.current);
-    setPhase("playing");
-    rerender();
-  }, [rerender]);
-
-  const onFrame = useCallback(() => {
-    const s = stateRef.current;
-    if (s.phase !== phase) {
-      setPhase(s.phase);
-      if (s.phase === "over" && s.score > s.best) {
-        s.best = s.score;
-        localStorage.setItem(BEST_KEY, String(s.best));
-      }
-    }
-    if (s.phase === "playing") rerender();
-  }, [phase, rerender]);
-
-  const s = stateRef.current;
-  const cfg = getLevelConfig(s.level);
-  const isFinalWin = phase === "levelup" && s.level >= getTotalLevels();
-  const runEnded = phase === "over" || isFinalWin;
-
+  // ── AUTO-SUBMIT: fire the ledger tx the moment a run ends, no button ────
   useEffect(() => {
-    if (runEnded && submitStatus === "idle" && !isSubmitting && !submittedRunRef.current) {
-      submitRun();
+    if ((gameState === "GAME_OVER" || gameState === "VICTORY") && submitStatus === "idle" && !isSubmitting) {
+      handleSubmitScore();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [runEnded]);
+  }, [gameState]);
 
-  const sessionButtonLabel = (idleLabel = "Play") => {
+  const handleJoystickMove = useCallback((x, y) => {
+    gameRef.current?.setMoveVector(x, y);
+  }, []);
+
+  const bottomControlSpace = gameState === "PLAYING" && isPortrait ? 140 : 0;
+
+  const startButtonLabel = () => {
     if (isStuckSession) {
-      if (clearStatus === "requesting") return "Requesting clear signature...";
-      if (clearStatus === "clearing") return "Clearing session...";
-      return "Clear stuck session";
+      if (clearStatus === "requesting") return "REQUESTING CLEAR SIGNATURE...";
+      if (clearStatus === "clearing") return "CLEARING SESSION...";
+      return "CLEAR STUCK SESSION";
     }
-    if (sessionStatus === "connecting") return "Connecting wallet...";
-    if (sessionStatus === "initializing_session") return "Approve tx...";
-    if (sessionStatus === "waiting_session_confirm") return "Registering on Hemi...";
-    return idleLabel;
+    if (submitStatus === "connecting") return "CONNECTING WALLET...";
+    if (submitStatus === "initializing_session") return "APPROVE TX...";
+    if (submitStatus === "waiting_session_confirm") return "REGISTERING ON HEMI...";
+    return "START GAME";
   };
 
-  const sessionButtonDisabled =
-    sessionStatus === "connecting" ||
-    sessionStatus === "initializing_session" ||
-    sessionStatus === "waiting_session_confirm" ||
+  const startButtonDisabled =
+    submitStatus === "connecting" ||
+    submitStatus === "initializing_session" ||
+    submitStatus === "waiting_session_confirm" ||
     clearStatus === "requesting" ||
     clearStatus === "clearing";
 
-  const tryAgainDisabled = !scoreSecured || sessionButtonDisabled;
-
-  const onCta = isStuckSession ? handleClearStuckSession : start;
-
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-black font-sans text-[#2d3436]">
-      {phase !== "playing" && (
-        <div className="absolute top-4 right-4 z-60">
+    <div
+      className="relative w-full h-[100dvh] flex flex-col items-center justify-center overflow-hidden bg-zinc-900"
+      style={{
+        touchAction: "none",
+        overscrollBehavior: "none",
+        fontFamily: "var(--font-sans, 'Inter', sans-serif)",
+      }}
+    >
+      {/* Global Wallet Info bar */}
+      {gameState !== "PLAYING" && (
+        <div className="absolute top-4 right-4 z-[60]">
           {walletAddress ? (
-            <div className="flex items-center gap-1.5 rounded-full border border-white/15 bg-white/10 px-3.5 py-2 text-xs font-mono text-white/70 backdrop-blur-md">
-              <Wallet className="h-3.5 w-3.5" />
-              {shortAddr(walletAddress)}
+            <div className="bg-white/10 backdrop-blur-md px-4 py-2 rounded-full border border-white/20 text-xs font-mono text-blue-300 shadow-md">
+              Connected: {walletAddress.slice(0, 6)}...{walletAddress.slice(-4)}
             </div>
           ) : (
             <button
               onClick={handleConnectWallet}
-              className="cursor-pointer rounded-full border border-white/15 bg-white/10 px-3.5 py-2 text-xs font-semibold text-white/80 backdrop-blur-md transition-colors hover:bg-white/20"
+              className="bg-blue-600/30 hover:bg-blue-600/50 backdrop-blur-md px-4 py-2 rounded-full border border-blue-500/30 text-xs font-semibold text-white tracking-wider transition-all duration-300"
             >
               Connect Wallet
             </button>
@@ -461,578 +506,352 @@ export default function fruitninja() {
         </div>
       )}
 
-      <div className="absolute inset-0">
-        <GameCanvas stateRef={stateRef} onFrame={onFrame} />
-      </div>
-
-      <AnimatePresence>
-        {phase === "playing" && (
-          <motion.div
-            initial={{ opacity: 0, y: -20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-          >
-            <HUD
-              score={s.score}
-              best={s.best}
-              lives={s.lives}
-              combo={s.combo}
-              level={s.level}
-              levelLabel={cfg.label}
-              levelScore={s.levelScore}
-              levelTarget={cfg.targetScore}
-              activeAbilities={s.activeAbilities}
-            />
-            <BombLegend />
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      <AnimatePresence mode="wait">
-        {phase === "menu" && (
-          <MenuScreen
-            key="menu"
-            best={s.best}
-            onStart={onCta}
-            ctaLabel={sessionButtonLabel("Play")}
-            ctaDisabled={sessionButtonDisabled}
-            isStuckSession={isStuckSession}
-            sessionError={sessionError}
-          />
-        )}
-        {phase === "levelup" && (
-          <LevelUpScreen
-            key="levelup"
-            level={s.level}
-            score={s.score}
-            onNext={nextLevel}
-            isFinal={isFinalWin}
-            onRestart={onCta}
-            restartLabel={sessionButtonLabel("Play Again")}
-            restartDisabled={tryAgainDisabled}
-            scoreSecured={scoreSecured}
-            sessionError={sessionError}
-            submitStatus={submitStatus}
-            submitError={submitError}
-            pointsAwarded={pointsAwarded}
-            txHash={txHash}
-            isSubmitting={isSubmitting}
-            onSubmitRetry={submitRun}
-            onSyncRetry={handleRetrySync}
-            onContinueWithoutSync={() => {
-              setSubmitStatus("success");
-              setScoreSecured(true);
-            }}
-          />
-        )}
-        {phase === "over" && (
-          <GameOverScreen
-            key="over"
-            score={s.score}
-            best={s.best}
-            level={s.level}
-            onRestart={onCta}
-            restartLabel={sessionButtonLabel("Play Again")}
-            restartDisabled={tryAgainDisabled}
-            scoreSecured={scoreSecured}
-            sessionError={sessionError}
-            submitStatus={submitStatus}
-            submitError={submitError}
-            pointsAwarded={pointsAwarded}
-            txHash={txHash}
-            isSubmitting={isSubmitting}
-            onSubmitRetry={submitRun}
-            onSyncRetry={handleRetrySync}
-            onContinueWithoutSync={() => {
-              setSubmitStatus("success");
-              setScoreSecured(true);
-            }}
-          />
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-// Status tile shared by GameOverScreen and the final LevelUpScreen — shows
-// where the on-chain submission + backend sync currently stands.
-function SubmitStatusTile({
-  submitStatus,
-  submitError,
-  pointsAwarded,
-  txHash,
-  isSubmitting,
-  onSubmitRetry,
-  onSyncRetry,
-  onContinueWithoutSync,
-}) {
-  if (submitStatus === "success") {
-    return (
-      <motion.div
-        variants={bentoItem}
-        className="col-span-2 sm:col-span-4 rounded-3xl border border-[#6ab04c]/30 bg-[#6ab04c]/10 p-4 text-center backdrop-blur-xl"
+      {/* Game Canvas Container */}
+      <div
+        className="relative shadow-2xl bg-black overflow-hidden shrink-0 rounded-xl border border-white/10 transition-all duration-300 z-0"
+        style={{
+          aspectRatio: "16/10",
+          width: `min(100vw, calc((100vh - ${bottomControlSpace}px) * 1.6))`,
+          height: `min(calc(100vh - ${bottomControlSpace}px), 62.5vw)`,
+        }}
       >
-        <p className="text-sm font-black text-[#6ab04c]">🎉 Score secured on-chain</p>
-        <p className="mt-1 text-xs font-medium text-white/60">
-          Added <strong className="text-[#ffd93d]">+{pointsAwarded}</strong> points to your profile.
-        </p>
-        {txHash && (
-          <a
-            href={`https://explorer.hemi.xyz/tx/${txHash}`}
-            target="_blank"
-            rel="noreferrer"
-            className="mt-2 inline-flex items-center gap-1 text-[10px] font-mono text-white/40 hover:text-white/70 hover:underline"
-          >
-            Tx: {txHash.slice(0, 10)}...{txHash.slice(-8)} <ExternalLink className="h-2.5 w-2.5" />
-          </a>
-        )}
-      </motion.div>
-    );
-  }
-
-  if (submitStatus === "syncFailed") {
-    return (
-      <motion.div
-        variants={bentoItem}
-        className="col-span-2 sm:col-span-4 flex flex-col items-center gap-3 rounded-3xl border border-[#ffd93d]/30 bg-[#ffd93d]/10 p-4 text-center backdrop-blur-xl"
-      >
-        <p className="text-xs font-black uppercase tracking-wider text-[#e6a800]">
-          Score confirmed, profile sync failed
-        </p>
-        <p className="text-xs leading-snug text-white/60">
-          Your entry fee and score are already final on-chain — only saving it to your profile failed.
-          {submitError ? ` (${submitError})` : ""}
-        </p>
-        {txHash && (
-          <a
-            href={`https://explorer.hemi.xyz/tx/${txHash}`}
-            target="_blank"
-            rel="noreferrer"
-            className="text-[10px] font-mono text-white/40 hover:underline"
-          >
-            Tx: {txHash.slice(0, 10)}...{txHash.slice(-8)}
-          </a>
-        )}
-        <div className="flex w-full gap-2">
-          <button
-            onClick={onContinueWithoutSync}
-            className="flex-1 cursor-pointer rounded-full bg-white/10 py-2 text-[11px] font-semibold uppercase tracking-wide text-white hover:bg-white/20"
-          >
-            Continue Without Syncing
-          </button>
-          <button
-            onClick={onSyncRetry}
-            disabled={isSubmitting}
-            className="flex-1 cursor-pointer rounded-full bg-[#ffd93d] py-2 text-[11px] font-bold uppercase tracking-wide text-[#7a5c00] disabled:opacity-50"
-          >
-            Retry Sync
-          </button>
-        </div>
-      </motion.div>
-    );
-  }
-
-  if (submitStatus === "error") {
-    return (
-      <motion.div
-        variants={bentoItem}
-        className="col-span-2 sm:col-span-4 flex flex-col items-center gap-3 rounded-3xl border border-[#ff6b6b]/30 bg-[#ff6b6b]/10 p-4 text-center backdrop-blur-xl"
-      >
-        <p className="text-xs font-semibold leading-snug text-[#ff9494]">Error: {submitError}</p>
-        <button
-          onClick={onSubmitRetry}
-          disabled={isSubmitting}
-          className="w-full cursor-pointer rounded-full bg-[#ff6b6b] py-2.5 text-xs font-black uppercase tracking-wide text-white hover:bg-[#ee5253] disabled:opacity-50"
-        >
-          Retry Ledger Submission
-        </button>
-      </motion.div>
-    );
-  }
-
-  // generating | signing | indexing | idle
-  const stepText = {
-    generating: "Step 1: Requesting server signature...",
-    signing: "Step 2: Sign score submission tx on Hemi...",
-    indexing: "Step 3: Indexing ledger confirmation...",
-    idle: "Preparing to submit score...",
-  }[submitStatus];
-
-  return (
-    <motion.div
-      variants={bentoItem}
-      className="col-span-2 sm:col-span-4 flex items-center justify-center gap-2 rounded-3xl border border-white/10 bg-white/4 p-4 backdrop-blur-xl"
-    >
-      <Loader2 className="h-3.5 w-3.5 animate-spin text-white/50" />
-      <span className="text-xs font-semibold text-white/60">{stepText}</span>
-    </motion.div>
-  );
-}
-
-function SessionErrorNote({ sessionError }) {
-  if (!sessionError) return null;
-  return (
-    <motion.p
-      variants={bentoItem}
-      className="col-span-2 sm:col-span-4 text-center text-[11px] font-semibold text-[#ff9494]"
-    >
-      🚫 {sessionError}
-    </motion.p>
-  );
-}
-
-function MenuScreen({ best, onStart, ctaLabel, ctaDisabled, isStuckSession, sessionError }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="absolute inset-0 z-30 flex items-center justify-center bg-black/40 p-6 backdrop-blur-sm"
-    >
-      <motion.div
-        variants={bentoContainer}
-        initial="hidden"
-        animate="show"
-        className="grid w-full max-w-xl grid-cols-2 sm:grid-cols-4 auto-rows-[90px] gap-3"
-      >
-        {/* Hero tile */}
-        <motion.div
-          variants={bentoItem}
-          className="relative col-span-2 row-span-2 flex flex-col justify-between overflow-hidden rounded-[28px] border border-white/10 bg-white/4 p-6 shadow-[0_0_40px_-15px_rgba(255,107,107,0.35)] backdrop-blur-xl"
-        >
-          <div className="pointer-events-none absolute -bottom-8 -right-6 select-none text-[120px] leading-none opacity-15">
-            🍓
-          </div>
-
-          <div className="relative z-10 flex items-center justify-between">
-            <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-[#ff6b6b]/15 text-[#ff6b6b]">
-              <Scissors className="h-5 w-5" strokeWidth={2.5} />
-            </div>
-            <span className="inline-flex items-center gap-1 rounded-full border border-[#ff6b6b]/40 bg-[#ff6b6b]/15 px-2.5 py-1 text-[10px] font-black uppercase tracking-widest text-[#ff9494]">
-              <Sparkles className="h-3 w-3" /> Reflex
-            </span>
-          </div>
-
-          <div className="relative z-10">
-            <h1 className="text-4xl font-black leading-none tracking-tight text-white">
-              FRUIT
-              <br />
-              <span className="text-[#ff6b6b]">SLASH</span>
-            </h1>
-            <p className="mt-3 text-sm font-medium leading-relaxed text-white/50">
-              Slice fruit mid-air, chain combos in one swipe, dodge the bombs.
-            </p>
-          </div>
-        </motion.div>
-
-        <motion.div
-          variants={bentoItem}
-          className="col-span-1 row-span-1 flex flex-col justify-center gap-1 rounded-[28px] border border-[#ff6b6b]/25 bg-[#ff6b6b]/10 p-4 backdrop-blur-xl transition-transform hover:scale-[1.03]"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-base">
-            🔪
-          </div>
-          <p className="text-sm font-black text-white">Slice</p>
-          <p className="text-[11px] font-medium text-white/45">Swipe to cut</p>
-        </motion.div>
-
-        <motion.div
-          variants={bentoItem}
-          className="col-span-1 row-span-1 flex flex-col justify-center gap-1 rounded-[28px] border border-[#ff9f43]/30 bg-[#ff9f43]/10 p-4 backdrop-blur-xl transition-transform hover:scale-[1.03]"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-base">
-            ⚡
-          </div>
-          <p className="text-sm font-black text-white">Combo</p>
-          <p className="text-[11px] font-medium text-white/45">Chain a swipe</p>
-        </motion.div>
-
-        <motion.div
-          variants={bentoItem}
-          className="col-span-1 row-span-1 flex flex-col justify-center gap-1 rounded-[28px] border border-white/10 bg-white/4 p-4 backdrop-blur-xl transition-transform hover:scale-[1.03]"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-base">
-            💣
-          </div>
-          <p className="text-sm font-black text-white">Bombs</p>
-          <p className="text-[11px] font-medium text-white/40">Never touch one</p>
-        </motion.div>
-
-        <motion.div
-          variants={bentoItem}
-          className="col-span-1 row-span-1 flex flex-col justify-center gap-1 rounded-[28px] border border-[#ffd93d]/30 bg-[#ffd93d]/10 p-4 backdrop-blur-xl transition-transform hover:scale-[1.03]"
-        >
-          <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-white/10 text-base">
-            🏆
-          </div>
-          <p className="text-lg font-black tabular-nums text-[#ffd93d]">
-            {best > 0 ? best : "—"}
-          </p>
-          <p className="text-[11px] font-medium text-white/45">Best score</p>
-        </motion.div>
-
-        {/* CTA */}
-        <motion.button
-          variants={bentoItem}
-          onClick={onStart}
-          disabled={ctaDisabled}
-          className={`cursor-pointer col-span-2 sm:col-span-4 flex items-center justify-center gap-2 rounded-full py-4 text-lg font-black text-white shadow-[0_6px_0_#ee5253] transition-colors active:translate-y-1 active:shadow-[0_2px_0_#ee5253] disabled:cursor-not-allowed disabled:opacity-70 ${isStuckSession ? "bg-[#e6a800] shadow-[0_6px_0_#a87a00]" : "bg-[#ff6b6b] hover:bg-[#ee5253]"
-            } ${CTA_FOCUS}`}
-        >
-          {sessionButtonIcon(ctaLabel)}
-          {ctaLabel}
-        </motion.button>
-
-        <SessionErrorNote sessionError={sessionError} />
-      </motion.div>
-    </motion.div>
-  );
-}
-
-function sessionButtonIcon(label) {
-  if (label === "Play") return <Play className="h-5 w-5 fill-white" />;
-  if (label === "Play Again") return <RotateCcw className="h-5 w-5" />;
-  if (label === "Clear stuck session") return null;
-  return <Loader2 className="h-5 w-5 animate-spin" />;
-}
-
-function LevelUpScreen({
-  level,
-  score,
-  onNext,
-  isFinal,
-  onRestart,
-  restartLabel,
-  restartDisabled,
-  scoreSecured,
-  sessionError,
-  submitStatus,
-  submitError,
-  pointsAwarded,
-  txHash,
-  isSubmitting,
-  onSubmitRetry,
-  onSyncRetry,
-  onContinueWithoutSync,
-}) {
-  const nextCfg = getLevelConfig(level + 1);
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="absolute inset-0 z-30 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm"
-    >
-      <motion.div
-        variants={bentoContainer}
-        initial="hidden"
-        animate="show"
-        className="grid w-full max-w-xl grid-cols-2 sm:grid-cols-4 auto-rows-[90px] gap-3"
-      >
-        <motion.div
-          variants={bentoItem}
-          className="relative col-span-2 row-span-2 flex flex-col justify-between overflow-hidden rounded-[28px] border border-[#58943f] bg-[#6ab04c] p-6 text-white shadow-sm"
-        >
-          <div className="pointer-events-none absolute -bottom-8 -right-6 select-none text-[120px] leading-none opacity-15">
-            {isFinal ? "🏆" : "✨"}
-          </div>
-          <div className="relative z-10 flex h-11 w-11 items-center justify-center rounded-2xl bg-white/20">
-            <Sparkles className="h-6 w-6 text-white" />
-          </div>
-          <div className="relative z-10">
-            <h2 className="text-3xl font-black leading-tight text-white">
-              {isFinal ? "YOU WIN!" : "LEVEL COMPLETE"}
-            </h2>
-            <p className="mt-2 text-sm font-medium text-white/85">
-              {isFinal
-                ? "Every level cleared. Legendary slicer."
-                : `Level ${level} cleared — next up: ${nextCfg.label}.`}
-            </p>
-          </div>
-        </motion.div>
-
-        {/* Score tile */}
-        <motion.div
-          variants={bentoItem}
-          className="col-span-2 row-span-1 flex flex-col justify-center rounded-[28px] border border-[#e0e4d0] bg-white p-4 shadow-sm transition-transform hover:scale-[1.02]"
-        >
-          <p className="text-[11px] font-black uppercase tracking-widest text-[#a0a590]">Score</p>
-          <p className="text-3xl font-black tabular-nums text-[#2d3436]">{score}</p>
-        </motion.div>
-
-        <motion.div
-          variants={bentoItem}
-          className="col-span-2 row-span-1 flex flex-col justify-center rounded-[28px] border border-[#ffd93d]/40 bg-[#ffd93d]/15 p-4 transition-transform hover:scale-[1.02]"
-        >
-          <p className="text-[11px] font-black uppercase tracking-widest text-[#a0a590]">
-            {isFinal ? "Levels" : "Next Up"}
-          </p>
-          <p className="text-3xl font-black tabular-nums text-[#e6a800]">
-            {isFinal ? `${getTotalLevels()}/${getTotalLevels()}` : nextCfg.label}
-          </p>
-        </motion.div>
-
-        {isFinal && (
-          <SubmitStatusTile
-            submitStatus={submitStatus}
-            submitError={submitError}
-            pointsAwarded={pointsAwarded}
-            txHash={txHash}
-            isSubmitting={isSubmitting}
-            onSubmitRetry={onSubmitRetry}
-            onSyncRetry={onSyncRetry}
-            onContinueWithoutSync={onContinueWithoutSync}
-          />
-        )}
-
-        <motion.button
-          variants={bentoItem}
-          onClick={isFinal ? onRestart : onNext}
-          disabled={isFinal && restartDisabled}
-          className={`cursor-pointer col-span-2 sm:col-span-4 flex items-center justify-center gap-2 rounded-full py-4 text-lg font-black text-white transition-colors active:translate-y-1 disabled:cursor-not-allowed disabled:opacity-60 ${CTA_FOCUS} ${isFinal
-              ? "bg-[#ff6b6b] shadow-[0_6px_0_#ee5253] hover:bg-[#ee5253] active:shadow-[0_2px_0_#ee5253]"
-              : "bg-[#6ab04c] shadow-[0_6px_0_#58943f] hover:bg-[#5c9941] active:shadow-[0_2px_0_#58943f]"
-            }`}
-        >
-          {isFinal ? (
-            <>
-              {sessionButtonIcon(restartLabel)}
-              {restartLabel}
-            </>
-          ) : (
-            <>
-              Next Level
-              <ChevronRight className="h-5 w-5" />
-            </>
-          )}
-        </motion.button>
-
-        {isFinal && !scoreSecured && (
-          <p className="col-span-2 sm:col-span-4 text-center text-[10px] tracking-wide text-white/40">
-            Locked until your score finishes submitting
-          </p>
-        )}
-        {isFinal && <SessionErrorNote sessionError={sessionError} />}
-      </motion.div>
-    </motion.div>
-  );
-}
-
-function GameOverScreen({
-  score,
-  best,
-  level,
-  onRestart,
-  restartLabel,
-  restartDisabled,
-  scoreSecured,
-  sessionError,
-  submitStatus,
-  submitError,
-  pointsAwarded,
-  txHash,
-  isSubmitting,
-  onSubmitRetry,
-  onSyncRetry,
-  onContinueWithoutSync,
-}) {
-  const isNewBest = score >= best && score > 0;
-  return (
-    <motion.div
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      className="absolute inset-0 z-30 flex items-center justify-center bg-black/50 p-6 backdrop-blur-sm"
-    >
-      <motion.div
-        variants={bentoContainer}
-        initial="hidden"
-        animate="show"
-        className="grid w-full max-w-xl grid-cols-2 sm:grid-cols-4 auto-rows-[90px] gap-3"
-      >
-        {/* Hero tile */}
-        <motion.div
-          variants={bentoItem}
-          className="relative col-span-2 row-span-2 flex flex-col justify-between overflow-hidden rounded-[28px] border border-[#e0e4d0] bg-white p-6 shadow-sm"
-        >
-          <div className="pointer-events-none absolute -bottom-8 -right-6 select-none text-[120px] leading-none opacity-10">
-            🍉
-          </div>
-          <div className="relative z-10 flex h-11 w-11 items-center justify-center rounded-2xl bg-[#2d3436]/5">
-            <Scissors className="h-5 w-5 text-[#2d3436]/50" strokeWidth={2.5} />
-          </div>
-          <div className="relative z-10">
-            <h2 className="text-3xl font-black text-[#2d3436]">GAME OVER</h2>
-            {isNewBest ? (
-              <motion.span
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                transition={{ delay: 0.2, type: "spring", stiffness: 260, damping: 12 }}
-                className="mt-2 inline-flex items-center gap-1.5 rounded-full bg-[#ffd93d] px-3 py-1 text-xs font-black text-[#7a5c00]"
-              >
-                <Trophy className="h-3.5 w-3.5" /> New best score
-              </motion.span>
-            ) : (
-              <p className="mt-2 text-sm font-medium text-[#636e72]">Nice run — beat it next time.</p>
-            )}
-          </div>
-        </motion.div>
-
-        {/* Score tile */}
-        <motion.div
-          variants={bentoItem}
-          className="col-span-1 row-span-1 flex flex-col justify-center rounded-[28px] border border-[#e0e4d0] bg-white p-4 shadow-sm transition-transform hover:scale-[1.03]"
-        >
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#a0a590]">Score</p>
-          <p className="text-2xl font-black tabular-nums text-[#2d3436]">{score}</p>
-        </motion.div>
-
-        <motion.div
-          variants={bentoItem}
-          className="col-span-1 row-span-1 flex flex-col justify-center rounded-[28px] border border-[#ffd93d]/40 bg-[#ffd93d]/15 p-4 transition-transform hover:scale-[1.03]"
-        >
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#a0a590]">Best</p>
-          <p className="text-2xl font-black tabular-nums text-[#e6a800]">{best}</p>
-        </motion.div>
-
-        <motion.div
-          variants={bentoItem}
-          className="col-span-2 row-span-1 flex flex-col justify-center rounded-[28px] border border-[#6ab04c]/30 bg-[#6ab04c]/10 p-4 transition-transform hover:scale-[1.02]"
-        >
-          <p className="text-[10px] font-black uppercase tracking-widest text-[#a0a590]">Level reached</p>
-          <p className="text-2xl font-black tabular-nums text-[#5c9941]">{level}</p>
-        </motion.div>
-
-        <SubmitStatusTile
-          submitStatus={submitStatus}
-          submitError={submitError}
-          pointsAwarded={pointsAwarded}
-          txHash={txHash}
-          isSubmitting={isSubmitting}
-          onSubmitRetry={onSubmitRetry}
-          onSyncRetry={onSyncRetry}
-          onContinueWithoutSync={onContinueWithoutSync}
+        <CanvasGame
+          ref={gameRef}
+          gameState={gameState}
+          setGameState={setGameState}
+          setStats={setStats}
         />
 
-        {/* CTA */}
-        <motion.button
-          variants={bentoItem}
-          onClick={onRestart}
-          disabled={restartDisabled}
-          className={`cursor-pointer col-span-2 sm:col-span-4 flex items-center justify-center gap-2 rounded-full bg-[#ff6b6b] py-4 text-lg font-black text-white shadow-[0_6px_0_#ee5253] transition-colors hover:bg-[#ee5253] active:translate-y-1 active:shadow-[0_2px_0_#ee5253] disabled:cursor-not-allowed disabled:opacity-60 ${CTA_FOCUS}`}
-        >
-          {sessionButtonIcon(restartLabel)}
-          {restartLabel}
-        </motion.button>
-
-        {!scoreSecured && (
-          <p className="col-span-2 sm:col-span-4 text-center text-[10px] tracking-wide text-white/40">
-            Locked until your score finishes submitting
-          </p>
+        {gameState === "PLAYING" && (
+          <>
+            <HUD stats={stats} />
+            {!isPortrait && (
+              <div className="absolute inset-0 flex flex-col justify-end items-center pb-6 pointer-events-none z-20">
+                <div className="pointer-events-auto">
+                  <TouchControls onMove={handleJoystickMove} />
+                </div>
+              </div>
+            )}
+          </>
         )}
-        <SessionErrorNote sessionError={sessionError} />
-      </motion.div>
-    </motion.div>
+      </div>
+
+      {/* Portrait Controls */}
+      {gameState === "PLAYING" && isPortrait && (
+        <div
+          className="relative w-full flex items-center justify-center shrink-0 overflow-hidden"
+          style={{ height: `${bottomControlSpace}px` }}
+        >
+          <div className="relative flex justify-center w-full max-w-sm pt-30 z-20">
+            <TouchControls onMove={handleJoystickMove} />
+          </div>
+        </div>
+      )}
+
+      {/* ========================================== */}
+      {/* START SCREEN (With Stateful Session Start) */}
+      {/* ========================================== */}
+      {gameState === "START" && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-white z-50 text-center overflow-hidden bg-zinc-950">
+          <div className="absolute inset-0 z-0 pointer-events-none">
+            <div className="absolute top-0 left-0 w-full h-[55%] bg-gradient-to-b from-indigo-900 via-purple-600 to-orange-400"></div>
+            <div className="absolute bottom-0 left-0 w-full h-[45%] bg-gradient-to-b from-[#0CA4FF] to-blue-900"></div>
+            <div className="absolute top-[55%] left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 md:w-64 md:h-64 bg-gradient-to-b from-yellow-100 to-yellow-400 rounded-full shadow-[0_0_60px_rgba(250,204,21,0.6)]"></div>
+          </div>
+
+          <div className="relative z-20 flex flex-col items-center justify-center px-4 py-2 w-full max-w-2xl h-full">
+            <div className="mb-3 md:mb-6 flex flex-col items-center">
+              <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-white to-blue-100 drop-shadow-lg tracking-tight leading-none mb-1 md:mb-2">
+                FISHING
+              </h1>
+              <h1 className="text-4xl sm:text-5xl md:text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-blue-300 to-blue-600 drop-shadow-lg tracking-tight leading-none">
+                PARTY
+              </h1>
+            </div>
+
+            <div className="bg-black/30 backdrop-blur-md p-4 md:p-8 rounded-2xl border border-white/20 mb-4 md:mb-8 w-full shadow-2xl">
+              <ul className="space-y-2 md:space-y-4 text-xs md:text-base text-left text-white/90">
+                <li className="flex items-start gap-2 md:gap-3">
+                  <span className="text-yellow-400 font-bold mt-0.5">❖</span>
+                  <span><strong className="text-white">NAVIGATE</strong> using WASD, Arrow Keys, or the Joystick.</span>
+                </li>
+                <li className="flex items-start gap-2 md:gap-3">
+                  <span className="text-blue-400 font-bold mt-0.5">❖</span>
+                  <span><strong className="text-white">CATCH</strong> target fish to rack up points.</span>
+                </li>
+                <li className="flex items-start gap-2 md:gap-3">
+                  <span className="text-red-400 font-bold mt-0.5">❖</span>
+                  <span><strong className="text-white">AVOID</strong> dangerous deep-sea creatures.</span>
+                </li>
+                <li className="flex items-start gap-2 md:gap-3">
+                  <span className="text-green-400 font-bold mt-0.5">❖</span>
+                  <span><strong className="text-white">COMPLETE</strong> all 5 levels to win the game.</span>
+                </li>
+              </ul>
+            </div>
+
+            {submitStatus === "error_starting" && (
+              <div className="text-xs text-red-400 font-bold max-w-md bg-red-950/40 p-3 rounded-lg border border-red-500/20 mb-4 text-center">
+                🚫 Session Registration Error: {submitError}
+              </div>
+            )}
+
+            <button
+              onClick={isStuckSession ? handleClearStuckSession : handleStart}
+              onMouseEnter={playHoverSound}
+              disabled={startButtonDisabled}
+              className={`px-8 py-3 md:px-12 md:py-4 text-white font-bold rounded-full transition-all duration-300 text-sm md:text-xl tracking-wide hover:-translate-y-1 active:translate-y-0 disabled:opacity-80 ${isStuckSession
+                  ? "bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 shadow-[0_0_20px_rgba(245,158,11,0.5)] hover:shadow-[0_0_30px_rgba(245,158,11,0.8)]"
+                  : "bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.5)] hover:shadow-[0_0_30px_rgba(59,130,246,0.8)]"
+                }`}
+              style={{ touchAction: "manipulation" }}
+            >
+              {startButtonLabel()}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* GAME OVER Overlay */}
+      {gameState === "GAME_OVER" && (
+        <div className="absolute inset-0 bg-zinc-950/90 backdrop-blur-sm flex flex-col items-center justify-center text-white z-50 text-center px-4 overflow-hidden">
+          <h2 className="text-4xl md:text-6xl font-black text-red-500 mb-4 tracking-tight drop-shadow-md">
+            GAME OVER
+          </h2>
+
+          <div className="bg-white/5 backdrop-blur-md border border-white/10 p-5 rounded-2xl w-full max-w-sm mb-4 shadow-2xl">
+            <div className="space-y-3 text-sm md:text-base">
+              <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                <span className="text-gray-400 uppercase text-xs font-semibold tracking-wider">Final Score</span>
+                <span className="text-xl md:text-2xl font-bold text-yellow-400 font-mono">
+                  {stats.score}
+                </span>
+              </div>
+              <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                <span className="text-gray-400 uppercase text-xs font-semibold tracking-wider">Total Fish</span>
+                <span className="text-lg md:text-xl text-blue-300 font-mono">
+                  {stats.totalFish}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-gray-400 uppercase text-xs font-semibold tracking-wider">Highest Level</span>
+                <span className="text-lg md:text-xl text-green-400 font-mono">
+                  {stats.maxLevelReached}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="w-full max-w-sm mb-6">
+            {submitStatus === "success" && (
+              <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-4 text-center">
+                <p className="text-green-400 font-bold text-sm">🎉 SCORE SECURED ON LEDGER!</p>
+                <p className="text-xs text-white/80 mt-1">
+                  Multiplier applied! Added <strong className="text-yellow-400">+{pointsAwarded}</strong> points to profile.
+                </p>
+                {txHash && (
+                  <a
+                    href={`https://explorer.hemi.xyz/tx/${txHash}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block text-[10px] font-mono text-blue-300 hover:underline mt-2"
+                  >
+                    Tx: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+                  </a>
+                )}
+              </div>
+            )}
+
+            {submitStatus === "syncFailed" && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col items-center gap-3 text-center">
+                <p className="text-amber-400 font-bold text-xs uppercase tracking-wider">Score Confirmed, Profile Sync Failed</p>
+                <p className="text-xs text-white/70 leading-snug">
+                  Your entry fee and score are already final on-chain. Only saving the result to your profile/leaderboard failed.
+                  {submitError ? ` (${submitError})` : ""}
+                </p>
+                {txHash && (
+                  <a
+                    href={`https://explorer.hemi.xyz/tx/${txHash}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] font-mono text-blue-300 hover:underline"
+                  >
+                    Tx: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+                  </a>
+                )}
+                <div className="flex gap-2 w-full mt-1">
+                  <button
+                    onClick={() => setSubmitStatus("success")}
+                    className="flex-1 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-semibold uppercase tracking-wide"
+                  >
+                    Continue Without Syncing
+                  </button>
+                  <button
+                    onClick={handleRetrySync}
+                    disabled={isSubmitting}
+                    className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 rounded-lg text-[11px] font-bold uppercase tracking-wide"
+                  >
+                    Retry Sync
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {submitStatus !== "success" && submitStatus !== "syncFailed" && (
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-4 flex flex-col items-center justify-center gap-3">
+                {submitStatus === "generating" && <div className="text-xs text-blue-300 animate-pulse font-semibold">Step 1: Requesting Server Signature...</div>}
+                {submitStatus === "signing" && <div className="text-xs text-indigo-300 animate-pulse font-semibold">Step 2: Sign score submission tx to Hemi...</div>}
+                {submitStatus === "indexing" && <div className="text-xs text-yellow-300 animate-pulse font-semibold">Step 3: Indexing Ledger Confirmation...</div>}
+                {submitStatus === "error" && (
+                  <>
+                    <div className="text-xs text-red-400 font-semibold text-center leading-snug">Error: {submitError}</div>
+                    <button
+                      onClick={handleSubmitScore}
+                      disabled={isSubmitting}
+                      className="w-full py-3 bg-gradient-to-r from-yellow-500 to-amber-500 hover:from-yellow-400 hover:to-amber-400 text-zinc-950 font-extrabold rounded-xl transition-all duration-300 text-xs uppercase tracking-wider shadow-lg hover:-translate-y-0.5 active:translate-y-0"
+                    >
+                      Retry Ledger Submission
+                    </button>
+                  </>
+                )}
+                {submitStatus === "idle" && (
+                  <div className="text-xs text-zinc-400 font-semibold">Preparing to submit score...</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={handleStart}
+            onMouseEnter={playHoverSound}
+            disabled={isDisabled}
+            className="px-8 py-3 cursor-pointer bg-white/10 hover:bg-white/20 text-white border border-white/30 font-bold rounded-full transition-all duration-300 text-xs uppercase tracking-widest hover:-translate-y-1 active:translate-y-0"
+          >
+            Try Again
+          </button>
+        </div>
+      )}
+
+      {/* VICTORY Overlay */}
+      {gameState === "VICTORY" && (
+        <div className="absolute inset-0 bg-blue-950/90 backdrop-blur-sm flex flex-col items-center justify-center text-white z-50 text-center px-4 overflow-hidden">
+          <h2 className="text-3xl md:text-6xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-300 to-yellow-500 mb-2 tracking-tight">
+            CONGRATULATIONS!
+          </h2>
+          <p className="text-blue-300 mb-4 text-xs uppercase tracking-[0.2em] font-semibold">
+            You Finished the Adventure
+          </p>
+
+          <div className="bg-black/40 backdrop-blur-md border border-yellow-500/30 p-5 rounded-2xl w-full max-w-sm mb-4 shadow-[0_0_40px_rgba(234,179,8,0.15)]">
+            <div className="space-y-3">
+              <div className="flex justify-between items-center border-b border-white/10 pb-2">
+                <span className="text-blue-200 uppercase text-xs font-semibold tracking-wider">Final Score</span>
+                <span className="text-2xl md:text-3xl font-bold text-yellow-400 font-mono">
+                  {stats.score}
+                </span>
+              </div>
+              <div className="flex justify-between items-center">
+                <span className="text-blue-200 uppercase text-xs font-semibold tracking-wider">Total Fish</span>
+                <span className="text-lg md:text-xl text-white font-mono">
+                  {stats.totalFish}
+                </span>
+              </div>
+            </div>
+            <div className="mt-4 pt-3 border-t border-white/10">
+              <span className="inline-block px-3 py-1 bg-green-500/20 text-green-300 text-[10px] font-bold rounded-full uppercase tracking-wider border border-green-500/30">
+                All 5 Levels Cleared
+              </span>
+            </div>
+          </div>
+
+          <div className="w-full max-w-sm mb-6">
+            {submitStatus === "success" && (
+              <div className="bg-green-500/10 border border-green-500/30 rounded-2xl p-4 text-center shadow-md">
+                <p className="text-green-400 font-bold text-sm">🎉 SCORE SECURED ON LEDGER!</p>
+                <p className="text-xs text-white/80 mt-1">
+                  Multiplier applied! Added <strong className="text-yellow-400">+{pointsAwarded}</strong> points to profile.
+                </p>
+                {txHash && (
+                  <a
+                    href={`https://explorer.hemi.xyz/tx/${txHash}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="block text-[10px] font-mono text-blue-300 hover:underline mt-2"
+                  >
+                    Tx: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+                  </a>
+                )}
+              </div>
+            )}
+
+            {submitStatus === "syncFailed" && (
+              <div className="bg-amber-500/10 border border-amber-500/30 rounded-2xl p-4 flex flex-col items-center gap-3 text-center">
+                <p className="text-amber-400 font-bold text-xs uppercase tracking-wider">Score Confirmed, Profile Sync Failed</p>
+                <p className="text-xs text-white/70 leading-snug">
+                  Your entry fee and score are already final on-chain. Only saving the result to your profile/leaderboard failed.
+                  {submitError ? ` (${submitError})` : ""}
+                </p>
+                {txHash && (
+                  <a
+                    href={`https://explorer.hemi.xyz/tx/${txHash}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-[10px] font-mono text-blue-300 hover:underline"
+                  >
+                    Tx: {txHash.slice(0, 10)}...{txHash.slice(-8)}
+                  </a>
+                )}
+                <div className="flex gap-2 w-full mt-1">
+                  <button
+                    onClick={() => setSubmitStatus("success")}
+                    className="flex-1 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg text-[11px] font-semibold uppercase tracking-wide"
+                  >
+                    Continue Without Syncing
+                  </button>
+                  <button
+                    onClick={handleRetrySync}
+                    disabled={isSubmitting}
+                    className="flex-1 py-2 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-400 hover:to-orange-400 text-zinc-950 rounded-lg text-[11px] font-bold uppercase tracking-wide"
+                  >
+                    Retry Sync
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {submitStatus !== "success" && submitStatus !== "syncFailed" && (
+              <div className="bg-black/20 border border-yellow-500/20 rounded-2xl p-4 flex flex-col items-center justify-center gap-3">
+                {submitStatus === "generating" && <div className="text-xs text-blue-300 animate-pulse font-semibold">Step 1: Requesting Server Signature...</div>}
+                {submitStatus === "signing" && <div className="text-xs text-indigo-300 animate-pulse font-semibold">Step 2: Sign score submission tx to Hemi...</div>}
+                {submitStatus === "indexing" && <div className="text-xs text-yellow-300 animate-pulse font-semibold">Step 3: Indexing Ledger Confirmation...</div>}
+                {submitStatus === "error" && (
+                  <>
+                    <div className="text-xs text-red-400 font-semibold text-center leading-snug">Error: {submitError}</div>
+                    <button
+                      onClick={handleSubmitScore}
+                      disabled={isSubmitting}
+                      className="w-full py-3 bg-gradient-to-r from-yellow-400 to-amber-500 hover:from-yellow-300 hover:to-amber-400 text-zinc-950 font-black rounded-xl transition-all duration-300 text-xs uppercase tracking-wider shadow-lg hover:-translate-y-0.5 active:translate-y-0"
+                    >
+                      Retry Ledger Submission
+                    </button>
+                  </>
+                )}
+                {submitStatus === "idle" && (
+                  <div className="text-xs text-zinc-400 font-semibold">Preparing to submit score...</div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <button
+            onClick={handleStart}
+            onMouseEnter={playHoverSound}
+            className="px-8 py-3 bg-yellow-400 hover:bg-yellow-300 text-blue-950 font-black rounded-full transition-all duration-300 text-xs uppercase tracking-widest shadow-[0_0_20px_rgba(250,204,21,0.4)] hover:shadow-[0_0_30px_rgba(250,204,21,0.6)] hover:-translate-y-1 active:translate-y-0"
+          >
+            Play Again
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

@@ -1,3 +1,5 @@
+import type { Drone } from './Drone';
+
 export type WeaponType = 'laser' | 'spread' | 'plasma' | 'missile' | 'lightning';
 
 export interface WeaponConfig {
@@ -62,8 +64,6 @@ export type EnemyBullet = {
   laserWidth?: number;
   lifetime?: number;
   maxLifetime?: number;
-
-  // ✅ NEW (for charging system)
   chargeTime?: number;
   isCharging?: boolean;
 
@@ -156,7 +156,7 @@ export type GamePhase =
   | 'asteroids'
   | 'asteroidWarning'
   | 'levelWarp'
-  | 'levelComplete'    // boss killed → show celebration overlay
+  | 'levelComplete'   
   | 'gameOver'
   | 'victory';
 
@@ -173,6 +173,8 @@ export interface GameState {
   particles: Particle[];
   powerUps: PowerUp[];
   asteroids: Asteroid[];
+  drones: Drone[];
+  droneBullets: Bullet[];
   screenShake: number;
   bossWarningTimer: number;
   waveClearTimer: number;

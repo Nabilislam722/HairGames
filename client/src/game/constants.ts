@@ -61,7 +61,7 @@ export const ENEMY_CONFIGS = {
     height: 50,
     maxHp: 30,
     speed: 1,
-    scoreValue: 10,
+    scoreValue: 70,
     shootInterval: 5000,
   },
   fighter: {
@@ -69,7 +69,7 @@ export const ENEMY_CONFIGS = {
     height: 60,
     maxHp: 60,
     speed: 15,
-    scoreValue: 4,
+    scoreValue: 200,
     shootInterval: 4000,
   },
   boss: {
@@ -77,7 +77,7 @@ export const ENEMY_CONFIGS = {
     height: 200,
     maxHp: 2000,
     speed: 1,
-    scoreValue: 400,
+    scoreValue: 2500,
     shootInterval: 1200,
   },
 };

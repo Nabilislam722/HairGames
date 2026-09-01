@@ -7,6 +7,7 @@ import {
 } from './enemies';
 import { maybeDropPowerUp } from './powerups';
 import { spawnAsteroidWave, updateAsteroids, spawnAsteroidDebris, createAsteroid } from './asteroids';
+import { grantDroneIfMissing, tickDrones, updateDroneMissiles } from './Drone';
 import { TOTAL_LEVELS, WAVES_PER_LEVEL } from './constants';
 
 const ASTEROID_PHASE_DURATION = 18000;
@@ -25,6 +26,8 @@ export function createInitialState(): GameState {
     particles: [],
     powerUps: [],
     asteroids: [],
+    drones: [],
+    droneBullets: [],
     screenShake: 0,
     bossWarningTimer: 0,
     waveClearTimer: 0,
@@ -96,6 +99,8 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
   s.particles    = [...(s.particles    ?? [])];
   s.powerUps     = [...(s.powerUps     ?? [])];
   s.asteroids    = [...(s.asteroids    ?? [])];
+  s.drones       = [...(s.drones       ?? [])];
+  s.droneBullets = [...(s.droneBullets ?? [])];
   s.asteroidTimer        = s.asteroidTimer        ?? 0;
   s.asteroidWarningTimer = s.asteroidWarningTimer ?? 0;
   s.asteroidSpawnTimer   = s.asteroidSpawnTimer   ?? 0;
@@ -104,7 +109,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
 
   s.screenShake = Math.max(0, s.screenShake - dt * 0.06);
 
-  // ── ASTEROID WARNING ──────────────────────────────────────────────────────
+  // ASTEROID WARNING 
   if (s.phase === 'asteroidWarning') {
     s.asteroidWarningTimer -= dt;
     updateParticles(s.particles, dt);
@@ -117,7 +122,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
     return s;
   }
 
-  // ── ASTEROID PHASE ────────────────────────────────────────────────────────
+  // ASTEROID PHASE
   if (s.phase === 'asteroids') {
     s.asteroidTimer      -= dt;
     s.asteroidSpawnTimer -= dt;
@@ -143,6 +148,30 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
     tickInvincible(s.player, dt);
     s.bullets = updateBullets(s.bullets, dt);
     updateAsteroids(s.asteroids, dt);
+
+    // Drones — orbit, auto-fire, and track the nearest asteroid
+    {
+      const pcx = s.player.x + s.player.width / 2, pcy = s.player.y + s.player.height / 2;
+      s.droneBullets = [...s.droneBullets, ...tickDrones(s.drones, dt, pcx, pcy)];
+      updateDroneMissiles(s.droneBullets, [], dt); // no enemies this phase — steering falls back to straight flight
+      for (const b of s.droneBullets) {
+        if (!b.active) continue;
+        for (const a of s.asteroids) {
+          if (!a.active) continue;
+          if (circleRectsOverlap(b, a)) {
+            b.active = false;
+            a.hp -= b.damage;
+            s.particles = [...s.particles, ...makeHitSpark(b.x + b.width / 2, b.y + b.height / 2, b.color)];
+            if (a.hp <= 0) {
+              a.active = false;
+              s.score += Math.floor(a.size * 3 + s.level * 10);
+              s.particles = [...s.particles, ...spawnAsteroidDebris(a)];
+            }
+            break;
+          }
+        }
+      }
+    }
 
     for (const b of s.bullets) {
       if (!b.active) continue;
@@ -190,10 +219,11 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
 
     tickPowerUps(s, dt);
     updateParticles(s.particles, dt);
-    s.bullets   = s.bullets.filter(b => b.active);
-    s.asteroids = s.asteroids.filter(a => a.active);
-    s.particles = s.particles.filter(p => p.active);
-    s.powerUps  = s.powerUps.filter(p => p.active);
+    s.bullets      = s.bullets.filter(b => b.active);
+    s.asteroids    = s.asteroids.filter(a => a.active);
+    s.particles    = s.particles.filter(p => p.active);
+    s.powerUps     = s.powerUps.filter(p => p.active);
+    s.droneBullets = s.droneBullets.filter(b => b.active);
 
     if (playerDead(s)) return gameOverState(s);
 
@@ -205,7 +235,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
     return s;
   }
 
-  // ── BOSS WARNING ──────────────────────────────────────────────────────────
+  // BOSS WARNING
   if (s.phase === 'bossWarning') {
     s.bossWarningTimer -= dt;
     if (s.bossWarningTimer <= 0) {
@@ -215,7 +245,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
     return s;
   }
 
-  // ── LEVEL WARP ────────────────────────────────────────────────────────────
+  // LEVEL WARP
   if (s.phase === 'levelWarp') {
     s.warpTimer -= dt;
     updateParticles(s.particles, dt);
@@ -232,7 +262,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
     return s;
   }
 
-  // ── WAVE CLEAR ────────────────────────────────────────────────────────────
+  // WAVE CLEAR
   if (s.phase === 'waveClear') {
     s.waveClearTimer -= dt;
     updateParticles(s.particles, dt);
@@ -245,7 +275,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
     return s;
   }
 
-  // ── ACTIVE WAVE / BOSS ────────────────────────────────────────────────────
+  // ACTIVE WAVE / BOSS
   movePlayer(s.player, input, dt);
 
   s.player.fireTimer -= dt;
@@ -286,6 +316,13 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
     s.player.y + s.player.height / 2,
   );
 
+  // Drones — orbit, auto-fire, and track the nearest enemy
+  {
+    const pcx = s.player.x + s.player.width / 2, pcy = s.player.y + s.player.height / 2;
+    s.droneBullets = [...s.droneBullets, ...tickDrones(s.drones, dt, pcx, pcy)];
+    updateDroneMissiles(s.droneBullets, s.enemies, dt);
+  }
+
   for (const e of s.enemies) {
     if (!e.active) continue;
     updateEnemy(e, dt, s.player.x + s.player.width / 2, s.player.y + s.player.height / 2);
@@ -307,6 +344,28 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
 
   // Player bullets vs enemies
   for (const b of s.bullets) {
+    if (!b.active) continue;
+    for (const e of s.enemies) {
+      if (!e.active) continue;
+      if (rectsOverlap(b, e)) {
+        b.active = false;
+        e.hp    -= b.damage;
+        s.particles = [...s.particles, ...makeHitSpark(b.x + b.width / 2, b.y + b.height / 2, b.color)];
+        if (e.hp <= 0) {
+          e.active = false;
+          s.score += e.scoreValue;
+          s.screenShake = Math.max(s.screenShake, e.type === 'boss' ? 20 : 5);
+          s.particles = [...s.particles, ...spawnDropParticles(e.x + e.width / 2, e.y + e.height / 2)];
+          const pu = maybeDropPowerUp(e.x + e.width / 2, e.y + e.height / 2, e.type === 'boss', s.score);
+          if (pu) s.powerUps = [...s.powerUps, pu];
+        }
+        break;
+      }
+    }
+  }
+
+  // Drone missiles vs enemies
+  for (const b of s.droneBullets) {
     if (!b.active) continue;
     for (const e of s.enemies) {
       if (!e.active) continue;
@@ -354,7 +413,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
       continue;
     }
 
-    // ── Normal / homing bullet ────────────────────────────────────────────
+    // Normal / homing bullet
     if (!s.player.invincible && rectsOverlap(b, { x: px, y: py, width: pw, height: ph, active: true })) {
       b.active = false;
       let dmg  = b.damage;
@@ -403,10 +462,11 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
   s.enemies      = s.enemies.filter(e => e.active);
   s.particles    = s.particles.filter(p => p.active);
   s.powerUps     = s.powerUps.filter(p => p.active);
+  s.droneBullets = s.droneBullets.filter(b => b.active);
 
   if (playerDead(s)) return gameOverState(s);
 
-  // ── Wave / boss clear check ────────────────────────────────────────────────
+  // Wave / boss clear check
   if (s.enemies.length === 0) {
     if (s.phase === 'boss') {
       if (s.level >= TOTAL_LEVELS) {
@@ -441,7 +501,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
   return s;
 }
 
-// ─── Helpers ─────────────────────────────────────────────────────────────────
+// Helpers
 
 function movePlayer(player: Player, input: InputState, dt: number) {
   const speed = player.speed * (dt / 16);
@@ -539,10 +599,15 @@ function circleRectsOverlap(
 
 function applyPowerUp(state: GameState, pu: PowerUp) {
   switch (pu.type) {
-    case 'weaponUpgrade':
+    case 'weaponUpgrade': {
+      const prevLevel = state.player.weapon.level;
       state.player.weapon = upgradeWeapon(state.player.weapon);
       spawnUpgradeParticles(state);
+      if (state.player.weapon.level > prevLevel) {
+        state.drones = grantDroneIfMissing(state.drones, state.player.weapon.level, Math.round(state.player.weapon.damage * 0.6));
+      }
       break;
+    }
     case 'weaponSwitch':
       if (pu.weaponType) state.player.weapon = switchWeapon(state.player.weapon.type, pu.weaponType);
       spawnUpgradeParticles(state);

@@ -11,7 +11,7 @@ import Leaderboard from "./components/Leaderboard";
 import SpaceHuggersGame from "./pages/SpaceHuggersGame";
 import RacingGamePage from "./pages/RacingGamePage"
 import EventRank from "./pages/eventRank";
-import FishingGame from "./pages/FishingGame";
+import Mxfishing from "./pages/Fishinggame";
 import fruitninja from "./pages/Fruitninja"
 function Router() {
   return (
@@ -23,7 +23,7 @@ function Router() {
         <Route path="/game/space_shooter" component={Game} />
         <Route path="/game/max_fruitninja" component={fruitninja}/>
         <Route path="/game/race_car" component={RacingGamePage} />
-        <Route path="/game/fishing_game" component={FishingGame}/>
+        <Route path="/game/fishing_game" component={Mxfishing}/>
         <Route path="/leaderboard" component={Leaderboard} />
         <Route path="/profile" component={Profile} />
         <Route path="/eventrank" component={EventRank}/>

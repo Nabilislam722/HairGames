@@ -27,7 +27,7 @@ const BEST_KEY = "fruit-slash-best";
 const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const FRUIT_NINJA_CONTRACT_ADDRESS = "0x1f2a78Ce71aFbac323bEDc3404d206E7F94D8CFd";
 const HEMI_CHAIN_ID = "0xa867";
-const GAME_COST_ETH = "0.000012";
+const GAME_COST_ETH = "0.00001";
 
 const HEMI_CHAIN_DETAILS = {
   chainId: HEMI_CHAIN_ID,

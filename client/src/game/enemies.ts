@@ -2,7 +2,7 @@ import type { Enemy, EnemyBullet, Particle, EnemyType } from './types';
 import { ENEMY_CONFIGS } from './constants';
 import { CANVAS_WIDTH, CANVAS_HEIGHT } from './constants';
 
-// ─── Formation helpers ────────────────────────────────────────────────────────
+// Formation helpers
 
 type FormationSlot = { x: number; y: number; type: EnemyType };
 
@@ -123,7 +123,7 @@ const FORMATIONS = [
   (n: number) => formationWave(n),
 ];
 
-// ─── Entry paths ──────────────────────────────────────────────────────────────
+// Entry paths
 
 function makeEntryPath(idx: number, total: number, targetX: number, targetY: number) {
   const sides = ['top', 'left', 'right', 'top-left', 'top-right'];
@@ -150,7 +150,7 @@ function makeEntryPath(idx: number, total: number, targetX: number, targetY: num
   return { startX, startY, ctrlX, ctrlY };
 }
 
-// ─── Spawn wave ───────────────────────────────────────────────────────────────
+// Spawn wave
 
 export function spawnWave(level: number, subWave: number): Enemy[] {
   const count = Math.min(8 + level * 3 + subWave * 2, 20);
@@ -183,7 +183,7 @@ export function spawnWave(level: number, subWave: number): Enemy[] {
   });
 }
 
-// ─── Spawn boss ───────────────────────────────────────────────────────────────
+// Spawn boss
 
 export function spawnBoss(level: number): Enemy {
   const cfg = ENEMY_CONFIGS.boss;
@@ -203,21 +203,21 @@ export function spawnBoss(level: number): Enemy {
     angle: 0,
     phase: 1,
     baseX: cx, baseY: 60,
-    bossLevel: level,        // ← which level this boss is
-    spiralAngle: 0,          // ← persistent angle for spiral attack
+    bossLevel: level,     
+    spiralAngle: 0,         
     entering: true, entryProgress: 0, entryDelay: 0,
     entryStartX: cx, entryStartY: -cfg.height,
     entryCtrlX: cx, entryCtrlY: -cfg.height,
   };
 }
 
-// ─── Bezier ───────────────────────────────────────────────────────────────────
+// Bezier
 
 function bezier(t: number, p0: number, p1: number, p2: number): number {
   return (1 - t) * (1 - t) * p0 + 2 * (1 - t) * t * p1 + t * t * p2;
 }
 
-// ─── Update enemy ─────────────────────────────────────────────────────────────
+// Update enemy 
 
 export function updateEnemy(enemy: Enemy, dt: number, playerX: number, playerY: number): void {
   if (!enemy.active) return;
@@ -272,7 +272,7 @@ function easingOutBack(t: number): number {
   return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
 }
 
-// ─── Boss shooting — unique pattern per level ─────────────────────────────────
+// Boss shooting
 
 export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): EnemyBullet[] {
   if (enemy.entering) return [];
@@ -281,7 +281,7 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
   const cx = enemy.x + enemy.width / 2;
   const cy = enemy.y + enemy.height;
 
-  // ── Minions ────────────────────────────────────────────────────────────────
+  // Minions
   if (enemy.type === 'drone') {
     bullets.push(makeBullet(cx - 3, cy, 0, 4.5, 10, '#ff4444'));
     return bullets;
@@ -294,14 +294,14 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
     return bullets;
   }
 
-  // ── BOSS — pick pattern by bossLevel ──────────────────────────────────────
+  // BOSS
   const bossLvl = enemy.bossLevel ?? 1;
   const phase = enemy.phase ?? 1;
   const enrage = enemy.enrageMode ?? false;
 
   switch (bossLvl) {
 
-    // ── LEVEL 1: VOID SENTINEL — aimed + radial spray ─────────────────────
+    // LEVEL 1
     case 1: {
       // Aimed homing shot
       const dx = playerX - cx, dy = playerY - cy;
@@ -326,7 +326,7 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
       break;
     }
 
-    // ── LEVEL 2: NOVA DESTROYER — laser beam sweep ────────────────────────
+    // LEVEL 2
     case 2: {
       const base = enemy.angle ?? 0;
 
@@ -336,7 +336,7 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
         makeLaser(cx, cy, sweepAngle, 700, '#ff2200', 18, 22, 400, 500)
       );
 
-      // ── PHASE 1 (Improved) ───────────────────────────
+      // PHASE 1
       // Secondary sweep (makes dodging tighter)
       bullets.push(
         makeLaser(
@@ -374,7 +374,7 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
         );
       }
 
-      // ── PHASE 2 ──────────────────────────────────────
+      // PHASE 2
       if (phase >= 2 || enrage) {
         // ONLY spawn every ~1 second (VERY IMPORTANT)
         if ((enemy.tick ?? 0) % 60 === 0) {
@@ -390,12 +390,12 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
                 cx,
                 cy,
                 a,
-                1000,        // whole map
+                1000,     
                 '#ff0000',
                 26,
                 30,
-                600,         // stays longer
-                800          // LONG CHARGE → cinematic
+                600,        
+                800         
               )
             );
           }
@@ -406,7 +406,7 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
         bullets.push(makeLaser(cx, cy, rot + Math.PI / 2, 500, '#ff8800', 10, 16));
       }
 
-      // ── PHASE 3 ──────────────────────────────────────
+      // PHASE 3 
       if (phase >= 3 || enrage) {
 
         const sweepAngle2 = (Math.PI / 2) - Math.sin(base * 0.8) * 0.6;
@@ -425,7 +425,7 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
         }
       }
 
-      // ── ENRAGE ───────────────────────────────────────
+      // ENRAGE 
       if (enrage) {
         const dx = playerX - cx, dy = playerY - cy;
         const len = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -443,7 +443,7 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
       break;
     }
 
-    // ── LEVEL 3: CRYSTAL FIEND — spiral bullet hell ───────────────────────
+    //  LEVEL 3
     case 3: {
       const spiralArms = phase >= 3 ? 5 : phase >= 2 ? 4 : 3;
       const spiralA = enemy.spiralAngle ?? 0;
@@ -468,7 +468,7 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
       break;
     }
 
-    // ── LEVEL 4: WAR COLOSSUS — homing missiles + barrage ─────────────────
+    // LEVEL 4
     case 4: {
       // Homing missiles (slow but track player)
       const missileCount = phase >= 3 ? 3 : phase >= 2 ? 2 : 1;
@@ -504,7 +504,7 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
       break;
     }
 
-    // ── LEVEL 5: VOID EMPEROR — chaos (all patterns combined) ─────────────
+    //  LEVEL 5
     default: {
       const spiralA = enemy.spiralAngle ?? 0;
 
@@ -544,7 +544,7 @@ export function enemyShoot(enemy: Enemy, playerX: number, playerY: number): Enem
   return bullets;
 }
 
-// ─── Bullet factories ─────────────────────────────────────────────────────────
+// Bullet factories 
 
 function makeBullet(
   x: number, y: number,
@@ -606,7 +606,7 @@ export function updateHomingBullet(b: EnemyBullet, playerX: number, playerY: num
   if (speed > 6) { b.vx = (b.vx / speed) * 6; b.vy = (b.vy / speed) * 6; }
 }
 
-// ─── Laser lifetime tick ──────────────────────────────────────────────────────
+// Laser lifetime tick 
 // Call this in engine.ts updateEnemyBullets
 
 export function tickLaser(b: EnemyBullet, dt: number) {
@@ -631,7 +631,7 @@ export function tickLaser(b: EnemyBullet, dt: number) {
   }
 }
 
-// ─── Laser collision ─────────────────────────────────────────────────────────
+// Laser collision 
 // Returns true if the player rect intersects this laser beam
 
 export function laserHitsPlayer(
@@ -656,7 +656,7 @@ export function laserHitsPlayer(
   return dist < bw + Math.max(pw, ph) * 0.35;
 }
 
-// ─── Particles ────────────────────────────────────────────────────────────────
+// Particles 
 
 export function spawnDropParticles(x: number, y: number): Particle[] {
   const particles: Particle[] = [];
