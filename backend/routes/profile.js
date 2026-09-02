@@ -23,6 +23,9 @@ router.get("/:wallet", async (req, res) => {
     const walletLower = wallet.toLowerCase();
 
     const allowedCollections = await CollectionConfig.find({}).lean();
+    const imageUrlByContract = new Map(
+      allowedCollections.map(c => [c.address?.toLowerCase(), c.imageUrl])
+    );
 
     try {
       await syncWalletNFTs(walletLower, provider, allowedCollections);
@@ -53,10 +56,16 @@ router.get("/:wallet", async (req, res) => {
       { $set: { rank: globalRank } }
     );
 
+    const nftHoldings = (user.nftHoldings || []).map(nft => {
+      const holding = nft.toObject ? nft.toObject() : nft;
+      const configImageUrl = imageUrlByContract.get(holding.contractAddress?.toLowerCase());
+      return configImageUrl ? { ...holding, imageUrl: configImageUrl } : holding;
+    });
+
     return res.json({
       wallet: user.wallet,
       points: user.points,
-      nftHoldings: user.nftHoldings || [],
+      nftHoldings,
       multiplier,
       completedTasks: user.completedTasks || [],
       rank: globalRank,

@@ -35,6 +35,9 @@ export default function SpaceHuggersGame() {
 
   const iframeRef = useRef(null);
   const hasSubmittedRef = useRef(false);
+  
+  // ◄ NEW: Keep track of previous level's total kills to calculate the delta
+  const previousTotalKillsRef = useRef(0);
 
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash: activeTxHash,
@@ -63,7 +66,7 @@ export default function SpaceHuggersGame() {
   useEffect(() => {
     const handleMessage = async (event) => {
       if (event.data && event.data.type === "SPACE_HUGGERS_LEVEL_COMPLETE") {
-        const { level, livesRemaining, kills } = event.data;
+        let { level, livesRemaining, kills: incomingTotalKills } = event.data;
 
         if (!isConnected || !address) {
           console.error("Wallet not connected. Cannot submit level score data.");
@@ -73,15 +76,26 @@ export default function SpaceHuggersGame() {
         if (hasSubmittedRef.current) return;
         hasSubmittedRef.current = true;
 
-        // Initialize state without a score (backend will provide it)
-        setCurrentLevelData({ level, livesRemaining, kills, score: null });
+        // If the game resets to level 1, or kills drop (new session), reset the tracker
+        if (level === 1 || incomingTotalKills < previousTotalKillsRef.current) {
+            previousTotalKillsRef.current = 0;
+        }
+        
+        // Calculate ONLY the kills achieved in this specific level
+        const currentLevelKills = incomingTotalKills - previousTotalKillsRef.current;
+        
+        // Save the new total for the next level's calculation
+        previousTotalKillsRef.current = incomingTotalKills;
+        // ==========================================
+
+        // Initialize state with DELTA kills
+        setCurrentLevelData({ level, livesRemaining, kills: currentLevelKills, score: null });
         setTxLoading(true);
         setTxError(null);
 
         try {
           console.log(`Submitting stats for Level ${level} to the secure backend authority...`);
 
-          // ◄ Modified: Passing raw metrics instead of frontend computed scores
           const verifyRes = await fetch(`${API_BASE}/api/points/verify`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -89,7 +103,7 @@ export default function SpaceHuggersGame() {
               gameId: "space_huggers",
               wallet: address,
               level: level,
-              kills: kills,
+              kills: currentLevelKills, // ◄ Using Delta here
               livesRemaining: livesRemaining
             }),
           });
@@ -97,16 +111,14 @@ export default function SpaceHuggersGame() {
           if (!verifyRes.ok) throw new Error("Failed anti-cheat verification script check.");
           const { nonce, signature, points } = await verifyRes.json();
 
-          // ◄ Update UI context with the backend calculated score
           setCurrentLevelData(prev => ({ ...prev, score: points }));
-
           console.log("Backend verification approved. Requesting on-chain transaction signature...");
 
           const txHash = await writeContractAsync({
             address: SPACE_HUGGERS_CONTRACT_ADDRESS,
             abi: SPACE_HUGGERS_ABI,
             functionName: 'submitLevelScore',
-            args: [BigInt(level), BigInt(kills), BigInt(points), BigInt(nonce), signature],
+            args: [BigInt(level), BigInt(currentLevelKills), BigInt(points), BigInt(nonce), signature], // ◄ Using Delta here
             value: parseEther(String(GAME_COST_ETH))
           });
 

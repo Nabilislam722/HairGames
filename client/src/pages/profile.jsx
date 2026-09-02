@@ -13,15 +13,10 @@ import { FaXTwitter, FaDiscord } from "react-icons/fa6";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-// ─── NFT Image Map ────────────────────────────────────────────────────────────
+// NFT Image Map 
 // Key   = contract address (lowercase)
 // Value = public image URL (Cloudflare R2 or any CDN)
-const NFT_IMAGE_MAP = {
-  "0xb45bc6d128d284025aabc0ae3159af9c228db16a": "https://pub-6fd72b146dbb4330a7ad961c7c584367.r2.dev/site_assets/Screenshot%202026-06-24%20150809.png",
-  // "0x21d494d2f708d418d58908b48b3e80d8e08a8533": "https://your-r2.dev/hemi1y.png",
-};
 const NFT_IMAGE_FALLBACK = "https://amaranth-imperial-otter-134.mypinata.cloud/ipfs/bafybeicdxf6wh2i7jtkinytziitfhv4nagmkvmzaraoy5b2ris27jiu7ae";
-// ─────────────────────────────────────────────────────────────────────────────
 
 // Single source of truth for level thresholds — shared by getLevelInfo() and
 // the roadmap list below, instead of keeping two copies in sync by hand.
@@ -67,7 +62,7 @@ function mulberry32(seed) {
   };
 }
 
-/* ── Sub-components ───────────────────────────────────────────── */
+/*  Sub-components  */
 
 // Deterministic, symmetric pixel-pattern identicon generated from the
 // wallet address — same wallet always renders the same pattern, no image
@@ -149,7 +144,7 @@ function NFTCard({ nft, index }) {
           }}
         />
         <img
-          src={NFT_IMAGE_MAP[nft.contractAddress?.toLowerCase()] ?? NFT_IMAGE_FALLBACK}
+          src={ nft.imageUrl || NFT_IMAGE_FALLBACK }
           alt={nft.name}
           className="relative z-10 w-full h-full object-cover"
         />
