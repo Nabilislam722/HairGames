@@ -24,7 +24,7 @@ contract NeedForHair is Ownable2Step, Pausable, ReentrancyGuard {
 
     mapping(address => Race) public activeRaces;
     mapping(address => uint256) public playerTotalPoints;
-    mapping(address => uint256) public userNonces; // Cheaper than mapping bytes32 signatures
+    mapping(address => uint256) public userNonces; 
 
     // ─────────────────────────────────────────────────────────────────────────
     // Events

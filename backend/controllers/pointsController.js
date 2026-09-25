@@ -9,14 +9,6 @@ import {
 } from "../config/constants.js";
 import { provider, getServerWallet } from "../config/provider.js";
 
-// BestGameVoting.vote(uint256) — selector only.
-const VOTE_SELECTOR = ethers.id("vote(uint256)").slice(0, 10);
-const VOTE_REWARD_POINTS = 5000;
-const MAX_VOTES_PER_DAY = 10;
-const VOTE_RESET_OFFSET_SECONDS = 60;
-const SECONDS_PER_DAY = 86400;
-const VOTING_CONTRACT_ADDRESS = process.env.VOTING_CONTRACTADDRESS || "0x79e42F91c7Df1ee23EEd5404748631F3472fdC4C";
-
 // Helper function to sign the verification payload
 async function generateCryptoSignature(level, kills, points, nonce, walletAddress, targetAddress, chainId) {
   const serverWallet = getServerWallet();
@@ -139,6 +131,24 @@ export const addPoints = async (req, res) => {
       const decodedData = abiCoder.decode(['uint256', 'uint256', 'uint256', 'uint256', 'bytes'], '0x' + inputData.slice(10));
       onChainScore = Number(decodedData[0]);
 
+    } else if (gameId === "proof_of_patience") {
+      // submitScore(uint256 score, uint256 survivalSeconds, uint256 answered,
+      // uint256 shots, uint256 hits, uint256 nonce, bytes signature) — score
+      // is the first param. A zero-score forfeit tx (clearing a stuck
+      // session) decodes and credits fine here too, at zero points — no
+      // special-casing needed.
+      const POP_SELECTOR = ethers
+        .id("submitScore(uint256,uint256,uint256,uint256,uint256,uint256,bytes)")
+        .slice(0, 10);
+      if (!inputData.startsWith(POP_SELECTOR)) {
+        return res.status(400).json({ error: 'Transaction did not call submitScore' });
+      }
+      const decodedData = abiCoder.decode(
+        ['uint256', 'uint256', 'uint256', 'uint256', 'uint256', 'uint256', 'bytes'],
+        '0x' + inputData.slice(10)
+      );
+      onChainScore = Number(decodedData[0]);
+
     } else if (gameId === "space_huggers") {
       if (!inputData.startsWith(SUBMIT_LEVEL_SCORE_SELECTOR)) {
         return res.status(400).json({ error: 'Transaction did not call submitLevelScore' });
@@ -199,129 +209,6 @@ export const addPoints = async (req, res) => {
   } catch (err) {
     console.error('/api/points/add error:', err);
     return res.status(500).json({ error: 'Internal server error' });
-  }
-};
-
-/**
- * POST /api/points/vote
- */
-export const addVotePoints = async (req, res) => {
-  const { wallet, txHash } = req.body;
-
-  try {
-    if (!wallet || !txHash) {
-      return res.status(400).json({ error: "Missing wallet or txHash" });
-    }
-
-    const walletLower = wallet.toLowerCase();
-
-    const alreadyProcessed = await UserProfile.findOne({ processedHashes: txHash });
-    if (alreadyProcessed) {
-      return res.status(400).json({ error: "Transaction already processed" });
-    }
-
-    const receipt = await provider.waitForTransaction(txHash);
-    if (!receipt || receipt.status !== 1) {
-      return res.status(400).json({ error: "Transaction failed or not found" });
-    }
-    if (receipt.to?.toLowerCase() !== VOTING_CONTRACT_ADDRESS.toLowerCase()) {
-      return res.status(400).json({ error: "Transaction not sent to voting contract" });
-    }
-
-    const tx = await provider.getTransaction(txHash);
-    if (!tx) {
-      return res.status(400).json({ error: "Transaction not found" });
-    }
-    if (tx.from.toLowerCase() !== walletLower) {
-      return res.status(400).json({ error: "Transaction sender does not match wallet" });
-    }
-
-    const inputData = tx.data;
-    if (!inputData.startsWith(VOTE_SELECTOR)) {
-      return res.status(400).json({ error: "Transaction did not call vote()" });
-    }
-    const abiCoder = new ethers.AbiCoder();
-    const [onChainGameId] = abiCoder.decode(["uint256"], "0x" + inputData.slice(10));
-
-    const block = await provider.getBlock(receipt.blockNumber);
-    const voteDay = Math.floor(Math.max(block.timestamp - VOTE_RESET_OFFSET_SECONDS, 0) / SECONDS_PER_DAY);
-
-    // Ensure the UserProfile exists safely without conditional upserts
-    let user = await UserProfile.findOne({ wallet: walletLower });
-    if (!user) {
-      try {
-        user = await UserProfile.findOneAndUpdate(
-          { wallet: walletLower },
-          { $setOnInsert: { wallet: walletLower, points: 0, votesToday: 0, voteDay: -1 } },
-          { upsert: true, new: true }
-        );
-      } catch (e) {
-        if (e.code === 11000) {
-          user = await UserProfile.findOne({ wallet: walletLower });
-        } else {
-          throw e;
-        }
-      }
-    }
-
-    const userMultiplier = user?.multiplier || 1.0;
-    const pointsToAdd = Math.round(VOTE_REWARD_POINTS * userMultiplier);
-
-    let updatedUser;
-
-    if (user.voteDay !== voteDay) {
-      // Reset counter for new day
-      updatedUser = await UserProfile.findOneAndUpdate(
-        { wallet: walletLower },
-        {
-          $inc: { points: pointsToAdd },
-          $push: { processedHashes: txHash },
-          $set: { lastSyncedAt: new Date(), voteDay, votesToday: 1 },
-        },
-        { new: true }
-      );
-    } else {
-      // Same day path: verify daily cap before updating
-      if (user.votesToday >= MAX_VOTES_PER_DAY) {
-        return res.status(400).json({ error: "Daily vote reward limit reached" });
-      }
-
-      updatedUser = await UserProfile.findOneAndUpdate(
-        { wallet: walletLower, voteDay, votesToday: { $lt: MAX_VOTES_PER_DAY } },
-        {
-          $inc: { points: pointsToAdd, votesToday: 1 },
-          $push: { processedHashes: txHash },
-          $set: { lastSyncedAt: new Date() },
-        },
-        { new: true }
-      );
-    }
-
-    if (!updatedUser) {
-      return res.status(400).json({ error: "Daily vote reward limit reached" });
-    }
-
-    await EventProfile.findOneAndUpdate(
-      { wallet: walletLower },
-      {
-        $inc: { points: pointsToAdd },
-        $set: { lastSyncedAt: new Date() },
-      },
-      { upsert: true }
-    );
-
-    return res.json({
-      wallet: updatedUser.wallet,
-      points: updatedUser.points,
-      gameId: onChainGameId.toString(),
-      votesToday: updatedUser.votesToday,
-      votesLeftToday: MAX_VOTES_PER_DAY - updatedUser.votesToday,
-      added: pointsToAdd,
-      txHash,
-    });
-  } catch (err) {
-    console.error("/api/points/vote error:", err);
-    return res.status(500).json({ error: "Internal server error" });
   }
 };
 

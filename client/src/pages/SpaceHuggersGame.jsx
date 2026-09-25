@@ -35,8 +35,6 @@ export default function SpaceHuggersGame() {
 
   const iframeRef = useRef(null);
   const hasSubmittedRef = useRef(false);
-  
-  // ◄ NEW: Keep track of previous level's total kills to calculate the delta
   const previousTotalKillsRef = useRef(0);
 
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
@@ -65,85 +63,80 @@ export default function SpaceHuggersGame() {
 
   useEffect(() => {
     const handleMessage = async (event) => {
-      if (event.data && event.data.type === "SPACE_HUGGERS_LEVEL_COMPLETE") {
-        let { level, livesRemaining, kills: incomingTotalKills } = event.data;
+      if (event.source !== iframeRef.current?.contentWindow) return;
+      if (!event.data || event.data.type !== "SPACE_HUGGERS_LEVEL_COMPLETE") return;
 
-        if (!isConnected || !address) {
-          console.error("Wallet not connected. Cannot submit level score data.");
-          return;
-        }
+      let { level, livesRemaining, kills: incomingTotalKills } = event.data;
 
-        if (hasSubmittedRef.current) return;
-        hasSubmittedRef.current = true;
+      if (!isConnected || !address) {
+        console.error("Wallet not connected. Cannot submit level score data.");
+        return;
+      }
 
-        // If the game resets to level 1, or kills drop (new session), reset the tracker
-        if (level === 1 || incomingTotalKills < previousTotalKillsRef.current) {
-            previousTotalKillsRef.current = 0;
-        }
-        
-        // Calculate ONLY the kills achieved in this specific level
-        const currentLevelKills = incomingTotalKills - previousTotalKillsRef.current;
-        
-        // Save the new total for the next level's calculation
-        previousTotalKillsRef.current = incomingTotalKills;
-        // ==========================================
+      if (hasSubmittedRef.current) return;
+      hasSubmittedRef.current = true;
 
-        // Initialize state with DELTA kills
-        setCurrentLevelData({ level, livesRemaining, kills: currentLevelKills, score: null });
-        setTxLoading(true);
-        setTxError(null);
+      if (level === 1 || incomingTotalKills < previousTotalKillsRef.current) {
+          previousTotalKillsRef.current = 0;
+      }
 
-        try {
-          console.log(`Submitting stats for Level ${level} to the secure backend authority...`);
+      const currentLevelKills = incomingTotalKills - previousTotalKillsRef.current;
+      previousTotalKillsRef.current = incomingTotalKills;
 
-          const verifyRes = await fetch(`${API_BASE}/api/points/verify`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              gameId: "space_huggers",
-              wallet: address,
-              level: level,
-              kills: currentLevelKills, // ◄ Using Delta here
-              livesRemaining: livesRemaining
-            }),
-          });
+      setCurrentLevelData({ level, livesRemaining, kills: currentLevelKills, score: null });
+      setTxLoading(true);
+      setTxError(null);
 
-          if (!verifyRes.ok) throw new Error("Failed anti-cheat verification script check.");
-          const { nonce, signature, points } = await verifyRes.json();
+      try {
+        console.log(`Submitting stats for Level ${level} to the secure backend authority...`);
 
-          setCurrentLevelData(prev => ({ ...prev, score: points }));
-          console.log("Backend verification approved. Requesting on-chain transaction signature...");
+        const verifyRes = await fetch(`${API_BASE}/api/points/verify`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            gameId: "space_huggers",
+            wallet: address,
+            level: level,
+            kills: currentLevelKills,
+            livesRemaining: livesRemaining
+          }),
+        });
 
-          const txHash = await writeContractAsync({
-            address: SPACE_HUGGERS_CONTRACT_ADDRESS,
-            abi: SPACE_HUGGERS_ABI,
-            functionName: 'submitLevelScore',
-            args: [BigInt(level), BigInt(currentLevelKills), BigInt(points), BigInt(nonce), signature], // ◄ Using Delta here
-            value: parseEther(String(GAME_COST_ETH))
-          });
+        if (!verifyRes.ok) throw new Error("Failed anti-cheat verification script check.");
+        const { nonce, signature, points } = await verifyRes.json();
 
-          setActiveTxHash(txHash);
+        setCurrentLevelData(prev => ({ ...prev, score: points }));
+        console.log("Backend verification approved. Requesting on-chain transaction signature...");
 
-          const res = await fetch(`${API_BASE}/api/points/add`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              wallet: address,
-              txHash: txHash,
-              score: points,
-              gameId: "space_huggers"
-            }),
-          });
+        const txHash = await writeContractAsync({
+          address: SPACE_HUGGERS_CONTRACT_ADDRESS,
+          abi: SPACE_HUGGERS_ABI,
+          functionName: 'submitLevelScore',
+          args: [BigInt(level), BigInt(currentLevelKills), BigInt(points), BigInt(nonce), signature],
+          value: parseEther(String(GAME_COST_ETH))
+        });
 
-          if (!res.ok) throw new Error("Failed to write updated score payload data to API.");
-          console.log("On-chain points ledger updated successfully. Waiting for block confirmation...");
+        setActiveTxHash(txHash);
 
-        } catch (err) {
-          console.error('Score submit error execution:', err);
-          setTxError(err?.message ?? 'Unknown submission error');
-          setTxLoading(false);
-          hasSubmittedRef.current = false;
-        }
+        const res = await fetch(`${API_BASE}/api/points/add`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            wallet: address,
+            txHash: txHash,
+            score: points,
+            gameId: "space_huggers"
+          }),
+        });
+
+        if (!res.ok) throw new Error("Failed to write updated score payload data to API.");
+        console.log("On-chain points ledger updated successfully. Waiting for block confirmation...");
+
+      } catch (err) {
+        console.error('Score submit error execution:', err);
+        setTxError(err?.message ?? 'Unknown submission error');
+        setTxLoading(false);
+        hasSubmittedRef.current = false;
       }
     };
 

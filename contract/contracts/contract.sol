@@ -1,250 +1,174 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
+import "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+import "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 import "@openzeppelin/contracts/access/Ownable2Step.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
-/// @title BestGameVoting
-/// @notice Daily "Best Game Award" voting. All vote counters are keyed by a
-///         rolling day index derived from block.timestamp, so counts reset
-///         automatically for every user at the same instant — 00:01:00 UTC —
-///         with no keeper, cron job, or owner transaction required.
-contract BestGameVoting is Ownable2Step, Pausable, ReentrancyGuard {
-    /*  Constants  */
+contract ProofOfPatience is Ownable2Step, Pausable, ReentrancyGuard {
+    using ECDSA for bytes32;
 
-    uint256 public constant SECONDS_PER_DAY = 1 days;
-    /// @dev Shifts the day boundary from 00:00:00 UTC to 00:01:00 UTC.
-    uint256 public constant RESET_OFFSET = 1 minutes;
-    uint256 public constant MAX_VOTES_PER_DAY = 10;
+    // ─────────────────────────────────────────────────────────────────────────
+    // State
+    // ─────────────────────────────────────────────────────────────────────────
 
-    /*  Storage  */
+    address public trustedSigner;
+    uint256 public submissionFee;
 
-    struct Game {
-        string key;   // off-chain identifier, e.g. "space_shooter"
-        bool active;
+    struct Run {
+        uint256 startTime;
+        bool isActive;
     }
 
-    Game[] private _games;
-    mapping(string => uint256) private _gameIdByKey; // 1-based; 0 = unregistered
+    mapping(address => Run) public activeRuns;
+    mapping(address => uint256) public playerBestScore;
+    mapping(address => uint256) public userNonces;
 
-    // day => gameId => total votes cast for that game
-    mapping(uint256 => mapping(uint256 => uint256)) private _gameVotesByDay;
-    // day => user => gameId => votes that user cast for that game
-    mapping(uint256 => mapping(address => mapping(uint256 => uint256))) private _userGameVotesByDay;
-    // day => user => total votes that user has cast (across all games)
-    mapping(uint256 => mapping(address => uint256)) private _userVotesToday;
-    // gameId => total votes ever cast for that game — persists across day resets
-    mapping(uint256 => uint256) private _gameVotesAllTime;
+    // ─────────────────────────────────────────────────────────────────────────
+    // Events
+    // ─────────────────────────────────────────────────────────────────────────
 
-    /*  Events  */
-
-    event GameAdded(uint256 indexed gameId, string key);
-    event GameActiveSet(uint256 indexed gameId, bool active);
-    event Voted(
-        address indexed voter,
-        uint256 indexed gameId,
-        uint256 indexed day,
-        uint256 userVotesToday,
-        uint256 gameVotesToday
+    event RunStarted(address indexed player, uint256 startTime);
+    event RunCompleted(
+        address indexed player,
+        uint256 score,
+        uint256 survivalSeconds,
+        uint256 answered,
+        uint256 shots,
+        uint256 hits,
+        uint256 feePaid
     );
+    event TrustedSignerUpdated(address indexed oldSigner, address indexed newSigner);
+    event SubmissionFeeUpdated(uint256 oldFee, uint256 newFee);
+    event FeesWithdrawn(address indexed to, uint256 amount);
 
-    /*  Errors  */
+    // ─────────────────────────────────────────────────────────────────────────
+    // Constructor
+    // ─────────────────────────────────────────────────────────────────────────
 
-    error EmptyKey();
-    error GameKeyTaken();
-    error GameNotFound();
-    error GameInactive();
-    error DailyLimitReached();
-
-    constructor(address initialOwner) Ownable(initialOwner) {}
-
-    /*  Day math  */
-
-    /// @notice Current voting day index. Increments at 00:01:00 UTC.
-    function currentVotingDay() public view returns (uint256) {
-        if (block.timestamp < RESET_OFFSET) return 0;
-        return (block.timestamp - RESET_OFFSET) / SECONDS_PER_DAY;
+    constructor(address _trustedSigner, uint256 _submissionFee) Ownable(msg.sender) {
+        require(_trustedSigner != address(0), "ProofOfPatience: zero signer");
+        trustedSigner = _trustedSigner;
+        submissionFee = _submissionFee;
     }
 
-    /// @notice Absolute UNIX timestamp of the next 00:01:00 UTC reset.
-    function nextResetTimestamp() public view returns (uint256) {
-        return (currentVotingDay() + 1) * SECONDS_PER_DAY + RESET_OFFSET;
+    // ─────────────────────────────────────────────────────────────────────────
+    // Core Gameplay Logic
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function startRun() external whenNotPaused {
+        require(!activeRuns[msg.sender].isActive, "ProofOfPatience: run already in progress");
+
+        activeRuns[msg.sender] = Run({
+            startTime: block.timestamp,
+            isActive: true
+        });
+
+        emit RunStarted(msg.sender, block.timestamp);
     }
 
-    /// @notice Seconds remaining until the next reset.
-    function timeUntilReset() external view returns (uint256) {
-        return nextResetTimestamp() - block.timestamp;
-    }
+    /**
+     * @param score            Final patience-point score reported by the client.
+     * @param survivalSeconds  Seconds the round lasted before it ended.
+     * @param answered         Questions fully answered.
+     * @param shots            Letters fired.
+     * @param hits             Letters that landed on the caller waiting for them.
+     * @param nonce            Must equal the caller's current on-chain nonce.
+     * @param signature        Backend attestation over every field above plus
+     *                         caller/contract/chain.
+     *
+     * Unlike a fixed-time race, this game's score depends on combo chains,
+     * POP OFF timing and mid-round breaks — there's no single pure function to
+     * recompute it from on-chain. Trust is placed entirely in `trustedSigner`,
+     * the same way `submitRaceResult` trusts it for lap time. The backend is
+     * expected to reject anything implausible (score vs. answered/hits, rate
+     * limits) before it ever signs — that check happens off-chain, same as
+     * every other validation here.
+     */
+    function submitScore(
+        uint256 score,
+        uint256 survivalSeconds,
+        uint256 answered,
+        uint256 shots,
+        uint256 hits,
+        uint256 nonce,
+        bytes calldata signature
+    ) external payable whenNotPaused nonReentrant {
+        require(activeRuns[msg.sender].isActive, "ProofOfPatience: no active run");
+        require(msg.value == submissionFee, "ProofOfPatience: incorrect fee");
+        require(nonce == userNonces[msg.sender], "ProofOfPatience: invalid nonce");
 
-    /*  Game registry (owner-managed)  */
+        // Increment nonce to prevent replay attacks
+        userNonces[msg.sender]++;
 
-    function addGame(string calldata key) external onlyOwner returns (uint256 gameId) {
-        if (bytes(key).length == 0) revert EmptyKey();
-        if (_gameIdByKey[key] != 0) revert GameKeyTaken();
+        // ── 1. Reconstruct and verify the backend signature ───────────────────
+        bytes32 structHash = keccak256(
+            abi.encodePacked(
+                msg.sender,
+                score,
+                survivalSeconds,
+                answered,
+                shots,
+                hits,
+                nonce,
+                address(this),
+                block.chainid
+            )
+        );
 
-        _games.push(Game({ key: key, active: true }));
-        gameId = _games.length - 1;
-        _gameIdByKey[key] = gameId + 1;
+        bytes32 ethSignedHash = MessageHashUtils.toEthSignedMessageHash(structHash);
+        address signer = ethSignedHash.recover(signature);
+        require(signer == trustedSigner, "ProofOfPatience: invalid signature");
 
-        emit GameAdded(gameId, key);
-    }
+        // ── 2. State update ───────────────────────────────────────────────────
+        activeRuns[msg.sender].isActive = false;
 
-    function setGameActive(uint256 gameId, bool active) external onlyOwner {
-        _requireGameExists(gameId);
-        _games[gameId].active = active;
-        emit GameActiveSet(gameId, active);
-    }
-
-    function gameCount() external view returns (uint256) {
-        return _games.length;
-    }
-
-    function getGame(uint256 gameId) external view returns (string memory key, bool active) {
-        _requireGameExists(gameId);
-        Game storage g = _games[gameId];
-        return (g.key, g.active);
-    }
-
-    function gameIdForKey(string calldata key) external view returns (uint256) {
-        uint256 stored = _gameIdByKey[key];
-        if (stored == 0) revert GameNotFound();
-        return stored - 1;
-    }
-
-    /// @notice Every registered game, for building an id<->key map client-side.
-    function getGames()
-        external
-        view
-        returns (uint256[] memory gameIds, string[] memory keys, bool[] memory active)
-    {
-        uint256 n = _games.length;
-        gameIds = new uint256[](n);
-        keys = new string[](n);
-        active = new bool[](n);
-        for (uint256 i = 0; i < n; i++) {
-            gameIds[i] = i;
-            keys[i] = _games[i].key;
-            active[i] = _games[i].active;
-        }
-    }
-
-    /*  Voting  */
-
-    /// @notice Cast one vote for `gameId` for the current voting day.
-    function vote(uint256 gameId) external whenNotPaused nonReentrant {
-        _requireGameExists(gameId);
-        if (!_games[gameId].active) revert GameInactive();
-
-        uint256 day = currentVotingDay();
-        uint256 usedToday = _userVotesToday[day][msg.sender];
-        if (usedToday >= MAX_VOTES_PER_DAY) revert DailyLimitReached();
-
-        _userVotesToday[day][msg.sender] = usedToday + 1;
-        _userGameVotesByDay[day][msg.sender][gameId] += 1;
-        uint256 newGameTotal = _gameVotesByDay[day][gameId] + 1;
-        _gameVotesByDay[day][gameId] = newGameTotal;
-        _gameVotesAllTime[gameId] += 1;
-
-        emit Voted(msg.sender, gameId, day, usedToday + 1, newGameTotal);
-    }
-
-    /*  Reads  */
-
-    /// @notice Votes `user` has left before hitting today's cap.
-    function votesRemaining(address user) public view returns (uint256) {
-        uint256 used = _userVotesToday[currentVotingDay()][user];
-        return used >= MAX_VOTES_PER_DAY ? 0 : MAX_VOTES_PER_DAY - used;
-    }
-
-    /// @notice Per-game breakdown of votes `user` cast today, plus totals.
-    function getUserVotes(address user)
-        external
-        view
-        returns (
-            uint256[] memory gameIds,
-            string[] memory keys,
-            uint256[] memory votesPerGame,
-            uint256 votesUsedToday,
-            uint256 votesLeftToday
-        )
-    {
-        uint256 day = currentVotingDay();
-        uint256 n = _games.length;
-        gameIds = new uint256[](n);
-        keys = new string[](n);
-        votesPerGame = new uint256[](n);
-
-        for (uint256 i = 0; i < n; i++) {
-            gameIds[i] = i;
-            keys[i] = _games[i].key;
-            votesPerGame[i] = _userGameVotesByDay[day][user][i];
+        if (score > playerBestScore[msg.sender]) {
+            playerBestScore[msg.sender] = score;
         }
 
-        votesUsedToday = _userVotesToday[day][user];
-        votesLeftToday = votesUsedToday >= MAX_VOTES_PER_DAY ? 0 : MAX_VOTES_PER_DAY - votesUsedToday;
+        emit RunCompleted(msg.sender, score, survivalSeconds, answered, shots, hits, msg.value);
     }
 
-    /// @notice Today's vote tally for every registered game.
-    function getAllVotes()
-        external
-        view
-        returns (
-            uint256[] memory gameIds,
-            string[] memory keys,
-            uint256[] memory votes,
-            uint256 totalVotes
-        )
-    {
-        uint256 day = currentVotingDay();
-        uint256 n = _games.length;
-        gameIds = new uint256[](n);
-        keys = new string[](n);
-        votes = new uint256[](n);
+    // ─────────────────────────────────────────────────────────────────────────
+    // Treasury & Admin Controls
+    // ─────────────────────────────────────────────────────────────────────────
 
-        for (uint256 i = 0; i < n; i++) {
-            gameIds[i] = i;
-            keys[i] = _games[i].key;
-            uint256 v = _gameVotesByDay[day][i];
-            votes[i] = v;
-            totalVotes += v;
-        }
+    function claimFees(address payable _to) external onlyOwner nonReentrant {
+        require(_to != address(0), "ProofOfPatience: zero address");
+        uint256 balance = address(this).balance;
+        require(balance > 0, "ProofOfPatience: nothing to claim");
+
+        (bool success, ) = _to.call{value: balance}("");
+        require(success, "ProofOfPatience: transfer failed");
+
+        emit FeesWithdrawn(_to, balance);
     }
 
-    /// @notice All-time vote tally for every registered game — never reset,
-    ///         unlike getAllVotes() which only reflects the current day.
-    function getAllTimeVotes()
-        external
-        view
-        returns (
-            uint256[] memory gameIds,
-            string[] memory keys,
-            uint256[] memory votes,
-            uint256 totalVotes
-        )
-    {
-        uint256 n = _games.length;
-        gameIds = new uint256[](n);
-        keys = new string[](n);
-        votes = new uint256[](n);
-
-        for (uint256 i = 0; i < n; i++) {
-            gameIds[i] = i;
-            keys[i] = _games[i].key;
-            uint256 v = _gameVotesAllTime[i];
-            votes[i] = v;
-            totalVotes += v;
-        }
+    function contractBalance() external view returns (uint256) {
+        return address(this).balance;
     }
 
-    /*  Internal  */
-
-    function _requireGameExists(uint256 gameId) internal view {
-        if (gameId >= _games.length) revert GameNotFound();
+    function setTrustedSigner(address _newSigner) external onlyOwner {
+        require(_newSigner != address(0), "ProofOfPatience: zero signer");
+        address old = trustedSigner;
+        trustedSigner = _newSigner;
+        emit TrustedSignerUpdated(old, _newSigner);
     }
 
-    /*  Admin  */
+    function setSubmissionFee(uint256 _newFee) external onlyOwner {
+        uint256 old = submissionFee;
+        submissionFee = _newFee;
+        emit SubmissionFeeUpdated(old, _newFee);
+    }
 
-    function pause() external onlyOwner { _pause(); }
-    function unpause() external onlyOwner { _unpause(); }
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    function unpause() external onlyOwner {
+        _unpause();
+    }
 }

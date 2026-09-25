@@ -5,7 +5,8 @@ import {
     getRaceConfig,
     generateRaceSignature,
     generateFishingSignature,
-    generateFruitNinjaSignature
+    generateFruitNinjaSignature,
+    generateProofOfPatienceSignature 
 } from "../controllers/gameController.js";
 
 import {
@@ -13,7 +14,6 @@ import {
     addPoints,
     getPoints,
     claimTask,
-    addVotePoints
 } from "../controllers/pointsController.js";
 
 import {
@@ -40,13 +40,14 @@ router.get("/race/config", getRaceConfig);
 router.post("/race/signature", generateRaceSignature);
 router.post("/fishing/signature", generateFishingSignature);
 router.post("/fruitninja/signature", generateFruitNinjaSignature);
+router.post("/proof-of-patience/signature", generateProofOfPatienceSignature);
 
 // Points Management 
 router.post("/points/verify", verifyPoints);
 router.post("/points/add", addPoints);
 router.get("/points/get", getPoints);
 router.post("/points/claim", claimTask);
-router.post("/points/vote", addVotePoints);
+// router.post("/points/vote", addVotePoints);
 
 // Leaderboards & Events 
 router.get("/leaderboard", getGlobalLeaderboard);

@@ -147,7 +147,7 @@ export function Layout({ children }) {
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-background overflow-x-hidden">
+    <div className="min-h-screen flex flex-col bg-background overflow-x-hidden ">
 
       {/* ── Navbar ── */}
       <header
@@ -322,7 +322,7 @@ export function Layout({ children }) {
 
       {/* ── Main ── */}
       <main className="flex-1 w-full">
-        <div className="w-full px-4 sm:px-6 xl:px-10 py-8 md:py-10">
+        <div className="w-full px-4 sm:px-6 xl:px-10 py-8 md:py-10 justify-center flex">
           {children}
         </div>
       </main>

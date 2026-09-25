@@ -3,7 +3,8 @@ export const ECOSYSTEM_CONTRACTS = {
   "racing_game": "0x3E0784ffE4e036bCc1859CA124dF327e8B866E29", 
   "fishing_party": "0x45cee112Ba2EbDE8224a1fA14D329f6AB190a7eA",
   "fruit_ninja": "0x1f2a78Ce71aFbac323bEDc3404d206E7F94D8CFd",
-  "default_legacy": "0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5"
+  "default_legacy": "0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5",
+  "proof_of_patience": "0x760d91401Afb3499cf1BD0256b30485BDa40728C",
 };
 
 export const GENERIC_GAME_ABI = [

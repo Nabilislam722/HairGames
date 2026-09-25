@@ -26,8 +26,8 @@ const LEVELS: LevelConfig[] = [
   { level: 1, label: "Orchard", targetScore: 500, spawnIntervalStart: 1.2, maxDifficulty: 3, bombChanceMax: 0.07, abilityChance: 0, allowFrenzy: false, allowGlitch: false },
   { level: 2, label: "Citrus Grove", targetScore: 1000, spawnIntervalStart: 1.1, maxDifficulty: 7, bombChanceMax: 0.08, abilityChance: 0.02, allowFrenzy: false, allowGlitch: false },
   { level: 3, label: "Lychee Labyrinth", targetScore: 2000, spawnIntervalStart: 0.8, maxDifficulty: 8, bombChanceMax: 0.1, abilityChance: 0.1, allowFrenzy: false, allowGlitch: false },
-  { level: 4, label: "Berry Blitz", targetScore: 3000, spawnIntervalStart: 0.75, maxDifficulty: 9, bombChanceMax: 0.15, abilityChance: 0.1, allowFrenzy: false, allowGlitch: true },
-  { level: 5, label: "Fruit Frenzy", targetScore: 4000, spawnIntervalStart: 0.65, maxDifficulty: 10, bombChanceMax: 0.2, abilityChance: 0.2, allowFrenzy: true, allowGlitch: true },
+  { level: 4, label: "Berry Blitz", targetScore: 2500, spawnIntervalStart: 0.75, maxDifficulty: 9.5, bombChanceMax: 0.15, abilityChance: 0.1, allowFrenzy: false, allowGlitch: true },
+  { level: 5, label: "Fruit Frenzy", targetScore: 3000, spawnIntervalStart: 0.65, maxDifficulty: 11, bombChanceMax: 0.25, abilityChance: 0.2, allowFrenzy: true, allowGlitch: true },
 ];
 
 export function getLevelConfig(level: number): LevelConfig {

@@ -13,6 +13,7 @@ import RacingGamePage from "./pages/RacingGamePage"
 import EventRank from "./pages/eventRank";
 import Mxfishing from "./pages/Fishinggame";
 import fruitninja from "./pages/Fruitninja"
+import ProofOfPatience from "./proofOfPatience/page.tsx";
 function Router() {
   return (
     <Layout>
@@ -24,6 +25,7 @@ function Router() {
         <Route path="/game/max_fruitninja" component={fruitninja}/>
         <Route path="/game/race_car" component={RacingGamePage} />
         <Route path="/game/fishing_game" component={Mxfishing}/>
+         <Route path="/game/proof_of_patience" component={ProofOfPatience} />
         <Route path="/leaderboard" component={Leaderboard} />
         <Route path="/profile" component={Profile} />
         <Route path="/eventrank" component={EventRank}/>

@@ -121,6 +121,18 @@ export async function syncWalletNFTs(walletLower, provider, allowedCollections) 
   let baselineHoldings = profile ? [...profile.nftHoldings] : [];
   let structureChanged = !profile;
 
+  // Drop holdings tied to collections that have since been removed from
+  // CollectionConfig. The per-collection loop below only visits addresses
+  // still present in allowedCollections, so a delisted contract's holdings
+  // (and multiplier bonus) would otherwise never get cleaned up.
+  const allowedAddresses = new Set(allowedCollections.map(c => c.address.toLowerCase()));
+  const orphanedCount = baselineHoldings.filter(h => !allowedAddresses.has(h.contractAddress)).length;
+  if (orphanedCount > 0) {
+    console.log(`   ├─ 🗑️  Dropping ${orphanedCount} holding(s) from delisted collection(s).`);
+    baselineHoldings = baselineHoldings.filter(h => allowedAddresses.has(h.contractAddress));
+    structureChanged = true;
+  }
+
   for (const collection of allowedCollections) {
     const contractLower = collection.address.toLowerCase();
 
