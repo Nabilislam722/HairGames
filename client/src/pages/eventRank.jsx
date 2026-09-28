@@ -16,7 +16,7 @@ const MEDAL = [
   { emoji: "🥉", color: "#fb923c", rowBg: "rgba(251,146,60,0.04)",  avatarBg: "rgba(251,146,60,0.1)",  avatarBorder: "rgba(251,146,60,0.22)"  },
 ];
 
-// ─── Glitch clock ─────────────────────────────────────────────────────────────
+//  Glitch clock 
 const GLITCH_POOL = "0123456789░▓█?!×≠∞╬#@$%";
 
 function GlitchClock() {

@@ -35,7 +35,10 @@ export default function SpaceHuggersGame() {
 
   const iframeRef = useRef(null);
   const hasSubmittedRef = useRef(false);
-  const previousTotalKillsRef = useRef(0);
+  
+  // ANTI-CHEAT: Trackers for strictly sequential progression 
+  const expectedLevelRef = useRef(1);
+  const lastSuccessfulTotalKillsRef = useRef(0);
 
   const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash: activeTxHash,
@@ -46,6 +49,7 @@ export default function SpaceHuggersGame() {
     return () => { document.body.style.overflow = ""; };
   }, []);
 
+  // Handle successful transaction confirmation
   useEffect(() => {
     if (isConfirmed && activeTxHash) {
       console.log("Transaction successfully written to block matrix!");
@@ -54,12 +58,18 @@ export default function SpaceHuggersGame() {
         iframeRef.current.contentWindow.postMessage({ type: "WEB3_TX_SUCCESS" }, "*");
       }
 
+      // ONLY advance the progression trackers upon successful confirmation
+      if (currentLevelData) {
+        expectedLevelRef.current = currentLevelData.level + 1;
+        lastSuccessfulTotalKillsRef.current = currentLevelData.incomingTotalKills;
+      }
+
       setTxLoading(false);
       setCurrentLevelData(null);
       hasSubmittedRef.current = false;
       setActiveTxHash(undefined);
     }
-  }, [isConfirmed, activeTxHash]);
+  }, [isConfirmed, activeTxHash, currentLevelData]);
 
   useEffect(() => {
     const handleMessage = async (event) => {
@@ -72,18 +82,30 @@ export default function SpaceHuggersGame() {
         console.error("Wallet not connected. Cannot submit level score data.");
         return;
       }
+      
+      // Detect game restart
+      if (level === 1) {
+        expectedLevelRef.current = 1;
+        lastSuccessfulTotalKillsRef.current = 0;
+      } else if (incomingTotalKills < lastSuccessfulTotalKillsRef.current) {
+        console.error("Anti-cheat: Invalid state. Kills decreased without resetting to Level 1.");
+        return;
+      }
+
+      // Prevent level skipping
+      if (level !== expectedLevelRef.current) {
+        console.error(`Anti-cheat: Level skip detected! Expected level ${expectedLevelRef.current}, but got ${level}.`);
+        return; 
+      }
 
       if (hasSubmittedRef.current) return;
       hasSubmittedRef.current = true;
 
-      if (level === 1 || incomingTotalKills < previousTotalKillsRef.current) {
-          previousTotalKillsRef.current = 0;
-      }
+      // Kills for this specific level run
+      const currentLevelKills = incomingTotalKills - lastSuccessfulTotalKillsRef.current;
 
-      const currentLevelKills = incomingTotalKills - previousTotalKillsRef.current;
-      previousTotalKillsRef.current = incomingTotalKills;
-
-      setCurrentLevelData({ level, livesRemaining, kills: currentLevelKills, score: null });
+      // Save payload so trackers can be updated strictly on success/bypass later
+      setCurrentLevelData({ level, livesRemaining, kills: currentLevelKills, score: null, incomingTotalKills });
       setTxLoading(true);
       setTxError(null);
 
@@ -145,10 +167,17 @@ export default function SpaceHuggersGame() {
   }, [isConnected, address, writeContractAsync]);
 
   const handleManualBypassRetry = () => {
+    // If bypassing, act as if level succeeded so the next one isn't rejected
+    if (currentLevelData) {
+      expectedLevelRef.current = currentLevelData.level + 1;
+      lastSuccessfulTotalKillsRef.current = currentLevelData.incomingTotalKills;
+    }
+
     hasSubmittedRef.current = false;
     setTxLoading(false);
     setTxError(null);
     setActiveTxHash(undefined);
+    setCurrentLevelData(null);
     if (iframeRef.current && iframeRef.current.contentWindow) {
       iframeRef.current.contentWindow.postMessage({ type: "WEB3_TX_SUCCESS" }, "*");
     }
@@ -194,10 +223,10 @@ export default function SpaceHuggersGame() {
             </Button>
             <Button
               variant="outline"
-              onClick={(() => {
+              onClick={() => {
                 hasSubmittedRef.current = false;
                 setTxError(null);
-              })}
+              }}
               className="font-mono text-xs uppercase tracking-wider"
             >
               Retry Submission

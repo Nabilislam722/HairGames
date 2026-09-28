@@ -246,7 +246,7 @@ export default function Home() {
     <div className="flex flex-col gap-0">
 
       {/* HERO */}
-      <section ref={heroRef} className="relative min-h-[92vh] flex flex-col items-center justify-center overflow-hidden rounded-3xl border border-white/10 mx-4 sm:mx-8 md:mx-16 lg:mx-32 xl:mx-44">
+      <section ref={heroRef} className="relative min-h-[92vh] flex flex-col items-center justify-center overflow-hidden rounded-3xl border border-white/10 mx-4 sm:mx-8 md:mx-16 lg:mx-32 xl:mx-44 w-[80vw]">
         <motion.div className="absolute inset-0 z-0 scale-110" style={{ y: bgY }}>
           <img src={BackgroundImg} alt="" className="w-full h-full object-cover opacity-20 blur-[3px]" />
           <div className="absolute inset-0 bg-gradient-to-b from-background/70 via-background/50 to-background" />

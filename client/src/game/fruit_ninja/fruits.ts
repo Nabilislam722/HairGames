@@ -155,7 +155,7 @@ export const FRUITS: FruitKind[] = [
 
 export const BOMB = {
   id: "bomb" as const,
-  radius: 46,
+  radius: 45,
 };
 
 export const ABILITY_FRUITS: AbilityKind[] = [
@@ -191,7 +191,7 @@ export const ABILITY_FRUITS: AbilityKind[] = [
     inner: "#fff8e1",
     seed: "#ff6f00",
     radius: 42,
-    points: 400,
+    points: 100,
     ability: "golden",
     glow: "#ffca28",
   },

@@ -1,6 +1,6 @@
 import { Link } from "wouter";
 import {
-  CheckCircle2, Play, Gamepad2, Zap, Star, ExternalLink, Loader2, Handshake, Sparkles
+  CheckCircle2, Play, Gamepad2, Zap, Star, ExternalLink, Loader2, Handshake, Sparkles, Settings
 } from "lucide-react";
 import { GiCrenelCrown } from "react-icons/gi";
 import { MdOutlineWallet } from "react-icons/md";
@@ -10,6 +10,7 @@ import { VOTING_CONTRACT_ADDRESS, VOTING_CONTRACT_ABI } from "@/lib/votingContra
 import {
   useAccount, useBalance, useReadContract
 } from "wagmi";
+import { formatUnits, parseAbi } from "viem";
 import { useState, useEffect, useMemo } from "react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import X_logo from "../assets/x.jpg";
@@ -26,14 +27,22 @@ import NFH_LOGO from "/game_assets/NeedforHairlogo.png";
 import voidStriker_LOGO from "/game_assets/voidStrikerLogo.png";
 import needBanner from "/game_assets/needBanner.png";
 import popthumbnail from "/game_assets/popthumbnail.png";
+import DISCORD_LOGO from '/discord.jpg';
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
+
+const HAIR_TOKEN = "0x5B774f563C902FA7b203FB7029ed6eD4Ce274705";
+const MIN_HOLD_USD = 1;
+const ERC20_ABI = parseAbi([
+  "function balanceOf(address) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+]);
 
 const QUESTS = [
   {
     id: "twitter_follow",
     title: "Follow on X",
-    description: "Join the community to unlock +100 PTS.",
+    description: "Join the community to unlock +100 HP.",
     points: 100,
     actionLabel: "Follow @HairMaxToken",
     actionClass: "btn-o",
@@ -43,24 +52,41 @@ const QUESTS = [
   {
     id: "hairy_person",
     title: "Join Guild HAIR",
-    description: "Become a Hairy Person and unlock +200 PTS.",
+    description: "Become a Hairy Person and unlock +200 HP.",
     points: 200,
     actionLabel: "Join Guild",
     actionClass: "btn-n",
     url: "https://guild.xyz/hair",
     icon: <img src={Guild_logo} alt="Guild" />,
   },
+  {
+    id: "hairy_holder",
+    title: "Buy atleast 1$ worth of HAIR!",
+    description: "Buy some hair and unlock +10000 HP.",
+    points: 10000,
+    actionLabel: "Buy now",
+    actionClass: "btn-n",
+    url: "https://www.sushi.com/hemi/swap?token0=0xad11a8beb98bbf61dbb1aa0f6d6f2ecd87b35afa&token1=0x5b774f563c902fa7b203fb7029ed6ed4ce274705",
+    icon: <img src={Guild_logo} />,
+  },
+  {
+    id: "hair_discord",
+    title: "Join Hair discord server",
+    description: "join and unlock +2000 HP.",
+    points: 2000,
+    actionLabel: "Join now",
+    actionClass: "btn-n",
+    url: "https://discord.gg/uNt4FyWvqP",
+    icon: <img src={DISCORD_LOGO} />,
+  },
 ];
 
-// Game "id" below must exactly match the keys registered on-chain via
-// BestGameVoting.addGame(key), in the same order, so the contract's
-// getGames()/getAllTimeVotes() results line up with this list.
 const GAMES = [
   {
     id: "proof_of_patience",
     title: "Proof of Patience",
     description: "A meme game about Midweek Max's Hemi team's long-awaited answers to questions",
-    entryFee: GAME_COST_ETH,
+    entryFee: 0.000008,
     image: popthumbnail,
     logo: FruitLogo,
     category: "Shooting",
@@ -259,7 +285,41 @@ function PartnerGameCard({ game, index }) {
   );
 }
 
-function HallOfFame({ game, totalVotes }) {
+function HallOfFame({ game, totalVotes, isLoading }) {
+  if (isLoading) {
+    return (
+      <motion.section
+        className="hof"
+        initial={{ opacity: 0, y: 16 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.5 }}
+        style={{
+          minHeight: "320px",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          gap: "1.25rem",
+          background: "rgba(255, 255, 255, 0.02)",
+          border: "1px solid rgba(255, 255, 255, 0.05)",
+          borderRadius: "24px"
+        }}
+      >
+        <Settings size={44} className="spin" color="rgba(255, 255, 255, 0.2)" style={{ animationDuration: '3.5s' }} />
+        <span style={{
+          fontFamily: "monospace",
+          fontSize: "12px",
+          textTransform: "uppercase",
+          letterSpacing: "0.2em",
+          color: "rgba(255, 255, 255, 0.35)",
+          fontWeight: "bold"
+        }}>
+          Vote Calculating....
+        </span>
+      </motion.section>
+    );
+  }
+
   if (!game) return null;
 
   const words = game.title.split(" ");
@@ -343,20 +403,45 @@ export default function Dashboard() {
   const { address, isConnected } = useAccount();
   const { data: ethBalanceData } = useBalance({ address });
 
+  // ----------------------------------------------------------------------
+  // SET TO FALSE TO REVEAL THE HALL OF FAME WINNER ONCE THE EPOCH ENDS
+  // ----------------------------------------------------------------------
+  const IS_CALCULATING_EPOCH = true;
+
   const [points, setPoints] = useState(null);
   const [multiplier, setMultiplier] = useState(1.0);
+  const [hairPrice, setHairPrice] = useState(null);
 
   const [questSteps, setQuestSteps] = useState(
     () => Object.fromEntries(QUESTS.map(q => [q.id, "idle"]))
   );
   const setStep = (id, step) => setQuestSteps(p => ({ ...p, [id]: step }));
 
-  const { data: allTimeVotesData } = useReadContract({
+  const { data: allTimeVotesData, isLoading: isVotesLoading } = useReadContract({
     address: VOTING_CONTRACT_ADDRESS,
     abi: VOTING_CONTRACT_ABI,
     functionName: "getAllTimeVotes",
     query: { refetchInterval: 15000 },
   });
+
+  const { data: hairBalanceRaw } = useReadContract({
+    address: HAIR_TOKEN,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [address],
+    query: { enabled: !!address, refetchInterval: 15000 },
+  });
+
+  const { data: hairDecimals } = useReadContract({
+    address: HAIR_TOKEN,
+    abi: ERC20_ABI,
+    functionName: "decimals",
+  });
+
+  const holderEligible = useMemo(() => {
+    if (hairBalanceRaw == null || hairDecimals == null || !hairPrice) return false;
+    return Number(formatUnits(hairBalanceRaw, hairDecimals)) * hairPrice >= MIN_HOLD_USD;
+  }, [hairBalanceRaw, hairDecimals, hairPrice]);
 
   const gameVotes = useMemo(() => {
     const base = Object.fromEntries(GAMES.map(g => [g.id, 0]));
@@ -367,6 +452,31 @@ export default function Dashboard() {
     });
     return base;
   }, [allTimeVotesData]);
+
+  useEffect(() => {
+    const loadPrice = () =>
+      fetch(`https://api.dexscreener.com/latest/dex/tokens/${HAIR_TOKEN}`)
+        .then(r => r.json())
+        .then(d => {
+          const pair = [...(d.pairs || [])]
+            .sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
+          if (pair?.priceUsd) setHairPrice(Number(pair.priceUsd));
+        })
+        .catch(console.error);
+
+    loadPrice();
+    const id = setInterval(loadPrice, 60000);
+    return () => clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    if (!holderEligible) return;
+    setQuestSteps(p =>
+      p.hairy_holder === "idle" || p.hairy_holder === "following"
+        ? { ...p, hairy_holder: "claimable" }
+        : p
+    );
+  }, [holderEligible]);
 
   useEffect(() => {
     if (!address) return;
@@ -389,11 +499,12 @@ export default function Dashboard() {
   const handleAction = q => {
     window.open(q.url, "_blank");
     setStep(q.id, "following");
-    setTimeout(() => setStep(q.id, "claimable"), 10000);
+    if (q.id !== "hairy_holder") setTimeout(() => setStep(q.id, "claimable"), 10000);
   };
 
   const handleClaim = async q => {
     if (!address) return;
+    if (q.id === "hairy_holder" && !holderEligible) { setStep(q.id, "idle"); return; }
     setStep(q.id, "verifying");
     try {
       const r = await fetch(`${API_BASE}/api/points/claim`, {
@@ -484,7 +595,11 @@ export default function Dashboard() {
           </div>
         </section>
 
-        <HallOfFame game={championGame} totalVotes={totalVotes} />
+        <HallOfFame 
+          game={championGame} 
+          totalVotes={totalVotes} 
+          isLoading={IS_CALCULATING_EPOCH || isVotesLoading || !allTimeVotesData} 
+        />
 
         <section className="sec">
           <div className="s-head">

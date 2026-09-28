@@ -3,8 +3,8 @@ import { useAccount } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { motion } from "framer-motion";
 import {
-  Layers, Star, Shield, Crown, ChevronRight, Copy, Check,
-  Sprout, Zap, Flame, Gem, Trophy
+  Layers, Trophy, Shield, Crown, ChevronRight, Copy, Check,
+  Sprout, Play, Zap, Gem, Gift, Vault, HelpCircle
 } from "lucide-react";
 import { MdLocalFireDepartment } from "react-icons/md";
 import { RiCopperCoinFill } from "react-icons/ri";
@@ -13,20 +13,21 @@ import { FaXTwitter, FaDiscord } from "react-icons/fa6";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
-// NFT Image Map 
+// NFT Image Map
 // Key   = contract address (lowercase)
 // Value = public image URL (Cloudflare R2 or any CDN)
 const NFT_IMAGE_FALLBACK = "https://amaranth-imperial-otter-134.mypinata.cloud/ipfs/bafybeicdxf6wh2i7jtkinytziitfhv4nagmkvmzaraoy5b2ris27jiu7ae";
 
-// Single source of truth for level thresholds — shared by getLevelInfo() and
-// the roadmap list below, instead of keeping two copies in sync by hand.
+// Single source of truth for level thresholds. Each level's ceiling is the
+// next level's min (so the header/level bars always agree), and rank order
+// here also drives the roadmap render order.
 const LEVELS = [
-  { level: 1, title: "Rookie",   min: 0,        max: 5000,     color: "#94a3b8", icon: Sprout },
-  { level: 2, title: "Player",   min: 50000,    max: 15000,    color: "#34d399", icon: Zap },
-  { level: 3, title: "Veteran",  min: 150000,   max: 400000,   color: "#38bdf8", icon: Flame },
-  { level: 4, title: "Elite",    min: 4000000,  max: 1000000,  color: "#a78bfa", icon: Gem },
-  { level: 5, title: "Legend",   min: 10000000, max: 25000000, color: "#fb923c", icon: Crown },
-  { level: 6, title: "Immortal", min: 25000000, max: 99999999, color: "#f43f5e", icon: Trophy },
+  { level: 1, title: "Rookie",   min: 0,        color: "#94a3b8", icon: Sprout },
+  { level: 2, title: "Player",   min: 50000,    color: "#10b981", icon: Play },
+  { level: 3, title: "Veteran",  min: 150000,   color: "#3b82f6", icon: Shield },
+  { level: 4, title: "Elite",    min: 4000000,  color: "#a855f7", icon: Gem },
+  { level: 5, title: "Legend",   min: 10000000, color: "#fb923c", icon: Crown },
+  { level: 6, title: "Immortal", min: 25000000, color: "#f43f5e", icon: Trophy },
 ];
 
 /* Helpers */
@@ -36,9 +37,22 @@ function shortenAddr(addr) {
 }
 
 function getLevelInfo(points) {
-  const current = LEVELS.findLast(l => points >= l.min) ?? LEVELS[0];
-  const pct = Math.min(100, Math.round(((points - current.min) / (current.max - current.min)) * 100));
-  return { ...current, pct };
+  const idx = LEVELS.findLastIndex(l => points >= l.min);
+  const current = LEVELS[idx] ?? LEVELS[0];
+  const next = LEVELS[idx + 1];
+  const max = next ? next.min : current.min;
+  const pct = next ? Math.min(100, Math.round(((points - current.min) / (max - current.min)) * 100)) : 100;
+  return { ...current, max, pct, isMaxed: !next };
+}
+
+function getRoadmap(points) {
+  const activeIdx = LEVELS.findLastIndex(l => points >= l.min);
+  return LEVELS.map((l, i) => {
+    if (i < activeIdx) return { ...l, status: "complete", pct: 100 };
+    if (i === activeIdx) return { ...l, status: "active", pct: 100 };
+    if (i === activeIdx + 1) return { ...l, status: "next", pct: Math.min(100, Math.round((points / l.min) * 100)) };
+    return { ...l, status: "locked", pct: 0 };
+  });
 }
 
 // Deterministic string hash + seeded PRNG — no crypto needed, just needs to
@@ -98,7 +112,7 @@ function AddressAvatar({ address, className = "" }) {
   );
 }
 
-function StatCard({ icon: Icon, label, value, sub, color, delay = 0 }) {
+function StatCard({ icon: Icon, label, value, sub, color, delay = 0, badge }) {
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -117,9 +131,14 @@ function StatCard({ icon: Icon, label, value, sub, color, delay = 0 }) {
         >
           <Icon className="w-4 h-4" style={{ color }} />
         </div>
+        {badge && (
+          <span className="font-mono text-[8px] uppercase tracking-widest text-white/30 bg-white/6 border border-white/10 px-1.5 py-0.5 rounded-md">
+            {badge}
+          </span>
+        )}
       </div>
       <p className="font-mono text-[10px] uppercase tracking-widest text-white/35 mb-1">{label}</p>
-      <p className="font-display font-black text-2xl text-white leading-none">{value}</p>
+      <p className="font-display font-black text-2xl text-white leading-none truncate">{value}</p>
       {sub && <p className="font-mono text-[10px] text-white/30 mt-1">{sub}</p>}
     </motion.div>
   );
@@ -144,10 +163,13 @@ function NFTCard({ nft, index }) {
           }}
         />
         <img
-          src={ nft.imageUrl || NFT_IMAGE_FALLBACK }
+          src={nft.imageUrl || NFT_IMAGE_FALLBACK}
           alt={nft.name}
           className="relative z-10 w-full h-full object-cover"
         />
+        <span className="absolute top-2 right-2 z-20 font-mono text-[8px] font-bold uppercase tracking-widest text-slate-900 bg-white px-1.5 py-0.5 rounded-md">
+          Verified
+        </span>
       </div>
       <div className="p-3">
         <p className="font-mono font-bold text-[11px] text-white/80 truncate">{nft.name}</p>
@@ -159,6 +181,66 @@ function NFTCard({ nft, index }) {
   );
 }
 
+function RoadmapRow({ item }) {
+  const { title, min, color, icon: Icon, status, pct } = item;
+  const litUp = status === "complete" || status === "active";
+  // Rookie is the base rank — its circle is a fixed dark badge rather than
+  // tinted with its own (deliberately muted) bar color.
+  const circleColor = title === "Rookie" ? "#0f172a" : color;
+
+  const statusLabel = {
+    complete: "100% Complete",
+    active: "Active Rank",
+    next: "In Progress",
+    locked: "Locked",
+  }[status];
+
+  // Only "complete" (green) and "active" (the level's own color) get a
+  // colored label — upcoming levels stay neutral, "next" just a shade
+  // brighter than "locked" to hint it's the one being worked toward.
+  const statusColor = status === "complete" ? "#10b981"
+    : status === "active" ? color
+    : status === "next" ? "rgba(255,255,255,0.45)"
+    : "rgba(255,255,255,0.25)";
+
+  return (
+    <div
+      className="flex items-center gap-3 p-3 rounded-xl border transition-all duration-200"
+      style={status === "active"
+        ? { background: `${color}0c`, borderColor: `${color}40` }
+        : { background: "transparent", borderColor: "rgba(255,255,255,0.04)" }
+      }
+    >
+      <div
+        className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0"
+        style={litUp
+          ? { background: circleColor, boxShadow: `0 0 16px ${circleColor}40` }
+          : { background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)" }
+        }
+      >
+        <Icon className="w-3.5 h-3.5" style={{ color: litUp ? "#fff" : "rgba(255,255,255,0.28)" }} />
+      </div>
+
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center justify-between gap-2 mb-1.5">
+          <p className="font-mono text-[11px] font-bold uppercase tracking-widest" style={{ color: litUp ? "#fff" : "rgba(255,255,255,0.4)" }}>
+            {title}
+          </p>
+          <span className="font-mono text-[9px] font-bold uppercase tracking-widest flex-shrink-0" style={{ color: statusColor }}>
+            {statusLabel}
+          </span>
+        </div>
+        <div className="h-1.5 rounded-full bg-white/6 overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all duration-700"
+            style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color}70, ${color})` }}
+          />
+        </div>
+        <p className="font-mono text-[8px] text-white/20 mt-1">{min.toLocaleString()} HP required</p>
+      </div>
+    </div>
+  );
+}
 
 export default function Profile() {
   const { address, isConnected } = useAccount();
@@ -253,9 +335,10 @@ export default function Profile() {
 
   const { points, nftHoldings, multiplier, rank, twitter, discord } = profile;
   const lvlInfo = getLevelInfo(points);
+  const roadmap = getRoadmap(points);
 
   return (
-    <div className="w-full max-w-5xl mx-auto px-2 sm:px-4 py-6 space-y-6">
+    <div className="w-full max-w-6xl mx-auto px-2 sm:px-4 py-6 space-y-6">
 
       {/* Identity Card  */}
       <motion.div
@@ -298,35 +381,42 @@ export default function Profile() {
               </h1>
               <button
                 onClick={copyAddr}
-                className="w-6 h-6 rounded-md bg-white/6 border border-white/10 flex items-center justify-center text-white/40 hover:text-white transition-colors"
+                className="w-7 h-7 rounded-full bg-white/6 border border-white/10 flex items-center justify-center text-white/40 hover:text-white transition-colors"
               >
                 {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+              </button>
+
+              <span
+                title="How ranks & scoring work"
+                className="w-7 h-7 rounded-full bg-white/6 border border-white/10 flex items-center justify-center text-white/40"
+              >
+                <HelpCircle className="w-3.5 h-3.5" />
+              </span>
+
+              <button
+                onClick={connectDiscord}
+                disabled={!!discord}
+                title={discord ? `${discord} — connected` : "Connect Discord"}
+                className={`w-7 h-7 rounded-full border flex items-center justify-center transition-colors ${
+                  discord
+                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400 cursor-not-allowed"
+                    : "bg-white/6 border-white/10 text-white/40 hover:text-white cursor-pointer"
+                }`}
+              >
+                <FaDiscord className="w-3.5 h-3.5" />
               </button>
 
               <button
                 onClick={connectTwitter}
                 disabled={!!twitter}
                 title={twitter ? `@${twitter} — connected` : "Connect X"}
-                className={`w-8 h-8 rounded-md border flex items-center justify-center transition-colors ${
+                className={`w-7 h-7 rounded-full border flex items-center justify-center transition-colors ${
                   twitter
                     ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400 cursor-not-allowed"
                     : "bg-white/6 border-white/10 text-white/40 hover:text-white cursor-pointer"
                 }`}
               >
-                <FaXTwitter className="w-5 h-5" />
-              </button>
-
-              <button
-                onClick={connectDiscord}
-                disabled={!!discord}
-                title={discord ? `${discord} — connected` : "Connect Discord"}
-                className={`w-8 h-8 rounded-md border flex items-center justify-center transition-colors ${
-                  discord
-                    ? "bg-emerald-500/15 border-emerald-500/40 text-emerald-400 cursor-not-allowed"
-                    : "bg-white/6 border-white/10 text-white/40 hover:text-white cursor-pointer"
-                }`}
-              >
-                <FaDiscord className="w-5 h-5" />
+                <FaXTwitter className="w-3.5 h-3.5" />
               </button>
 
               {rank && rank <= 10 && (
@@ -373,7 +463,9 @@ export default function Profile() {
                 </motion.div>
               </div>
               <p className="font-mono text-[9px] text-white/25">
-                {lvlInfo.pct}% · {(lvlInfo.max - points).toLocaleString()} HP to Level {lvlInfo.level + 1}
+                {lvlInfo.isMaxed
+                  ? "Max level reached"
+                  : `${lvlInfo.pct}% · ${(lvlInfo.max - points).toLocaleString()} HP to Level ${lvlInfo.level + 1}`}
               </p>
             </div>
           </div>
@@ -390,109 +482,84 @@ export default function Profile() {
       </motion.div>
 
       {/* ══ Live Stat Cards ═══════════════════════════════════════════ */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         <StatCard
           icon={RiCopperCoinFill} label="Total Points" value={points.toLocaleString()}
-          sub="Hair Points" color="#fb923c" delay={0.1}
+          sub="Hair Points" color="#f97316" delay={0.1}
         />
         <StatCard
-          icon={Star} label="Global Rank" value={rank ? `#${rank}` : "—"}
-          sub="All players" color="#a78bfa" delay={0.15}
+          icon={Trophy} label="Global Rank" value={rank ? `#${rank}` : "—"}
+          sub="All players" color="#a855f7" delay={0.14}
         />
         <StatCard
           icon={Layers} label="NFTs Owned" value={nftHoldings.length}
-          sub="Verified collection holdings" color="#38bdf8" delay={0.2}
+          sub="Verified holdings" color="#3b82f6" delay={0.18}
+        />
+        <StatCard
+          icon={Gift} label="Rewards" value="Hairdrop" sub="Claim points" color="#ec4899" delay={0.22} badge="Coming Soon"
+        />
+        <StatCard
+          icon={Vault} label="Vault" value="Staking" sub="...." color="#10b981" delay={0.26} badge="Coming Soon"
         />
       </div>
 
-      {/* ══ NFT Collection Grid ════════════════════════════════════ */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.35, duration: 0.4 }}
-        className="rounded-2xl border border-white/8 bg-white/3 p-5"
-      >
-        <div className="flex items-center justify-between mb-5">
-          <h3 className="font-mono text-[11px] uppercase tracking-widest text-white/50 flex items-center gap-2">
-            <Layers className="w-3.5 h-3.5 text-sky-400" /> NFT Holdings
-            <span className="px-1.5 py-0.5 rounded-md bg-white/6 text-white/40 text-[9px] font-mono">
-              {nftHoldings.length} items
-            </span>
-          </h3>
-          {nftHoldings.length > 0 && (
-            <button className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-white/30 hover:text-white/60 transition-colors">
-              View all <ChevronRight className="w-3 h-3" />
-            </button>
-          )}
-        </div>
+      {/* ══ NFT Holdings + Level Roadmap ═══════════════════════════════ */}
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
 
-        {nftHoldings.length > 0 ? (
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3">
-            {nftHoldings.map((nft, i) => (
-              <NFTCard key={`${nft.contractAddress}-${nft.tokenId}`} nft={nft} index={i} />
+        {/* NFT Collection Grid */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.3, duration: 0.4 }}
+          className="lg:col-span-2 rounded-2xl border border-white/8 bg-white/3 p-5"
+        >
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="font-mono text-[11px] uppercase tracking-widest text-white/50 flex items-center gap-2">
+              <Layers className="w-3.5 h-3.5 text-sky-400" /> NFT Holdings
+              <span className="px-1.5 py-0.5 rounded-md bg-white/6 text-white/40 text-[9px] font-mono">
+                {nftHoldings.length}
+              </span>
+            </h3>
+            {nftHoldings.length > 0 && (
+              <button className="flex items-center gap-1 font-mono text-[10px] uppercase tracking-widest text-primary/70 hover:text-primary transition-colors">
+                View all <ChevronRight className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+
+          {nftHoldings.length > 0 ? (
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 gap-3">
+              {nftHoldings.map((nft, i) => (
+                <NFTCard key={`${nft.contractAddress}-${nft.tokenId}`} nft={nft} index={i} />
+              ))}
+            </div>
+          ) : (
+            <div className="py-12 text-center">
+              <Layers className="w-8 h-8 text-white/10 mx-auto mb-3" />
+              <p className="font-mono text-[11px] uppercase tracking-widest text-white/25">No supported NFTs found</p>
+              <p className="font-mono text-[10px] text-white/15 mt-1">Acquire ecosystem collection NFTs to secure scoring multipliers</p>
+            </div>
+          )}
+        </motion.div>
+
+        {/* Level Roadmap */}
+        <motion.div
+          initial={{ opacity: 0, y: 16 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.36, duration: 0.4 }}
+          className="lg:col-span-3 rounded-2xl border border-white/8 bg-white/3 p-5"
+        >
+          <h3 className="font-mono text-[11px] uppercase tracking-widest text-white/50 flex items-center gap-2 mb-5">
+            <Zap className="w-3.5 h-3.5 text-yellow-400" /> Level Roadmap
+          </h3>
+          <div className="space-y-2">
+            {roadmap.map(item => (
+              <RoadmapRow key={item.level} item={item} />
             ))}
           </div>
-        ) : (
-          <div className="py-12 text-center">
-            <Layers className="w-8 h-8 text-white/10 mx-auto mb-3" />
-            <p className="font-mono text-[11px] uppercase tracking-widest text-white/25">No supported NFTs found</p>
-            <p className="font-mono text-[10px] text-white/15 mt-1">Acquire ecosystem collection NFTs to secure scoring multipliers</p>
-          </div>
-        )}
-      </motion.div>
+        </motion.div>
 
-      {/* ══ Level Roadmap ══════════════════════════════════════════ */}
-      <motion.div
-        initial={{ opacity: 0, y: 16 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.4, duration: 0.4 }}
-        className="rounded-2xl border border-white/8 bg-white/3 p-5"
-      >
-        <h3 className="font-mono text-[11px] uppercase tracking-widest text-white/50 flex items-center gap-2 mb-5">
-          <Zap className="w-3.5 h-3.5 text-yellow-400" /> Level Roadmap
-        </h3>
-        <div className="space-y-2">
-          {LEVELS.map(l => {
-            const isActive = points >= l.min && points < l.max;
-            const isPassed = points >= l.max;
-            const rowPct = isPassed ? 100 : isActive ? Math.round(((points - l.min) / (l.max - l.min)) * 100) : 0;
-            const litUp = isPassed || isActive;
-            return (
-              <div
-                key={l.level}
-                className="flex items-center gap-3 p-3 rounded-xl border transition-all duration-200"
-                style={isActive
-                  ? { background: `${l.color}08`, borderColor: `${l.color}255` }
-                  : { background: "transparent", borderColor: "rgba(255,255,255,0.04)" }
-                }
-              >
-                <div
-                  className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
-                  style={{
-                    background: litUp ? `${l.color}18` : "rgba(255,255,255,0.04)",
-                    border: `1px solid ${litUp ? `${l.color}30` : "rgba(255,255,255,0.06)"}`,
-                  }}
-                >
-                  <l.icon className="w-3.5 h-3.5" style={{ color: litUp ? l.color : "rgba(255,255,255,0.25)" }} />
-                </div>
-                <div className="w-14 flex-shrink-0">
-                  <p className="font-mono text-[10px] font-bold uppercase tracking-widest" style={{ color: litUp ? l.color : "rgba(255,255,255,0.25)" }}>
-                    {l.title}
-                  </p>
-                  <p className="font-mono text-[8px] text-white/20">{l.min.toLocaleString()} HP</p>
-                </div>
-                <div className="flex-1 h-1.5 rounded-full bg-white/6 overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{ width: `${rowPct}%`, background: `linear-gradient(90deg, ${l.color}60, ${l.color})` }}
-                  />
-                </div>
-                <span className="font-mono text-[9px] text-white/25 w-8 text-right flex-shrink-0">{rowPct}%</span>
-              </div>
-            );
-          })}
-        </div>
-      </motion.div>
+      </div>
 
     </div>
   );

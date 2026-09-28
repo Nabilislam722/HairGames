@@ -29,7 +29,7 @@ export const verifyPoints = async (req, res) => {
 
     let points = 0;
     if (gameId === "space_huggers") {
-      points = Math.min(Math.round((Number(kills) * 50) + (Number(livesRemaining) * 100)), 65535) || 0;
+      points = Math.min(Math.round((Number(kills) * 30) + (Number(livesRemaining) * 100)), 65535) || 0;
     } else {
       points = Number(req.body.score) || 0;
     }
@@ -239,7 +239,7 @@ export const claimTask = async (req, res) => {
   const { wallet, task } = req.body;
   const walletLower = wallet?.toLowerCase();
 
-  if (!walletLower || (task !== 'twitter_follow' && task !== 'hairy_person')) {
+  if (!walletLower || (task !== 'twitter_follow' && task !== 'hairy_person' && task !== 'hairy_holder' && task !== 'hair_discord')) {
     return res.status(400).json({ error: "Invalid claim request" });
   }
 

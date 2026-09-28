@@ -55,7 +55,7 @@ import { AttractOverlay, ResultOverlay } from "./components/StageOverlays";
 import { ThumbBar } from "./components/ThumbBar";
 
 const CONTRACT_ADDRESS = "0x760d91401Afb3499cf1BD0256b30485BDa40728C";
-const GAME_COST_ETH = "0.00001";
+const GAME_COST_ETH = "0.000008";
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const STEP = SIM_STEP;
