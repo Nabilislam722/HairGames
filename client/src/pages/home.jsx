@@ -313,9 +313,9 @@ export default function Home() {
         <div className="container mx-auto px-4">
           <div className="flex flex-col divide-y divide-white/5">
             {[
-              { label: "Total Fee Collected", value: "0.2", suffix: " ETH", icon: Coins, accent: "text-accent", num: true },
+              { label: "Total Fee Collected", value: "0.3", suffix: " ETH", icon: Coins, accent: "text-accent", num: true },
               { label: "Active Players", value: "55", suffix: "", icon: Trophy, accent: "text-primary", num: true },
-              { label: "Games Live", value: "5", suffix: "", icon: Zap, accent: "text-secondary", num: true },
+              { label: "Games Live", value: "6", suffix: "", icon: Zap, accent: "text-secondary", num: true },
             ].map((s, i) => (
               <Reveal key={i} delay={i * 0.1} from="left">
                 <div className="group flex items-center justify-between py-7 cursor-default">

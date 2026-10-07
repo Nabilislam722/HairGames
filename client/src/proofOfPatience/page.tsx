@@ -22,7 +22,6 @@ import {
   SPAWN_Y,
   STAGE_Y,
   answersTo,
-  assistedAimAngle,
   backlogAfterReview,
   difficultyAt,
   expectedLetter,
@@ -31,9 +30,7 @@ import {
   patienceTier,
   perfectChainBonus,
   pickSpawnX,
-  predictedTarget,
   questionPool,
-  questionsOverlap,
   scoreForAnswer,
   separateQuestions,
   shouldBurnBacklog,
@@ -61,22 +58,61 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const STEP = SIM_STEP;
 const KEYBOARD_AIM_SPEED = 3.2;
 const MAX_STEPS_PER_FRAME = 5;
+const REVIEW_BONUS = 15;
+const WIN_BACKLOG_BONUS = 15;
+const WIN_METER_BONUS = 1;
+const PC_SCORE_SCALE = 0.75;
+const MOBILE_SCORE_SCALE = 0.85;
+const ASSIST_CONE = 0.32;
+const ASSIST_HIT_PADDING = 6;
+const AIM_MIN = -Math.PI + 0.12;
+const AIM_MAX = -0.12;
+
+const IS_MOBILE =
+  typeof window !== "undefined" &&
+  typeof navigator !== "undefined" &&
+  ("ontouchstart" in window || navigator.maxTouchPoints > 0);
+
+const HUD_INTERVAL = IS_MOBILE ? 0.25 : 0.08;
 
 function pickInitialQuality() {
-  if (typeof navigator === "undefined") return "high";
-  const touch =
-    typeof window !== "undefined" &&
-    (("ontouchstart" in window) || navigator.maxTouchPoints > 0);
-  if (!touch) return "high";
-  const cores = navigator.hardwareConcurrency ?? 8;
-  const memory = navigator.deviceMemory;
-  if (cores <= 4 || (memory !== undefined && memory <= 4)) return "low";
-  return "medium";
+  return IS_MOBILE ? "low" : "high";
 }
 
 function isActiveRunError(err) {
   const text = `${err?.reason ?? ""} ${err?.shortMessage ?? ""} ${err?.message ?? ""}`.toLowerCase();
   return text.includes("run already in progress");
+}
+
+// Resilient Fetch Wrapper to handle silent drops on mobile networks
+async function fetchWithRetry(url, options, maxRetries = 3, timeoutMs = 12000) {
+  let lastError;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      const res = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(timeoutId);
+      
+      // Treat 5xx server errors as retriable network glitches
+      if (!res.ok && res.status >= 500) {
+        throw new Error(`Server returned ${res.status}`);
+      }
+      return res;
+    } catch (err) {
+      clearTimeout(timeoutId);
+      lastError = err;
+      if (attempt < maxRetries) {
+        // Wait 1 second before retrying to let the network stabilize
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+  }
+  // If we exhaust all 3 retries, throw the final error
+  if (lastError?.name === 'AbortError') {
+    throw new Error("Server took too long to respond. Connection may be dropped.");
+  }
+  throw lastError;
 }
 
 function createGame(phase = "idle") {
@@ -93,6 +129,8 @@ function createGame(phase = "idle") {
     popMeter: 0,
     ammoIndex: 0,
     aim: -Math.PI / 2,
+    assist: false,
+    scoreScale: IS_MOBILE ? MOBILE_SCORE_SCALE : PC_SCORE_SCALE,
     questions: [],
     projectiles: [],
     spawnTimer: 2.8,
@@ -141,17 +179,37 @@ function say(game, text, seconds = 2) {
   game.announcementAge = 0;
 }
 
-function assistedAim(game) {
-  return assistedAimAngle(game.aim, LETTERS[game.ammoIndex], game.questions);
+function assistAim(game) {
+  const letter = LETTERS[game.ammoIndex];
+  const fallScale = game.slowTimer > 0 ? 0.48 : 1;
+  let bestAngle = null;
+  let bestDiff = ASSIST_CONE;
+  for (const question of game.questions) {
+    if (!answersTo(question, letter)) continue;
+    const distance = Math.hypot(question.x - DESK_X, question.y - DESK_Y);
+    const targetY = question.y + question.speed * fallScale * (distance / SHOT_SPEED);
+    const angle = Math.atan2(targetY - DESK_Y, question.x - DESK_X);
+    const diff = Math.abs(angle - game.aim);
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestAngle = angle;
+    }
+  }
+  if (bestAngle !== null) game.aim = Math.max(AIM_MIN, Math.min(AIM_MAX, bestAngle));
 }
 
-function fireShot(game, scene) {
+function fireShot(game, scene, assist = false) {
   if (game.phase !== "playing" || game.cooldown > 0 || game.projectiles.length > 0) return;
-  const aim = assistedAim(game);
+
+  game.assist = assist;
+  if (assist) assistAim(game);
+
+  const aim = game.aim; 
   const letter = LETTERS[game.ammoIndex];
-  game.aim = aim;
+  
   const x = DESK_X + Math.cos(aim) * MUZZLE_OFFSET;
   const y = DESK_Y + Math.sin(aim) * MUZZLE_OFFSET;
+  
   game.projectiles.push({
     id: game.entityId++,
     x,
@@ -198,9 +256,13 @@ function spawnQuestion(game) {
   }
 }
 
+function scaled(game, amount) {
+  return Math.floor(amount * game.scoreScale);
+}
+
 function syncHud(game) {
   return {
-    score: game.score,
+    score: scaled(game, game.score),
     time: Math.max(0, ROUND_SECONDS - game.elapsed),
     backlog: game.backlog,
     combo: game.combo,
@@ -237,7 +299,7 @@ function popOff(game, scene) {
   const cleared = game.questions.length;
   scene?.onPopOff(cleared, game.questions);
   game.questions = [];
-  game.score += cleared * 35;
+  game.score += cleared * 15;
   game.answered += cleared;
   game.popMeter = 0;
   game.flash = 1;
@@ -258,13 +320,14 @@ function updateGame(game, dt, scene) {
   if (game.elapsed >= game.nextReviewAt && game.nextReviewAt < ROUND_SECONDS) {
     const minute = Math.round(game.nextReviewAt / REVIEW_INTERVAL_SECONDS);
     game.slowTimer = Math.max(game.slowTimer, 8);
-    game.score += 30;
+    game.score += REVIEW_BONUS;
     game.backlog = backlogAfterReview(game.backlog);
     say(game, `MWM BREAK ${minute} — CHAT SLOWED, ONE QUESTION ARCHIVED`, 3);
     game.nextReviewAt += REVIEW_INTERVAL_SECONDS;
   }
 
   const difficulty = difficultyAt(game.elapsed);
+  const hitPadding = difficulty.hitPadding + (game.assist ? ASSIST_HIT_PADDING : 0);
   game.spawnTimer = Math.max(0, game.spawnTimer - dt);
   if (game.spawnTimer <= 0 && game.questions.length < difficulty.maxActive) {
     spawnQuestion(game);
@@ -298,7 +361,7 @@ function updateGame(game, dt, scene) {
     if (spentShots.has(shot.id)) continue;
     for (const question of game.questions) {
       if (answeredQuestions.has(question.id)) continue;
-      if (!insideStrikeBox(question, shot.x, shot.y, difficulty.hitPadding)) continue;
+      if (!insideStrikeBox(question, shot.x, shot.y, hitPadding)) continue;
       spentShots.add(shot.id);
       const required = expectedLetter(question.progress);
       const liveAmmo = LETTERS[game.ammoIndex];
@@ -313,7 +376,7 @@ function updateGame(game, dt, scene) {
         question.progress += 1;
         question.sinceHit = 0;
         game.hits += 1;
-        game.score += 4 + Math.floor(game.combo * 0.4);
+        game.score += 2 + Math.floor(game.combo * 0.2);
         game.ammoIndex = nextAmmoIndex(game.ammoIndex);
 
         const cardComplete = question.progress >= question.total;
@@ -340,13 +403,13 @@ function updateGame(game, dt, scene) {
           game.bestCombo = Math.max(game.bestCombo, game.combo);
           const spec =
             QUESTION_SPECS.find((candidate) => candidate.kind === question.kind) ?? QUESTION_SPECS[0];
-          const value = Math.floor(scoreForAnswer(spec, game.combo) * 0.2);
+          const value = Math.floor(scoreForAnswer(spec, game.combo) * 0.1);
           game.score += value;
           game.popMeter = Math.min(100, game.popMeter + (question.words > 1 ? 8 : 6));
 
           let bonus = 0;
           if (game.chainClean) {
-            bonus = Math.floor(perfectChainBonus(game.combo) * 0.2);
+            bonus = Math.floor(perfectChainBonus(game.combo) * 0.1);
             if (bonus > 0) {
               game.score += bonus;
               game.perfectChains += 1;
@@ -358,12 +421,12 @@ function updateGame(game, dt, scene) {
             x: question.x,
             y: question.y,
             color: question.color,
-            value,
+            value: scaled(game, value),
             combo: game.combo,
             cardId: question.id,
             words: question.words,
             perfect: game.chainClean,
-            perfectBonus: bonus,
+            perfectBonus: scaled(game, bonus),
           });
 
           if (game.combo % 3 === 0) {
@@ -372,7 +435,7 @@ function updateGame(game, dt, scene) {
           }
           if (shouldBurnBacklog(game.answered, game.backlog)) {
             game.backlog -= 1;
-            game.score += 20;
+            game.score += 10;
             say(game, "MOD ACTION — ONE BACKLOG QUESTION ARCHIVED", 2.1);
           }
         }
@@ -403,17 +466,15 @@ function updateGame(game, dt, scene) {
     say(game, "THE COMMUNITY TOOK OVER MWM", 4);
   } else if (game.elapsed >= ROUND_SECONDS) {
     game.phase = "won";
-    game.score += Math.max(0, MAX_BACKLOG - game.backlog) * 30;
-    game.score += Math.round(game.popMeter) * 2;
+    game.score += Math.max(0, MAX_BACKLOG - game.backlog) * WIN_BACKLOG_BONUS;
+    game.score += Math.round(game.popMeter) * WIN_METER_BONUS;
     say(game, "MAX SURVIVED THE COMMUNITY Q&A", 4);
   }
 }
 
-/**
- * Syncs the verified on-chain score with the database via /api/points/add
- */
 async function syncPointsToBackend(wallet, txHash, score) {
-  const res = await fetch(`${API_BASE}/api/points/add`, {
+  // Utilizing fetchWithRetry to ensure points sync isn't lost to drops
+  const res = await fetchWithRetry(`${API_BASE}/api/points/add`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -456,8 +517,10 @@ export default function ProofOfPatience() {
 
   const audioRef = useRef(DEFAULT_AUDIO_SETTINGS);
   const controlsRef = useRef({ left: false, right: false, fire: false });
+  const assistRef = useRef(IS_MOBILE);
   const lastSubmissionRef = useRef(null);
   const dragRef = useRef(null);
+  
   const [phase, setPhase] = useState("idle");
   const [audio, setAudio] = useState(DEFAULT_AUDIO_SETTINGS);
   const [showHow, setShowHow] = useState(false);
@@ -495,48 +558,52 @@ export default function ProofOfPatience() {
     setPhase("playing");
   }, []);
 
-  /**
-   * Signs, sends on-chain, and registers points on backend
-   */
   const submitResult = useCallback(async (result) => {
     const provider = new ethers.BrowserProvider(window.ethereum);
     const signer = await provider.getSigner();
     const player = await signer.getAddress();
 
-    // 1. Get server signature
-    const res = await fetch(`${API_BASE}/api/proof-of-patience/signature`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ player, ...result }),
-    });
-    if (!res.ok) {
-      const errData = await res.json().catch(() => ({}));
-      throw new Error(errData.error || "Score could not be verified.");
+    try {
+      // Swapped to fetchWithRetry with up to 3 automatic attempts
+      const res = await fetchWithRetry(`${API_BASE}/api/proof-of-patience/signature`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ player, ...result }),
+      });
+
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "Score could not be verified by the server.");
+      }
+      
+      const { nonce, signature } = await res.json();
+      lastSubmissionRef.current = { result, nonce, signature, txHash: null };
+
+      const contract = new ethers.Contract(CONTRACT_ADDRESS, proofOfPatienceAbi, signer);
+      
+      const tx = await contract.submitScore(
+        result.score,
+        result.survivalSeconds,
+        result.answered,
+        result.shots,
+        result.hits,
+        nonce,
+        signature,
+        { value: ethers.parseEther(GAME_COST_ETH) },
+      );
+      
+      setTxHash(tx.hash);
+      lastSubmissionRef.current.txHash = tx.hash;
+      
+      await tx.wait();
+      await syncPointsToBackend(player, tx.hash, result.score);
+
+    } catch (err) {
+      // Automatically triggers the fallback UI if all retries fail
+      throw err;
     }
-    const { nonce, signature } = await res.json();
-    lastSubmissionRef.current = { result, nonce, signature, txHash: null };
-
-    // 2. Submit score on-chain
-    const contract = new ethers.Contract(CONTRACT_ADDRESS, proofOfPatienceAbi, signer);
-    const tx = await contract.submitScore(
-      result.score,
-      result.survivalSeconds,
-      result.answered,
-      result.shots,
-      result.hits,
-      nonce,
-      signature,
-      { value: ethers.parseEther(GAME_COST_ETH) },
-    );
-    setTxHash(tx.hash);
-    lastSubmissionRef.current.txHash = tx.hash;
-    await tx.wait();
-
-    // 3. Sync points with backend DB
-    await syncPointsToBackend(player, tx.hash, result.score);
   }, []);
 
-  /** TX1 — GO LIVE. Free, opens the on-chain run session. */
   const requestStart = useCallback(async () => {
     setChainError(null);
     setTxHash(null);
@@ -560,6 +627,7 @@ export default function ProofOfPatience() {
       } catch (err) {
         if (!isActiveRunError(err)) throw err;
         setChainStatus("clearing");
+        // Clear session also uses retry logic in submitResult implicitly now!
         await submitResult({ score: 0, survivalSeconds: 0, answered: 0, shots: 0, hits: 0 });
         lastSubmissionRef.current = null;
         setTxHash(null);
@@ -576,7 +644,6 @@ export default function ProofOfPatience() {
     }
   }, [isConnected, openConnectModal, startGame, submitResult]);
 
-  /** TX2 — round end. Attests, submits on-chain, and adds points. */
   const finishRun = useCallback(async (result) => {
     setChainStatus("submitting");
     setChainError(null);
@@ -590,7 +657,6 @@ export default function ProofOfPatience() {
     }
   }, [submitResult]);
 
-  /** Retries submission or points sync */
   const retrySubmit = useCallback(async () => {
     if (!lastSubmissionRef.current) {
       setChainError("Nothing to retry — please start a new run.");
@@ -607,7 +673,6 @@ export default function ProofOfPatience() {
 
       let finalHash = existingTxHash;
 
-      // If the tx never succeeded on-chain, submit it now
       if (!finalHash) {
         const contract = new ethers.Contract(CONTRACT_ADDRESS, proofOfPatienceAbi, signer);
         const tx = await contract.submitScore(
@@ -626,9 +691,7 @@ export default function ProofOfPatience() {
         finalHash = tx.hash;
       }
 
-      // Sync points to database
       await syncPointsToBackend(player, finalHash, result.score);
-
       setChainStatus("completed");
     } catch (err) {
       console.error("Retry submit failed:", err);
@@ -644,7 +707,7 @@ export default function ProofOfPatience() {
 
   const shoot = useCallback(() => {
     sceneRef.current?.unlockAudio();
-    fireShot(gameRef.current, sceneRef.current);
+    fireShot(gameRef.current, sceneRef.current, assistRef.current);
   }, []);
 
   const activatePop = useCallback(() => {
@@ -654,43 +717,53 @@ export default function ProofOfPatience() {
     setHud(syncHud(game));
   }, []);
 
-  const setAimFromPointer = useCallback((event) => {
+  const applyAbsoluteAim = useCallback((clientX, clientY) => {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) return;
+    
+    const x = ((clientX - rect.left) / rect.width) * GAME_WIDTH;
+    const y = ((clientY - rect.top) / rect.height) * GAME_HEIGHT;
+    const angle = Math.atan2(y - DESK_Y, x - DESK_X);
+    gameRef.current.aim = Math.max(AIM_MIN, Math.min(AIM_MAX, angle));
+  }, []);
 
+  const setAimFromPointer = useCallback((event) => {
     if (event.pointerType === "touch") {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const rect = canvas.getBoundingClientRect();
+      if (rect.width <= 0 || rect.height <= 0) return;
+
       const drag = dragRef.current;
       if (!drag) return;
       const dx = ((event.clientX - drag.originX) / rect.width) * Math.PI * 1.15;
-      gameRef.current.aim = Math.max(-Math.PI + 0.12, Math.min(-0.12, drag.originAim + dx));
-      return;
+      gameRef.current.aim = Math.max(AIM_MIN, Math.min(AIM_MAX, drag.originAim + dx));
+    } else {
+      applyAbsoluteAim(event.clientX, event.clientY);
     }
-
-    const x = ((event.clientX - rect.left) / rect.width) * GAME_WIDTH;
-    const y = ((event.clientY - rect.top) / rect.height) * GAME_HEIGHT;
-    const angle = Math.atan2(y - DESK_Y, x - DESK_X);
-    gameRef.current.aim = Math.max(-Math.PI + 0.12, Math.min(-0.12, angle));
-  }, []);
+  }, [applyAbsoluteAim]);
 
   const handlePointerDown = useCallback(
     (event) => {
       event.preventDefault();
       event.currentTarget.setPointerCapture(event.pointerId);
+
+      assistRef.current = event.pointerType === "touch";
+      applyAbsoluteAim(event.clientX, event.clientY);
+
       if (event.pointerType === "touch") {
         dragRef.current = {
           originX: event.clientX,
           originY: event.clientY,
           originAim: gameRef.current.aim,
         };
-      } else {
-        setAimFromPointer(event);
       }
       controlsRef.current.fire = true;
       shoot();
     },
-    [setAimFromPointer, shoot],
+    [applyAbsoluteAim, shoot],
   );
 
   const handlePointerUp = useCallback((event) => {
@@ -700,6 +773,21 @@ export default function ProofOfPatience() {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
   }, []);
+
+  // KEEPALIVE HOOK: Prevents mobile WebViews from killing idle network sockets
+  useEffect(() => {
+    let interval;
+    if (phase === "playing") {
+      interval = setInterval(() => {
+        // Fires an invisible HEAD request every 15s to keep the TCP connection warm
+        fetch(`${API_BASE}/api/ping?t=${Date.now()}`, { 
+          method: 'HEAD', 
+          mode: 'no-cors' 
+        }).catch(() => {}); // Fails silently, no impact on UI
+      }, 15000);
+    }
+    return () => clearInterval(interval);
+  }, [phase]);
 
   useEffect(() => {
     const stored = readAudioSettings();
@@ -718,7 +806,7 @@ export default function ProofOfPatience() {
       seed: 0x504f5021,
       muted: audioRef.current.muted,
       mix: audioRef.current,
-      postProcessing: qa.__POP_POST__,
+      postProcessing: IS_MOBILE ? false : qa.__POP_POST__,
       quality: pickInitialQuality(),
       preserveDrawingBuffer: qa.__POP_QA__ === true,
     });
@@ -728,7 +816,8 @@ export default function ProofOfPatience() {
       const rect = canvas.getBoundingClientRect();
       const width = rect.width > 0 ? rect.width : GAME_WIDTH;
       const height = rect.height > 0 ? rect.height : (width * GAME_HEIGHT) / GAME_WIDTH;
-      scene.resize(width, height, window.devicePixelRatio || 1);
+      const dpr = window.devicePixelRatio || 1;
+      scene.resize(width, height, IS_MOBILE ? Math.min(dpr, 1.5) : dpr);
     };
     sync();
 
@@ -768,20 +857,21 @@ export default function ProofOfPatience() {
         const direction = Number(controlsRef.current.right) - Number(controlsRef.current.left);
         if (game.phase === "playing" && direction !== 0) {
           game.aim = Math.max(
-            -Math.PI + 0.12,
-            Math.min(-0.12, game.aim + direction * KEYBOARD_AIM_SPEED * STEP),
+            AIM_MIN,
+            Math.min(AIM_MAX, game.aim + direction * KEYBOARD_AIM_SPEED * STEP),
           );
         }
-        if (controlsRef.current.fire) fireShot(game, scene);
+        if (controlsRef.current.fire) fireShot(game, scene, assistRef.current);
         updateGame(game, STEP, scene);
         accumulator -= STEP;
         steps += 1;
+        
         if (previousPhase === "playing" && game.phase !== "playing") {
           controlsRef.current.fire = false;
           setPhase(game.phase);
           setHud(syncHud(game));
           void finishRunRef.current({
-            score: game.score,
+            score: scaled(game, game.score),
             survivalSeconds: Math.min(ROUND_SECONDS, Math.floor(game.elapsed)),
             answered: game.answered,
             shots: game.shots,
@@ -792,7 +882,7 @@ export default function ProofOfPatience() {
       if (steps >= MAX_STEPS_PER_FRAME) accumulator = 0;
 
       hudTimer += rawSeconds;
-      if (hudTimer >= 0.08) {
+      if (hudTimer >= HUD_INTERVAL) {
         hudTimer = 0;
         setHud(syncHud(gameRef.current));
       }
@@ -802,7 +892,7 @@ export default function ProofOfPatience() {
         const next = frameRef.current;
         next.phase = game.phase;
         next.elapsed = game.elapsed;
-        next.score = game.score;
+        next.score = scaled(game, game.score);
         next.combo = game.combo;
         next.backlog = game.backlog;
         next.answered = game.answered;
@@ -845,6 +935,7 @@ export default function ProofOfPatience() {
       }
       if (event.code === "Space") {
         event.preventDefault();
+        assistRef.current = false;
         controlsRef.current.fire = true;
         shoot();
       }
@@ -876,6 +967,7 @@ export default function ProofOfPatience() {
   const queueHasRoom = hud.backlog < MAX_BACKLOG - 2;
   const live = phase === "playing";
   const chainBusy = chainStatus === "starting" || chainStatus === "clearing" || chainStatus === "submitting";
+  
   const holdAnswer = () => {
     controlsRef.current.fire = true;
     shoot();
@@ -886,8 +978,8 @@ export default function ProofOfPatience() {
 
   return (
     <main className="proof-of-patience pop-shell">
-      <div className="shell-grain" aria-hidden="true" />
-      <div className="shell-vignette" aria-hidden="true" />
+      {!IS_MOBILE && <div className="shell-grain" aria-hidden="true" />}
+      {!IS_MOBILE && <div className="shell-vignette" aria-hidden="true" />}
 
       <ShowHeader
         muted={audio.muted}
@@ -908,6 +1000,7 @@ export default function ProofOfPatience() {
             ref={canvasRef}
             width={GAME_WIDTH}
             height={GAME_HEIGHT}
+            style={{ touchAction: "none" }}
             aria-label="Proof of Patience play field. Drag toward a community question and hold to answer with S O O N."
             onPointerMove={setAimFromPointer}
             onPointerDown={handlePointerDown}

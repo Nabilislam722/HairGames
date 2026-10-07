@@ -403,14 +403,12 @@ export default function Dashboard() {
   const { address, isConnected } = useAccount();
   const { data: ethBalanceData } = useBalance({ address });
 
-  // ----------------------------------------------------------------------
-  // SET TO FALSE TO REVEAL THE HALL OF FAME WINNER ONCE THE EPOCH ENDS
-  // ----------------------------------------------------------------------
+
   const IS_CALCULATING_EPOCH = true;
 
   const [points, setPoints] = useState(null);
   const [multiplier, setMultiplier] = useState(1.0);
-  const [hairPrice, setHairPrice] = useState(null);
+  const hairPrice = 0.000006;
 
   const [questSteps, setQuestSteps] = useState(
     () => Object.fromEntries(QUESTS.map(q => [q.id, "idle"]))
@@ -452,22 +450,6 @@ export default function Dashboard() {
     });
     return base;
   }, [allTimeVotesData]);
-
-  useEffect(() => {
-    const loadPrice = () =>
-      fetch(`https://api.dexscreener.com/latest/dex/tokens/${HAIR_TOKEN}`)
-        .then(r => r.json())
-        .then(d => {
-          const pair = [...(d.pairs || [])]
-            .sort((a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0))[0];
-          if (pair?.priceUsd) setHairPrice(Number(pair.priceUsd));
-        })
-        .catch(console.error);
-
-    loadPrice();
-    const id = setInterval(loadPrice, 60000);
-    return () => clearInterval(id);
-  }, []);
 
   useEffect(() => {
     if (!holderEligible) return;

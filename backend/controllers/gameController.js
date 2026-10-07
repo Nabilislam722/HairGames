@@ -2,6 +2,17 @@ import { ethers } from "ethers";
 import { ECOSYSTEM_CONTRACTS, GENERIC_GAME_ABI, GAME_CONFIG } from "../config/constants.js";
 import { provider, getServerWallet } from "../config/provider.js";
 
+const HEMI_CHAIN_ID = 43111n; // Hardcoded to prevent redundant getNetwork() RPC calls
+
+// Helper function to prevent the RPC from hanging the server indefinitely
+const fetchNonceWithTimeout = async (contract, player, timeoutMs = 6000) => {
+  const noncePromise = contract.userNonces(player);
+  const timeoutPromise = new Promise((_, reject) =>
+    setTimeout(() => reject(new Error("Hemi RPC timed out fetching nonce")), timeoutMs)
+  );
+  return Promise.race([noncePromise, timeoutPromise]);
+};
+
 export const getRaceConfig = (req, res) => {
   res.json({
     initialPoints: GAME_CONFIG.RACE_INITIAL_POINTS,
@@ -16,18 +27,19 @@ export const generateRaceSignature = async (req, res) => {
 
     const targetContract = ECOSYSTEM_CONTRACTS["racing_game"];
     const gameContract = new ethers.Contract(targetContract, GENERIC_GAME_ABI, provider);
-    const nonce = await gameContract.userNonces(player);
-    const network = await provider.getNetwork();
+    
+    const nonce = await fetchNonceWithTimeout(gameContract, player);
 
     const serverWallet = getServerWallet();
     const messageHash = ethers.solidityPackedKeccak256(
       ["address", "uint256", "uint256", "address", "uint256"],
-      [player, BigInt(timeTakenMs), BigInt(nonce), targetContract, BigInt(network.chainId)]
+      [player, BigInt(timeTakenMs), BigInt(nonce), targetContract, HEMI_CHAIN_ID]
     );
 
     const signature = await serverWallet.signMessage(ethers.getBytes(messageHash));
     res.json({ timeTakenMs, nonce: nonce.toString(), signature });
   } catch (error) {
+    console.error("Race signature error:", error.message);
     res.status(500).json({ error: error.message });
   }
 };
@@ -41,27 +53,25 @@ export const generateFishingSignature = async (req, res) => {
 
     const targetContract = ECOSYSTEM_CONTRACTS["fishing_party"];
     const gameContract = new ethers.Contract(targetContract, GENERIC_GAME_ABI, provider);
-    const nonce = await gameContract.userNonces(player);
-    const network = await provider.getNetwork();
+    
+    const nonce = await fetchNonceWithTimeout(gameContract, player);
 
     const serverWallet = getServerWallet();
     const messageHash = ethers.solidityPackedKeccak256(
       ["address", "uint256", "uint256", "uint256", "address", "uint256"],
-      [player, BigInt(finalScore), BigInt(totalFish), BigInt(nonce), targetContract, BigInt(network.chainId)]
+      [player, BigInt(finalScore), BigInt(totalFish), BigInt(nonce), targetContract, HEMI_CHAIN_ID]
     );
 
     const signature = await serverWallet.signMessage(ethers.getBytes(messageHash));
     res.json({ finalScore, totalFish, nonce: nonce.toString(), signature });
   } catch (error) {
+    console.error("Fishing signature error:", error.message);
     res.status(500).json({ error: error.message });
   }
 };
 
 // FruitNinja.submitGameResult signs over:
 // keccak256(abi.encodePacked(player, finalScore, levelReached, fruitsSliced, nonce, contract, chainid))
-// — same field order as the contract's structHash, hashed as an Ethereum
-// Signed Message (signMessage already adds that prefix, matching the
-// contract's MessageHashUtils.toEthSignedMessageHash).
 export const generateFruitNinjaSignature = async (req, res) => {
   try {
     const { player, finalScore, levelReached, fruitsSliced } = req.body;
@@ -76,8 +86,8 @@ export const generateFruitNinjaSignature = async (req, res) => {
 
     const targetContract = ECOSYSTEM_CONTRACTS["fruit_ninja"];
     const gameContract = new ethers.Contract(targetContract, GENERIC_GAME_ABI, provider);
-    const nonce = await gameContract.userNonces(player);
-    const network = await provider.getNetwork();
+    
+    const nonce = await fetchNonceWithTimeout(gameContract, player);
 
     const serverWallet = getServerWallet();
     const messageHash = ethers.solidityPackedKeccak256(
@@ -89,13 +99,14 @@ export const generateFruitNinjaSignature = async (req, res) => {
         BigInt(fruitsSliced),
         BigInt(nonce),
         targetContract,
-        BigInt(network.chainId),
+        HEMI_CHAIN_ID,
       ]
     );
 
     const signature = await serverWallet.signMessage(ethers.getBytes(messageHash));
     res.json({ finalScore, levelReached, fruitsSliced, nonce: nonce.toString(), signature });
   } catch (error) {
+    console.error("FruitNinja signature error:", error.message);
     res.status(500).json({ error: error.message });
   }
 };
@@ -116,9 +127,6 @@ function popImplausibleReason({ score, survivalSeconds, answered, shots, hits })
   if (hits > shots) return "More hits than shots.";
   if (score > POP_MAX_SCORE) return "Score is above the contract maximum.";
 
-  // survivalSeconds is floored before it's signed, so a run reported as S
-  // seconds actually ran for up to S+1. Without this, honest sub-five-second
-  // runs get refused by the rate rules below.
   const duration = survivalSeconds + 1;
 
   const ceiling = Math.min(popHonestScoreCeiling(answered, hits) * POP_SCORE_TOLERANCE, POP_MAX_SCORE);
@@ -135,10 +143,6 @@ function popImplausibleReason({ score, survivalSeconds, answered, shots, hits })
 
 // ProofOfPatience.submitScore signs over:
 // keccak256(abi.encodePacked(player, score, survivalSeconds, answered, shots, hits, nonce, contract, chainid))
-// — same field order as the contract's structHash, hashed as an Ethereum
-// Signed Message. A zero-everything request (the "clear a stuck session"
-// path in page.tsx) is a legitimate submission here too — it trivially
-// passes the plausibility check below, so it needs no special-casing.
 export const generateProofOfPatienceSignature = async (req, res) => {
   try {
     const { player, score, survivalSeconds, answered, shots, hits } = req.body;
@@ -166,8 +170,8 @@ export const generateProofOfPatienceSignature = async (req, res) => {
 
     const targetContract = ECOSYSTEM_CONTRACTS["proof_of_patience"];
     const gameContract = new ethers.Contract(targetContract, GENERIC_GAME_ABI, provider);
-    const nonce = await gameContract.userNonces(player);
-    const network = await provider.getNetwork();
+    
+    const nonce = await fetchNonceWithTimeout(gameContract, player);
 
     const serverWallet = getServerWallet();
     const messageHash = ethers.solidityPackedKeccak256(
@@ -181,13 +185,14 @@ export const generateProofOfPatienceSignature = async (req, res) => {
         BigInt(hits),
         BigInt(nonce),
         targetContract,
-        BigInt(network.chainId),
+        HEMI_CHAIN_ID,
       ]
     );
 
     const signature = await serverWallet.signMessage(ethers.getBytes(messageHash));
     res.json({ score, survivalSeconds, answered, shots, hits, nonce: nonce.toString(), signature });
   } catch (error) {
+    console.error("ProofOfPatience signature error:", error.message);
     res.status(500).json({ error: error.message });
   }
 };
