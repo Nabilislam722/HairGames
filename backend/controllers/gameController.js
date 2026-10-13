@@ -112,7 +112,9 @@ export const generateFruitNinjaSignature = async (req, res) => {
 };
 
 //pop
-const POP_MAX_SCORE = 30_000;
+// Best real runs score about 8,500 on phones (PC 7,500) since scores were halved; this leaves
+// headroom for exceptional runs without letting inflated scores through.
+const POP_MAX_SCORE = 15_000;
 const POP_SCORE_TOLERANCE = 1.25;
 const POP_MAX_ANSWERS_PER_SECOND = 8;
 const POP_MAX_SHOTS_PER_SECOND = 17;

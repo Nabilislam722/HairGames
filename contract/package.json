@@ -5,7 +5,9 @@
   "scripts": {
     "clean": "hardhat clean",
     "compile": "hardhat compile",
-    "deploy": "hardhat run scripts/deploy.js --network hemi"
+    "deploy": "hardhat run scripts/deploy.js --network hemi",
+    "deploy:candy": "hardhat run scripts/deploy-candy-cascade.js --network hemi",
+    "test": "hardhat test"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

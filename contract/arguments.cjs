@@ -1,0 +1,5 @@
+module.exports = [
+  "0xb1eEa1e5DBe0Df654fC30129A60A9F9F0942E7e1", // signer
+  "0xd3C008B48Db16c16309717d592C270310561c4fA", // owner
+  ["0xb1eEa1e5DBe0Df654fC30129A60A9F9F0942E7e1"], // tokens
+];

@@ -8,6 +8,8 @@ import {
   SUBMIT_LEVEL_SCORE_SELECTOR 
 } from "../config/constants.js";
 import { provider, getServerWallet } from "../config/provider.js";
+import { findLevelCleared } from "../services/candyCascade.js";
+import { nft } from "../services/nft.js";
 
 // Helper function to sign the verification payload
 async function generateCryptoSignature(level, kills, points, nonce, walletAddress, targetAddress, chainId) {
@@ -96,6 +98,11 @@ export const addPoints = async (req, res) => {
       return res.status(400).json({ error: 'Transaction not sent to game contract' });
     }
 
+    // Transactions are public: without this, anyone could claim another player's unprocessed tx.
+    if (receipt.from.toLowerCase() !== wallet.toLowerCase()) {
+      return res.status(400).json({ error: 'Transaction was not sent by this wallet' });
+    }
+
     const tx = await provider.getTransaction(txHash);
     if (!tx) {
       return res.status(400).json({ error: 'Transaction not found' });
@@ -155,6 +162,19 @@ export const addPoints = async (req, res) => {
       }
       const decodedData = abiCoder.decode(['uint256', 'uint256', 'uint256', 'uint256', 'bytes'], '0x' + inputData.slice(10));
       onChainScore = Number(decodedData[2]);
+
+    } else if (gameId === "candy_cascade") {
+      // HP pays for beating your best on a level, read from the contract's own event: replays that
+      // don't improve earn nothing, and lifetime HP is capped by the sum of best scores.
+      const cleared = findLevelCleared(receipt, targetAddress);
+      if (!cleared) {
+        return res.status(400).json({ error: 'Transaction did not clear a Candy Cascade level' });
+      }
+      if (cleared.player.toLowerCase() !== wallet.toLowerCase()) {
+        return res.status(400).json({ error: 'Level was cleared by a different wallet' });
+      }
+      onChainScore = Math.max(0, Number(cleared.score) - Number(cleared.previousBest));
+
     } else {
       const SELECTOR_16 = ethers.id("submitGuess(uint16)").slice(0, 10);
       const SELECTOR_256 = ethers.id("submitGuess(uint256)").slice(0, 10);
@@ -170,13 +190,14 @@ export const addPoints = async (req, res) => {
       }
     }
 
-    if (gameId !== "racing_game" && onChainScore !== pointsRequested) {
+    if (gameId !== "racing_game" && gameId !== "candy_cascade" && onChainScore !== pointsRequested) {
       return res.status(400).json({ error: `Score mismatch: on-chain=${onChainScore}, claimed=${pointsRequested}` });
     }
 
     const walletLower = wallet.toLowerCase();
-    const profile = await UserProfile.findOne({ wallet: walletLower });
-    const userMultiplier = profile?.multiplier || 1.0;
+    // Fresh from the NFT index: only NFTs held past the hold period count, so passing one NFT
+    // between wallets can't boost each of them.
+    const userMultiplier = await nft.walletMultiplier(walletLower);
     const pointsToAdd = Math.round(onChainScore * userMultiplier);
 
     const user = await UserProfile.findOneAndUpdate(

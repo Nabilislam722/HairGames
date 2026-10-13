@@ -1,13 +1,10 @@
 import express from "express";
 import { ethers } from "ethers";
 import UserProfile from "../models/UserProfile.js";
-import CollectionConfig from "../models/CollectionConfig.js";
-import { syncWalletNFTs } from "../services/nftWatcher.js";
+import { nft } from "../services/nft.js";
+import { mongoNftStore } from "../services/nftStore.js";
 
 const router = express.Router();
-
-const HEMI_RPC_URL = "https://rpc.hemi.network/rpc";
-const provider = new ethers.JsonRpcProvider(HEMI_RPC_URL);
 
 /**
  * @route   GET /api/profile/:wallet
@@ -22,16 +19,10 @@ router.get("/:wallet", async (req, res) => {
   try {
     const walletLower = wallet.toLowerCase();
 
-    const allowedCollections = await CollectionConfig.find({}).lean();
-    const imageUrlByContract = new Map(
-      allowedCollections.map(c => [c.address?.toLowerCase(), c.imageUrl])
-    );
-
-    try {
-      await syncWalletNFTs(walletLower, provider, allowedCollections);
-    } catch (syncErr) {
-      console.error("⚠️  On-demand NFT sync failed, serving cached holdings:", syncErr.message);
-    }
+    // NFTs come from the indexer's database, not the chain, so this stays fast. The occasional
+    // on-chain double check runs in the background (at most every few minutes per wallet).
+    nft.reconcileWallet(walletLower).catch((err) => console.error("[nft] reconcile failed:", err.message));
+    const { holdings, multiplier, pendingMultiplier } = await nft.walletNfts(walletLower);
 
     let user = await UserProfile.findOne({ wallet: walletLower });
 
@@ -46,30 +37,18 @@ router.get("/:wallet", async (req, res) => {
     const userPoints = user.points || 0;
     const globalRank = await UserProfile.countDocuments({ points: { $gt: userPoints } }) + 1;
 
-    // Read multiplier from DB — already computed correctly by syncWalletNFTs
-    // from CollectionConfig. Do NOT re-derive here; that would overwrite the
-    // per-collection multiplier with a single hardcoded contract check.
-    const multiplier = user.multiplier ?? 1.0;
-
-    await UserProfile.updateOne(
-      { wallet: walletLower },
-      { $set: { rank: globalRank } }
-    );
-
-    const nftHoldings = (user.nftHoldings || []).map(nft => {
-      const holding = nft.toObject ? nft.toObject() : nft;
-      const configImageUrl = imageUrlByContract.get(holding.contractAddress?.toLowerCase());
-      return configImageUrl ? { ...holding, imageUrl: configImageUrl } : holding;
-    });
+    await UserProfile.updateOne({ wallet: walletLower }, { $set: { rank: globalRank } });
+    await mongoNftStore.saveProfileCache(walletLower, holdings, multiplier);
 
     return res.json({
       wallet: user.wallet,
       points: user.points,
-      nftHoldings,
+      nftHoldings: holdings, // each with `active` and `countsFrom`: NFTs count after a hold period
       multiplier,
+      pendingMultiplier,
       completedTasks: user.completedTasks || [],
       rank: globalRank,
-      lastSyncedAt: user.lastSyncedAt,
+      lastSyncedAt: new Date(),
       createdAt: user.createdAt
     });
 

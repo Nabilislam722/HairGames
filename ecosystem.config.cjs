@@ -2,9 +2,8 @@ module.exports = {
   apps: [
     {
       name: "backend-api",
-      script: "node",
-      args: "./backend/leaderboard.js",
-      cwd: "O:/Projects/HemiGameX",
+      script: "./backend/server.js",
+      cwd: __dirname,
       env: {
         NODE_ENV: "development"
       }

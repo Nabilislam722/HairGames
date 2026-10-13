@@ -1,34 +1,39 @@
 import { Switch, Route } from "wouter";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { Layout } from "@/components/layout";
-import Home from "@/pages/home";
-import Dashboard from "@/pages/dashboard";
-import Game from "@/pages/game";
-import Profile from "@/pages/profile";
-import NotFound from "@/pages/not-found";
-import Leaderboard from "./components/Leaderboard";
-import SpaceHuggersGame from "./pages/SpaceHuggersGame";
-import RacingGamePage from "./pages/RacingGamePage"
-import EventRank from "./pages/eventRank";
-import Mxfishing from "./pages/Fishinggame";
-import fruitninja from "./pages/Fruitninja"
-import ProofOfPatience from "./proofOfPatience/page.tsx";
+import { Layout } from "@/components/layout/Layout";
+
+import Home from "@/pages/Home";
+import Dashboard from "@/pages/Dashboard";
+import Profile from "@/pages/Profile";
+import Leaderboard from "@/pages/Leaderboard";
+import EventRank from "@/pages/EventRank";
+import NotFound from "@/pages/NotFound";
+
+import SpaceShooterPage from "@/games/space-shooter/SpaceShooterPage";
+import SpaceHuggersPage from "@/games/space-huggers/SpaceHuggersPage";
+import FruitNinjaPage from "@/games/fruit-ninja/FruitNinjaPage";
+import RacingGamePage from "@/games/racing/RacingGamePage";
+import FishingGamePage from "@/games/fishing/FishingGamePage";
+import ProofOfPatiencePage from "@/games/proof-of-patience/ProofOfPatiencePage";
+import CandyCascadePage from "@/games/candy-cascade/CandyCascadePage";
+
 function Router() {
   return (
     <Layout>
       <Switch>
         <Route path="/" component={Home} />
         <Route path="/dashboard" component={Dashboard} />
-        <Route path="/game/space_huggers" component={SpaceHuggersGame} />
-        <Route path="/game/space_shooter" component={Game} />
-        <Route path="/game/max_fruitninja" component={fruitninja}/>
+        <Route path="/game/space_huggers" component={SpaceHuggersPage} />
+        <Route path="/game/space_shooter" component={SpaceShooterPage} />
+        <Route path="/game/max_fruitninja" component={FruitNinjaPage} />
         <Route path="/game/race_car" component={RacingGamePage} />
-        <Route path="/game/fishing_game" component={Mxfishing}/>
-         <Route path="/game/proof_of_patience" component={ProofOfPatience} />
+        <Route path="/game/fishing_game" component={FishingGamePage} />
+        <Route path="/game/proof_of_patience" component={ProofOfPatiencePage} />
+        <Route path="/game/candy_cascade" component={CandyCascadePage} />
         <Route path="/leaderboard" component={Leaderboard} />
         <Route path="/profile" component={Profile} />
-        <Route path="/eventrank" component={EventRank}/>
+        <Route path="/eventrank" component={EventRank} />
         <Route component={NotFound} />
       </Switch>
     </Layout>

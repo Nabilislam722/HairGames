@@ -3,15 +3,14 @@ import cors from "cors";
 import dotenv from "dotenv";
 import connectDB from "./config/db.js";
 import routes from "./routes/index.js";
-import { startNftWatcher } from "./services/nftWatcher.js";
-import { provider } from "./config/provider.js";
+import { nft } from "./services/nft.js";
 
 dotenv.config();
 
 const app = express();
 
 app.use(cors({
-  origin: ["https://game.hairtoken.xyz"],
+  origin: ["https://anticipated-attractions-apparatus-lopez.trycloudflare.com"],
   methods: ['GET', 'POST'],
   credentials: true
 }));
@@ -20,7 +19,7 @@ app.use(express.json());
 
 // Connect to DB, Start Services, and Start Server
 connectDB().then(() => {
-  startNftWatcher(provider);
+  nft.start();
   
   app.use("/api", routes); // Mount all API routes under /api
 

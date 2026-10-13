@@ -5,6 +5,7 @@ export const ECOSYSTEM_CONTRACTS = {
   "fruit_ninja": "0x1f2a78Ce71aFbac323bEDc3404d206E7F94D8CFd",
   "default_legacy": "0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5",
   "proof_of_patience": "0x760d91401Afb3499cf1BD0256b30485BDa40728C",
+  "candy_cascade":"0xadDfFAdc18554f8711058bdbDeF7fC687091A69b",
 };
 
 export const GENERIC_GAME_ABI = [

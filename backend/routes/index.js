@@ -17,6 +17,11 @@ import {
 } from "../controllers/pointsController.js";
 
 import {
+    startCandySession,
+    verifyCandyLevel,
+} from "../controllers/candyCascadeController.js";
+
+import {
     getGlobalLeaderboard,
     getEventLeaderboard,
 } from "../controllers/statsController.js";
@@ -28,11 +33,15 @@ import {
     discordCallback,
     getTwitterStatus,
     getDiscordStatus
-} from "../controllers/Authcontroller.js";
+} from "../controllers/authController.js";
 
 const router = express.Router();
 
-// Profile Sub-Router 
+// Keepalive target for phone games: a cheap request every few seconds stops mobile browsers from
+// dropping the idle connection mid-game. (Express answers HEAD from this GET route.)
+router.get("/ping", (req, res) => res.sendStatus(204));
+
+// Profile Sub-Router
 router.use("/profile", profileRouter);
 
 // Game Signatures & Configs 
@@ -41,6 +50,8 @@ router.post("/race/signature", generateRaceSignature);
 router.post("/fishing/signature", generateFishingSignature);
 router.post("/fruitninja/signature", generateFruitNinjaSignature);
 router.post("/proof-of-patience/signature", generateProofOfPatienceSignature);
+router.post("/candy-cascade/session", startCandySession);
+router.post("/candy-cascade/verify", verifyCandyLevel);
 
 // Points Management 
 router.post("/points/verify", verifyPoints);
