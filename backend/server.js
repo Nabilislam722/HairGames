@@ -10,7 +10,7 @@ dotenv.config();
 const app = express();
 
 app.use(cors({
-  origin: ["https://anticipated-attractions-apparatus-lopez.trycloudflare.com"],
+  origin: ["https://game.hairtoken.xyz"],
   methods: ['GET', 'POST'],
   credentials: true
 }));
@@ -21,7 +21,7 @@ app.use(express.json());
 connectDB().then(() => {
   nft.start();
   
-  app.use("/api", routes); // Mount all API routes under /api
+  app.use("/api", routes);
 
   const PORT = process.env.PORT || 3000;
   app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

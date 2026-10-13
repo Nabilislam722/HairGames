@@ -1,150 +1,147 @@
-# HairGames
+<p align="center">
+  <img src="client/public/logo.png" alt="HairGames" width="96">
+</p>
 
-On-chain mini-games on the Hemi network. Players pay a small entry fee, play in the browser, submit their score to a game contract and earn Hair Points (HP), boosted by NFT multipliers.
+<h1 align="center">HairGames</h1>
 
-## Repository layout
+<p align="center">
+  An arcade of on-chain games on the <a href="https://hemi.xyz">Hemi</a> network.<br>
+  Play in your browser, put your score on chain, and earn Hair Points.
+</p>
 
-```
-hairGames/
-├── client/                  React + Vite frontend
-│   ├── index.html
-│   ├── public/              Static files served as-is (sprites, game assets, SpaceHuggers and candy-cascade builds)
-│   └── src/
-│       ├── main.jsx         Providers (wagmi, RainbowKit, React Query)
-│       ├── App.jsx          Route table
-│       ├── pages/           Site pages: Home, Dashboard, Profile, Leaderboard, EventRank, NotFound
-│       ├── games/           One folder per game (see below)
-│       ├── components/
-│       │   ├── layout/      App shell (nav, footer)
-│       │   └── ui/          shadcn/ui primitives
-│       ├── hooks/           Shared React hooks
-│       ├── lib/             Shared helpers: web3, chain config, contracts, utils
-│       ├── assets/images/   Site-wide images imported from code
-│       ├── styles/          globals.css (Tailwind entry), dashboard.css
-│       └── legacy/          Unused older code kept for reference. Not part of the build.
-├── backend/                 Express API (port 3000)
-│   ├── server.js            Entry point
-│   ├── config/              DB, RPC provider, constants
-│   ├── controllers/         Request handlers (auth, games, points, stats)
-│   ├── models/              Mongoose models
-│   ├── routes/              Route definitions, mounted under /api
-│   └── services/            Background jobs (NFT watcher)
-├── contract/                Hardhat project: Solidity game contracts + deploy script
-└── docs/                    Operational notes (server-operations.md)
-```
+<p align="center">
+  <a href="https://game.hairtoken.xyz"><b>Play now</b></a> ·
+  <a href="https://x.com/HairMaxToken">X</a> ·
+  <a href="https://discord.gg/uNt4FyWvqP">Discord</a> ·
+  <a href="https://explorer.hemi.xyz/token/0x5B774f563C902FA7b203FB7029ed6eD4Ce274705">$HAIR</a>
+</p>
 
-### Game folders
+---
 
-Every game in `client/src/games/` follows the same shape:
+## The games
 
-```
-games/<game-name>/
-├── <GameName>Page.jsx       Route component: wallet flow, start/submit, overlays
-├── components/              Game-specific React components
-├── lib/                     Engine, rendering, constants, types (no React)
-└── assets/                  Images imported by this game only (optional)
-```
+| | Game | |
+| --- | --- | --- |
+| <img src="client/public/game_assets/candyCascadeBanner.png" width="180" alt="Candy Cascade"> | **Candy Cascade**<br>500 levels of match-3 across 25 episodes, with your progress, stars and best scores saved on chain. Difficulty climbs every 5 levels. | Puzzle |
+| <img src="client/public/game_assets/popthumbnail.png" width="180" alt="Proof of Patience"> | **Proof of Patience**<br>A meme shooter about the Hemi team's long-awaited answers to the community's questions. Hold the line before the backlog takes over the show. | Shooter |
+| <img src="client/public/game_assets/FruitBanner.png" width="180" alt="Max Fruit Slicer 200"> | **Max Fruit Slicer 200**<br>Slice fruit, chain combos and stay clear of the bombs. | Slicer |
+| <img src="client/public/game_assets/voidStrikerLogo.png" width="180" alt="Void Striker"> | **Void Striker**<br>Classic 8-bit block mechanics meet high-speed cyber logic. | Shooter |
+| <img src="client/public/game_assets/spaceHuggerBanner.png" width="180" alt="Space Huggers"> | **Space Huggers**<br>Fight through the levels and complete the mission. | Adventure |
+| <img src="client/public/game_assets/needBanner.png" width="180" alt="Need for Hair"> | **Need for Hair**<br>Three, two, one, go. Race to the finish, but slow down or you'll lose your HP. | Racing |
+| <img src="client/public/game_assets/fishingbanner.png" width="180" alt="Max Prø Fishing 2026"> | **Max Prø Fishing 2026**<br>Catch fish across five levels and sell your haul. | Fishing |
 
-| Folder | Route |
+Partner games from the Hemi ecosystem, like the open-world MMORPG **Bro Town**, are listed on the dashboard too.
+
+## How it works
+
+1. **Connect your wallet** on the Hemi network.
+2. **Play a game.** Runs are recorded through each game's smart contract, with a small entry or save fee.
+3. **Earn Hair Points (HP).** Your score turns into HP once its transaction is confirmed. Holding NFTs from ecosystem collections raises your multiplier, up to 1.5×.
+4. **Climb.** Compete on the global leaderboard and the weekly event, rank up from Rookie to Immortal on your profile, finish bonus tasks, and vote for your favourite game every day.
+
+## Fair play
+
+Points are only worth something if they can't be faked, so every score is checked before it counts:
+
+- **Signed results.** A game contract only accepts a score signed by the HairGames server. Each signature is tied to one wallet, one contract and one chain, and can only be used once.
+- **Replayed moves.** In Candy Cascade, the server picks each board's random seed and then replays the player's exact moves with the game's own engine. Only the score from that replay is signed; whatever the game client reports is ignored.
+- **One win per start.** Every Candy Cascade attempt opens a numbered run on chain, and a win can only be saved against its own run.
+- **No farming.** A Candy Cascade level with all 3 stars is finished. HP is paid for beating your previous best, not for repeating a level.
+- **Points go to the player who played.** HP is credited from the contract's own events, and only to the wallet that sent the transaction.
+- **No passing NFTs around.** NFT ownership comes from an on-chain indexer, and a newly received NFT counts toward the multiplier only after it has been held for 24 hours.
+
+## Built with
+
+| Layer | Stack |
 | --- | --- |
-| `space-shooter` | `/game/space_shooter` |
-| `space-huggers` | `/game/space_huggers` |
-| `fruit-ninja` | `/game/max_fruitninja` |
-| `racing` | `/game/race_car` |
-| `fishing` | `/game/fishing_game` |
-| `proof-of-patience` | `/game/proof_of_patience` |
-| `candy-cascade` | `/game/candy_cascade` |
+| Frontend | React 19, Vite, Tailwind CSS 4, Framer Motion, wagmi, viem, RainbowKit |
+| Backend | Node.js, Express, MongoDB (Mongoose), ethers v6 |
+| Contracts | Solidity 0.8.24, OpenZeppelin 5, Hardhat |
+| Chain | Hemi mainnet (chain ID 43111) |
 
-To add a game, create a new folder with that shape, register its page in `client/src/App.jsx` and add it to `GAMES` in `client/src/pages/Dashboard.jsx`.
+```mermaid
+flowchart LR
+  Player["Browser<br/>React + wagmi"] -- "moves, scores" --> API["Backend API<br/>Express"]
+  API -- "signed result" --> Player
+  Player -- "start / submit transactions" --> Contracts["Game contracts<br/>on Hemi"]
+  API -- "verifies transactions,<br/>credits HP" --> DB[("MongoDB")]
+  Indexer["NFT indexer"] -- "reads transfers" --> Chain["Hemi chain"]
+  Indexer --> DB
+```
 
-Space Huggers and Candy Cascade are standalone builds served from `client/public/` and embedded in an iframe by their page.
+## Smart contracts
 
-### Candy Cascade: on-chain saves and anti-cheat
+All game contracts are deployed on Hemi mainnet:
 
-Progress (highest cleared level, best score and stars per level) lives in the `CandyCascade` contract, not in the browser.
+| Game | Contract |
+| --- | --- |
+| Proof of Patience | [`0x760d…728C`](https://explorer.hemi.xyz/address/0x760d91401Afb3499cf1BD0256b30485BDa40728C) |
+| Max Fruit Slicer 200 | [`0x1f2a…8CFd`](https://explorer.hemi.xyz/address/0x1f2a78Ce71aFbac323bEDc3404d206E7F94D8CFd) |
+| Void Striker | [`0x61A8…a8E5`](https://explorer.hemi.xyz/address/0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5) |
+| Space Huggers | [`0x8950…9750`](https://explorer.hemi.xyz/address/0x895087a3b85C38DAB365495A5E1EA518459A9750) |
+| Need for Hair | [`0x3E07…6E29`](https://explorer.hemi.xyz/address/0x3E0784ffE4e036bCc1859CA124dF327e8B866E29) |
+| Max Prø Fishing 2026 | [`0x45ce…a7eA`](https://explorer.hemi.xyz/address/0x45cee112Ba2EbDE8224a1fA14D329f6AB190a7eA) |
 
-1. Every attempt starts on chain: the player sends `startLevel(levelId)`, which opens a numbered run. A new start replaces any open run, so losing or quitting never leaves a player stuck.
-2. As soon as the wallet sends the start, the page asks `POST /api/candy-cascade/session` for the board. The server checks the start transaction (sender, contract, level), even while it is still pending, and picks the random seed. Each start transaction gets exactly one seed.
-3. The game records every move. When the level is won, the page sends the moves to `POST /api/candy-cascade/verify`.
-4. The server replays the moves with the game's own engine and signs only the score and stars the replay produced. It never uses a score from the client. It also checks that the start was mined and is still the open run, and binds the signature to that run.
-5. The player submits `submitLevel(...)`. The contract checks the signature against the open run, then closes it, so one start can save at most one win. It also checks the level order and the fee.
-6. `POST /api/points/add` reads the `LevelCleared` event and credits HP for **improvement over the previous best** on that level. Replays that don't beat it earn nothing.
+Contract sources are in [`contract/contracts`](contract/contracts), including the new [`CandyCascade.sol`](contract/contracts/CandyCascade.sol).
 
-A level with all **3 stars is finished**. The contract won't start it again and the backend won't issue a board for it, so players move on to new levels instead of farming old ones. Levels with 1 or 2 stars can be replayed to earn the rest. In the game, tapping a 3-star level shows "Level mastered" with a shortcut to the newest level.
+## Run it locally
 
-Phone networks: the page sends every request through `fetchWithRetry` (`client/src/lib/network.js`: 12 s timeout, 3 tries), and pings `/api/ping` every 15 s while the game is open. If a board request fails after the start went out, "Try again" reuses that start instead of asking for a new transaction.
-
-The backend loads the engine from `client/src/games/candy-cascade/game/src/core`, the same files the game is built from. A rules fingerprint is built into the game and computed again by the backend. If they differ, the backend refuses to sign and players are told to reload.
-
-**To change the game:** edit it in its repo ([candy-Cascade](https://github.com/Nabilislam722/candy-Cascade)). Run `npm test`, then `npm run build`, and copy `dist/index.html` and `dist/assets/` into `client/public/candy-cascade/`. Then copy the changed `src/` files into `client/src/games/candy-cascade/game/src/` and restart the backend. Deploy the client and the backend together. After changing points or levels, run `npm run stars` in the game repo before building.
-
-**Deploying the contract:** in `contract/.env`, set `SIGNER_ADDRESS` to the address of the backend `SERVER_PRIVATE_KEY`. Then run `npm run deploy:candy` in `contract/`. The fee is set in `scripts/deploy-candy-cascade.js`. Contract tests: `npm test` in `contract/`.
-
-**Adding levels:** the game has 500 levels in 25 episodes.
-1. In the game repo, raise `TOTAL_LEVELS` in `tools/generate-levels.mjs`, run `npm run levels -- <first new> <last>`, then `npm run stars -- <first new> <last>`. Existing levels stay untouched.
-2. Extend `EPISODES` and `DIFFICULTY_CURVE` in `src/core/levels.js`.
-3. Raise `LEVEL_COUNT` in `backend/services/candyCascade.js`.
-4. Have the contract owner call `setLevelCount(n)`. No redeploy is needed.
-
-### Naming conventions
-
-- Folders: `kebab-case` (`fruit-ninja`, `proof-of-patience`)
-- React components: `PascalCase.jsx` / `.tsx`
-- Non-component modules: `camelCase.js` / `.ts`
-- Imports across folders use the `@/` alias (`@/lib/web3`, `@/components/ui/button`); imports inside a game folder stay relative.
-
-### NFT multiplier indexer
-
-NFTs from the collections in `CollectionConfig` raise a player's HP multiplier (+`multiplier - 1` per NFT, capped at 1.5×). `backend/services/nftIndexer.js` keeps track of who owns them:
-
-- **How it reads the chain:** every 10 seconds it reads Transfer logs in block ranges and saves how far it got per collection (`IndexerState`). A restart continues from there, so no transfer is missed.
-- **Reorg safety:** it stays 3 blocks behind the chain head, so shallow reorgs never land.
-- **One record per token:** each token has a single ownership record (`NftToken`), and only a later transfer replaces it. Replayed or duplicate events change nothing.
-- **New collections:** a collection added to `CollectionConfig` is picked up on the next pass and backfilled from its `startBlock`. Set `startBlock` to the contract's deploy block; from 0 a backfill takes a few minutes.
-- **Hold period:** a newly received NFT counts toward the multiplier only after `NFT_HOLD_HOURS` (default 24), so one NFT can't be passed between wallets to boost each of them. HP crediting reads the multiplier fresh from the index.
-- **Profiles:** the profile endpoint reads the index (no chain calls), and at most every 10 minutes per wallet it double-checks on-chain balances in the background and repairs any difference.
-
-Tests run against a local chain: `contract/test/NftIndexer.test.js`.
-
-## Getting started
-
-Requirements: Node.js 20+, a local MongoDB (or the SSH tunnel described in [docs/server-operations.md](docs/server-operations.md)).
+You'll need Node.js 20 or later, a MongoDB instance on `mongodb://127.0.0.1:27017`, and a browser wallet.
 
 ```bash
+git clone https://github.com/HAIR-Max/HairGames.git
+cd HairGames
 npm install
-
-# Frontend (http://127.0.0.1:5000)
-npm run dev:client
-
-# Backend API (http://localhost:3000)
-node backend/server.js
-
-# Production build of the frontend -> dist/public
-npm run build
 ```
 
-## Environment variables
+Create `client/.env`:
 
-Frontend (`client/.env`):
+```bash
+VITE_API_URL=http://localhost:3000
+```
 
-| Variable | Purpose |
-| --- | --- |
-| `VITE_API_URL` | Backend base URL (defaults to `http://localhost:3000`) |
-| `VITE_VOTING_CONTRACT_ADDRESS` | Voting contract used on the dashboard |
-| `VITE_CANDY_CASCADE_CONTRACT` | CandyCascade contract. Without it the game runs in local play, with nothing saved on chain |
+Create `.env` in the repository root for the backend:
 
-Backend:
+```bash
+SERVER_PRIVATE_KEY=0x...   # signs verified game results; use a throwaway key locally
+```
 
-| Variable | Purpose |
-| --- | --- |
-| `PORT` | API port (default `3000`) |
-| `SERVER_PRIVATE_KEY` | Signer for score signatures |
-| `FRONTEND_URL` | Redirect target after OAuth |
-| `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`, `DISCORD_REDIRECT_URI` | Discord account linking |
-| `TWITTER_CLIENT_ID`, `TWITTER_CLIENT_SECRET`, `TWITTER_REDIRECT_URI` | X account linking |
-| `RACE_INITIAL_POINTS`, `RACE_POINTS_DECREMENT_PER_SECOND` | Racing game scoring |
-| `CANDY_CASCADE_CONTRACT` | CandyCascade contract address (session, verify and HP crediting) |
-| `CANDY_CASCADE_CORE_DIR` | Optional: where the backend loads the Candy Cascade engine from (default: the game source in `client/`) |
-| `NFT_HOLD_HOURS` | Hours a newly received NFT is held before it counts toward the multiplier (default `24`) |
+Then start both parts:
 
-Never commit `.env` files. They are already in `.gitignore`.
+```bash
+npm run dev:client          # frontend on http://127.0.0.1:5000
+node backend/server.js      # API on http://localhost:3000
+```
+
+The API only accepts browser requests from the origins listed in the CORS settings in `backend/server.js`. Add `http://127.0.0.1:5000` there while developing locally.
+
+Contract and indexer tests run on a local chain:
+
+```bash
+cd contract
+npm install
+npm test
+```
+
+The full list of environment variables is in the [development guide](docs/development.md#environment-variables).
+
+## Project structure
+
+```
+client/      React frontend: site pages and one folder per game
+backend/     Express API: score verification, HP, profiles, NFT indexer
+contract/    Solidity contracts, deploy scripts and tests
+docs/        Development guide
+```
+
+Candy Cascade's game code lives in its own repository, [candy-Cascade](https://github.com/Nabilislam722/candy-Cascade).
+
+## Contributing
+
+Contributions are welcome. The [development guide](docs/development.md) covers how the code is organised, the conventions each game folder follows, and how the anti-cheat and NFT indexer work. Please open an issue to discuss larger changes before starting.
+
+If you find a security issue, please report it privately to the team on [Discord](https://discord.gg/uNt4FyWvqP) instead of opening a public issue.
+
+## License
+
+MIT
