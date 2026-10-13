@@ -481,9 +481,13 @@ export class Engine {
 
   // ---------------------------------------------------------------- bookkeeping
 
+  // A level's score stops at its cap (level.maxScore, which is also its 3-star score), so holding
+  // back the last goal to keep scoring with the remaining moves can't pay past it.
   addScore(points) {
     if (!points) return;
-    this.score += points;
+    const cap = this.level.maxScore ?? Infinity;
+    if (this.score >= cap) return;
+    this.score = Math.min(cap, this.score + points);
     for (const goal of this.goals) if (goal.type === 'score') goal.left = Math.max(0, goal.target - this.score);
     this.emit('score', this.score, points);
   }

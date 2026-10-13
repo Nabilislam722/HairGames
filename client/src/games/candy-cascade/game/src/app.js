@@ -16,6 +16,13 @@ const LOSE_LINES = ['So close!', 'Almost had it!', 'One more try?'];
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+// "5h 12m", "12m" or "a minute".
+const formatWait = (ms) => {
+  const minutes = Math.max(1, Math.ceil(ms / 60_000));
+  const hours = Math.floor(minutes / 60);
+  if (!hours) return minutes === 1 ? 'a minute' : `${minutes}m`;
+  return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+};
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
 
 export class App {
@@ -62,8 +69,9 @@ export class App {
   }
 
   // On-chain progress from the host replaces the game state; settings stay as they are.
-  applyHostProgress({ unlocked, stars, best }) {
-    Object.assign(this.progress, { unlocked: Math.max(1, unlocked), stars: { ...stars }, best: { ...best } });
+  // `cooldowns` maps recently cleared levels to when they can be replayed (ms).
+  applyHostProgress({ unlocked, stars, best, cooldowns = {} }) {
+    Object.assign(this.progress, { unlocked: Math.max(1, unlocked), stars: { ...stars }, best: { ...best }, cooldowns: { ...cooldowns } });
     if (this.root.dataset.screen === 'map') this.renderMap(false);
   }
 
@@ -221,11 +229,15 @@ export class App {
     }
   }
 
-  // Inside HairGames a level with all 3 stars is finished (the contract won't start it again), so
-  // players head for new levels instead of farming old ones. On its own the game allows replays.
-  // The level's intro, or the mastered screen for a finished level.
+  // Inside HairGames, players are steered to new levels instead of replaying old ones: a level with
+  // all 3 stars is finished (the contract won't start it again), and a cleared level can only be
+  // replayed once its cooldown from the last clear has passed (the host sends those times). On its
+  // own the game allows replays freely.
+  // The level's intro, or the mastered or cooldown screen.
   openLevel(level) {
+    const replayAt = this.cooldownUntil(level);
     if (this.isMastered(level)) this.showMastered(level);
+    else if (replayAt) this.showCooldown(level, replayAt);
     else this.levelIntro(level);
   }
 
@@ -233,9 +245,43 @@ export class App {
     return !!this.host && (this.progress.stars[level.id] ?? 0) >= 3;
   }
 
-  showMastered(level) {
+  // When a recently cleared level can be played again (ms), or null if it can be played now.
+  cooldownUntil(level) {
+    const replayAt = this.host ? this.progress.cooldowns?.[level.id] : null;
+    return replayAt && replayAt > Date.now() ? replayAt : null;
+  }
+
+  // The newest unlocked level, if it can be played right now.
+  newestPlayable() {
     const newest = LEVELS.find((l) => l.id === this.progress.unlocked);
-    const target = newest && !this.isMastered(newest) ? newest : null;
+    return newest && !this.isMastered(newest) && !this.cooldownUntil(newest) ? newest : null;
+  }
+
+  playNewest(target) {
+    this.openMap(target.id);
+    setTimeout(() => this.root.dataset.screen === 'map' && this.levelIntro(target), 650);
+  }
+
+  showCooldown(level, replayAt) {
+    const target = this.newestPlayable();
+    this.openModal(
+      'intro',
+      `<h2 class="ribbon" id="modal-title">Level ${level.id}</h2>
+      <div class="modal-body">
+        <p class="modal-sub">${escapeHtml(level.name)}</p>
+        <p class="modal-text">You cleared this level recently. You can play it again in <strong>${formatWait(replayAt - Date.now())}</strong>.</p>
+        <p class="modal-text">${target ? 'New levels pay the most Hair Points. Keep climbing!' : 'Come back soon!'}</p>
+        <div class="modal-actions">
+          <button class="btn btn-quiet" type="button" data-action="close">Back</button>
+          ${target ? `<button class="btn btn-candy" type="button" data-action="newest">Play level ${target.id}</button>` : ''}
+        </div>
+      </div>`,
+      { close: () => this.closeModal(), newest: () => this.playNewest(target) },
+    );
+  }
+
+  showMastered(level) {
+    const target = this.newestPlayable();
     const stars = [0, 1, 2]
       .map(() => '<div class="result-star earned"><img class="star-off" src="assets/candies/star.png" alt=""><img class="on" src="assets/candies/star.png" alt=""></div>')
       .join('');
@@ -251,13 +297,7 @@ export class App {
           ${target ? `<button class="btn btn-candy" type="button" data-action="newest">Play level ${target.id}</button>` : ''}
         </div>
       </div>`,
-      {
-        close: () => this.closeModal(),
-        newest: () => {
-          this.openMap(target.id);
-          setTimeout(() => this.root.dataset.screen === 'map' && this.levelIntro(target), 650);
-        },
-      },
+      { close: () => this.closeModal(), newest: () => this.playNewest(target) },
     );
   }
 
@@ -470,8 +510,8 @@ export class App {
     const { level } = session;
     const next = LEVELS.find((l) => l.id === level.id + 1);
     const newBest = result.score > session.prevBest;
-    // A 3-star clear inside HairGames finishes the level, so there's nothing to replay.
-    const canReplay = !(this.host && result.stars >= 3);
+    // Inside HairGames a saved win starts the level's replay cooldown (or finishes it at 3 stars).
+    const canReplay = !this.host;
     const stars = [0, 1, 2]
       .map((i) => `<div class="result-star"><img class="star-off" src="assets/candies/star.png" alt=""><img class="on" src="assets/candies/star.png" alt=""></div>`)
       .join('');

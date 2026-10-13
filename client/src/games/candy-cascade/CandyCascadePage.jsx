@@ -10,6 +10,33 @@ import { postJson, useKeepAlive } from "@/lib/network";
 const GAME_SRC = `${import.meta.env.BASE_URL}candy-cascade/index.html`;
 const CONTRACT = import.meta.env.VITE_CANDY_CASCADE_CONTRACT;
 
+// A cleared level can be replayed once per cooldown, timed from its last clear saved on chain, so
+// players move on to new levels instead of replaying one over and over. Only clears this recent
+// matter, so the lookback covers the cooldown in Hemi blocks (~12 s each) plus a margin.
+const REPLAY_COOLDOWN_HOURS = 24;
+const COOLDOWN_LOOKBACK_BLOCKS = BigInt(Math.ceil(((REPLAY_COOLDOWN_HOURS * 3600) / 12) * 1.25));
+
+const LEVEL_CLEARED_EVENT = {
+  type: "event", name: "LevelCleared",
+  inputs: [
+    { name: "player", type: "address", indexed: true },
+    { name: "levelId", type: "uint256", indexed: true },
+    { name: "score", type: "uint256", indexed: false },
+    { name: "stars", type: "uint256", indexed: false },
+    { name: "previousBest", type: "uint256", indexed: false },
+    { name: "runId", type: "uint256", indexed: false },
+    { name: "sessionId", type: "bytes32", indexed: false },
+  ],
+};
+
+// "5h 12m", "12m" or "a minute".
+function formatWait(ms) {
+  const minutes = Math.max(1, Math.ceil(ms / 60_000));
+  const hours = Math.floor(minutes / 60);
+  if (!hours) return minutes === 1 ? "a minute" : `${minutes}m`;
+  return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+}
+
 const CANDY_ABI = [
   {
     type: "function", name: "getProgress", stateMutability: "view",
@@ -88,6 +115,7 @@ export default function CandyCascadePage() {
   const gameReady = useRef(false);
   const job = useRef(null); // the win being saved: request, verified result, tx hash
   const pendingStart = useRef(null); // a start tx whose board request failed: { levelId, hash }
+  const cooldowns = useRef({}); // levelId → when it can be replayed (ms)
   const [starting, setStarting] = useState(null); // { step } while a level start is on screen
   const [save, setSave] = useState(null); // { step, error?, added? } while a save is on screen
 
@@ -106,12 +134,42 @@ export default function CandyCascadePage() {
     iframeRef.current?.contentWindow?.postMessage({ source: "hairgames", ...msg }, window.location.origin);
   }, []);
 
-  const readProgress = useCallback(async () => {
-    const raw = await publicClient.readContract({
-      address: CONTRACT, abi: CANDY_ABI, functionName: "getProgress", args: [address],
+  // When each recently cleared level can be played again: REPLAY_COOLDOWN_HOURS after its last
+  // saved clear, timed by the block it landed in.
+  const readCooldowns = useCallback(async () => {
+    const head = await publicClient.getBlockNumber();
+    const logs = await publicClient.getLogs({
+      address: CONTRACT, event: LEVEL_CLEARED_EVENT, args: { player: address },
+      fromBlock: head > COOLDOWN_LOOKBACK_BLOCKS ? head - COOLDOWN_LOOKBACK_BLOCKS : 0n, toBlock: head,
     });
-    return toGameProgress(raw);
+    const lastClear = new Map(); // levelId → block number of its latest clear
+    for (const log of logs) {
+      const id = Number(log.args.levelId);
+      if (!lastClear.has(id) || log.blockNumber > lastClear.get(id)) lastClear.set(id, log.blockNumber);
+    }
+    const until = {};
+    await Promise.all(
+      [...lastClear].map(async ([id, blockNumber]) => {
+        const block = await publicClient.getBlock({ blockNumber });
+        const replayAt = (Number(block.timestamp) + REPLAY_COOLDOWN_HOURS * 3600) * 1000;
+        if (replayAt > Date.now()) until[id] = replayAt;
+      })
+    );
+    return until;
   }, [publicClient, address]);
+
+  const readProgress = useCallback(async () => {
+    const [raw, until] = await Promise.all([
+      publicClient.readContract({ address: CONTRACT, abi: CANDY_ABI, functionName: "getProgress", args: [address] }),
+      // If this read fails the game stays playable; it just can't show cooldowns until the next read.
+      readCooldowns().catch((error) => {
+        console.error("Candy Cascade: could not read replay cooldowns", error);
+        return {};
+      }),
+    ]);
+    cooldowns.current = until;
+    return { ...toGameProgress(raw), cooldowns: until };
+  }, [publicClient, address, readCooldowns]);
 
   const sendProgress = useCallback(async () => {
     if (!gameReady.current || !address) return;
@@ -206,6 +264,15 @@ export default function CandyCascadePage() {
     // Every attempt opens an on-chain run, then gets its board. Play begins once the wallet has
     // sent the start; the backend checks it was mined when the win is saved.
     start: async ({ requestId, levelId }) => {
+      // The game checks this too; this catches a stale map before any transaction is sent.
+      const replayAt = cooldowns.current[levelId];
+      if (replayAt > Date.now()) {
+        post({
+          type: "error", requestId,
+          message: `You cleared level ${levelId} recently. You can play it again in ${formatWait(replayAt - Date.now())}. Try a new level!`,
+        });
+        return;
+      }
       try {
         let startTxHash;
         if (pendingStart.current?.levelId === levelId) {

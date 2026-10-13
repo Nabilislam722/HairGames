@@ -42,20 +42,23 @@ export const EPISODES = [
 
 // level-data.js is tuned so the balancing bot wins about 95% of normal levels (70% of challenges)
 // on the plain game, but the bot spots the best move every turn and people do not. So the first
-// levels get extra moves, smaller score and collect targets and a strong refill assist (see
+// levels get an extra move, smaller score and collect targets and a strong refill assist (see
 // CASCADE_CHANCE), and difficulty steps up every DIFFICULTY_STEP levels along DIFFICULTY_CURVE:
 // each step moves one notch from one point toward the next.
-//  - By level 296 moves and goals are as generated, with half the assist: the bot still wins about
-//    98% of normal levels and 80% of challenges.
+//  - Moves are kept tight: even so the bot finishes the goals with over half its moves to spare,
+//    and spare moves are what a player stalls with (see maxScore below).
+//  - By level 296 goals are as generated and moves 5% under, with half the assist: the bot still
+//    wins about 95% of normal levels and 75% of challenges.
 //  - Levels 301-500 phase out the assist, so the last step is the plain game the levels were
-//    balanced on. No level is harder than that, so none becomes unbeatable.
+//    balanced on, 5% short on moves: the bot wins about 93% of normal levels and 73% of challenges,
+//    so none becomes unbeatable.
 // Star scores are tuned to every step by `npm run stars`, so the 1 / 2 / 3 star mix (and anything
 // paid per star) stays the same.
 export const DIFFICULTY_STEP = 5;
 export const DIFFICULTY_CURVE = [
-  { level: 1, moveScale: 1.25, extraMoves: 3, targetScale: 0.8, cascadeChance: CASCADE_CHANCE },
-  { level: 296, moveScale: 1, extraMoves: 0, targetScale: 1, cascadeChance: 0.25 },
-  { level: 496, moveScale: 1, extraMoves: 0, targetScale: 1, cascadeChance: 0 },
+  { level: 1, moveScale: 1, extraMoves: 1, targetScale: 0.8, cascadeChance: CASCADE_CHANCE },
+  { level: 296, moveScale: 0.95, extraMoves: 0, targetScale: 1, cascadeChance: 0.25 },
+  { level: 496, moveScale: 0.95, extraMoves: 0, targetScale: 1, cascadeChance: 0 },
 ];
 const settings = ({ level, ...rest }) => rest;
 export const EASING = {
@@ -63,7 +66,7 @@ export const EASING = {
   floor: settings(DIFFICULTY_CURVE[DIFFICULTY_CURVE.length - 1]),
 };
 
-const lerp = (a, b, t) => a * (1 - t) + b * t; // exact at both ends
+const lerp = (a, b, t) => (a === b ? a : a * (1 - t) + b * t); // exact at both ends and on flat stretches
 const roundTo100 = (n) => Math.max(100, Math.round(n / 100) * 100);
 
 export function easingFor(levelId) {
@@ -96,6 +99,9 @@ function ease(level) {
     cascadeChance: easing.cascadeChance,
     goals,
     stars: [scoreGoal ? Math.min(one, scoreGoal.target) : one, two, three],
+    // The most the level can score is its 3-star score, so each level has its own cap. Without
+    // one, a player could hold back the last goal and keep scoring with every move left.
+    maxScore: three,
   };
 }
 
