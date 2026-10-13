@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, X, House, Gamepad2, Trophy, UserRound, Wallet, ChevronDown, Zap } from "lucide-react";
+import { Menu, X, House, Gamepad2, Trophy, UserRound, Wallet, ChevronDown, Zap, Ban } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
 import { motion, AnimatePresence } from "framer-motion";
@@ -44,6 +44,53 @@ function useHairPoints(address, location) {
     return () => { cancelled = true; };
   }, [address, location]);
   return points;
+}
+
+/* ─── Ban status for the connected wallet ───────────────────────────── */
+// Checked when a wallet connects or changes. If the check itself fails, the site stays usable:
+// the backend refuses banned wallets on every game and HP route regardless.
+function useBanStatus(address) {
+  const [ban, setBan] = useState(null);
+  useEffect(() => {
+    setBan(null);
+    if (!address) return;
+    let cancelled = false;
+    fetch(`${API_BASE}/api/ban/${address}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (!cancelled && d?.banned) setBan(d);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [address]);
+  return ban;
+}
+
+function BannedScreen({ ban }) {
+  const until = ban.until ? new Date(ban.until) : null;
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-background px-4 font-ui">
+      <div role="alert" className="w-full max-w-md text-center rounded-3xl border border-red-500/25 bg-red-500/6 p-8">
+        <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-red-500/15 border border-red-500/30 flex items-center justify-center">
+          <Ban className="w-8 h-8 text-red-400" />
+        </div>
+        <h1 className="text-2xl font-bold text-white mb-2">You are banned</h1>
+        <p className="text-sm text-white/60 mb-5">
+          This wallet can't play HairGames or earn Hair Points
+          {until ? ` until ${until.toLocaleString()}` : ""}.
+        </p>
+        {ban.reason && (
+          <p className="text-sm text-red-200/90 bg-red-500/10 border border-red-500/20 rounded-xl px-4 py-3 mb-5">
+            Reason: {ban.reason}
+          </p>
+        )}
+        <p className="text-xs text-white/40 mb-6">If you think this is a mistake, contact the HairGames team on Discord.</p>
+        <div className="flex justify-center">
+          <WalletButton />
+        </div>
+      </div>
+    </div>
+  );
 }
 
 /* ─── Pieces ─────────────────────────────────────────────────────────── */
@@ -315,6 +362,7 @@ export function Layout({ children }) {
   const [location] = useLocation();
   const { address, isConnected } = useAccount();
   const points = useHairPoints(isConnected ? address : null, location);
+  const ban = useBanStatus(isConnected ? address : null);
   const isGamePage = location.startsWith("/game/");
 
   useEffect(() => {
@@ -331,6 +379,9 @@ export function Layout({ children }) {
 
   // Close the menu whenever the route changes.
   useEffect(() => setMobileOpen(false), [location]);
+
+  // A banned wallet sees only the ban screen, on every page and game.
+  if (ban) return <BannedScreen ban={ban} />;
 
   if (isGamePage) return (
     <div className="min-h-screen flex flex-col bg-background">

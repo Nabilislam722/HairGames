@@ -1,6 +1,7 @@
 import { ethers } from "ethers";
 import { ECOSYSTEM_CONTRACTS, GENERIC_GAME_ABI, GAME_CONFIG } from "../config/constants.js";
 import { provider, getServerWallet } from "../config/provider.js";
+import { logSuspicious } from "../services/moderation.js";
 
 const HEMI_CHAIN_ID = 43111n; // Hardcoded to prevent redundant getNetwork() RPC calls
 
@@ -167,6 +168,7 @@ export const generateProofOfPatienceSignature = async (req, res) => {
       hits: Number(hits),
     });
     if (implausible) {
+      logSuspicious(req, player, "pop_implausible_score", implausible, { score, survivalSeconds, answered, shots, hits });
       return res.status(400).json({ error: implausible });
     }
 

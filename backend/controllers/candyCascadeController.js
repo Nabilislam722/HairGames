@@ -12,6 +12,7 @@ import {
   signLevelResult,
   startLevelArg,
 } from "../services/candyCascade.js";
+import { logSuspicious } from "../services/moderation.js";
 
 const HEMI_CHAIN_ID = 43111n;
 const RPC_TIMEOUT_MS = 6000;
@@ -74,6 +75,9 @@ export const startCandySession = async (req, res) => {
     const existing = await CandySession.findOne({ startTxHash });
     if (existing) {
       if (existing.wallet !== wallet.toLowerCase() || existing.levelId !== levelId) {
+        logSuspicious(req, wallet, "candy_start_reused", "Reused a level start for a different level or wallet", {
+          startTxHash, levelId, startedLevel: existing.levelId, startedBy: existing.wallet,
+        });
         throw httpError(409, "That start transaction belongs to a different level.");
       }
       return res.json(sessionReply(existing));
@@ -86,6 +90,9 @@ export const startCandySession = async (req, res) => {
       tx.to?.toLowerCase() !== contractAddress().toLowerCase() ||
       startLevelArg(tx.data) !== levelId
     ) {
+      logSuspicious(req, wallet, "candy_foreign_start", "Asked for a board with a transaction that doesn't start this level", {
+        startTxHash, levelId, txFrom: tx.from, txTo: tx.to, txLevel: startLevelArg(tx.data),
+      });
       throw httpError(400, "That transaction doesn't start this level.");
     }
 
@@ -141,6 +148,14 @@ export const verifyCandyLevel = async (req, res) => {
       if (!result.valid || !result.win) {
         session.status = "rejected";
         await session.save();
+        // The game only sends wins it played, so either case means the request was doctored.
+        logSuspicious(
+          req,
+          wallet,
+          result.valid ? "candy_lost_game_submitted" : "candy_tampered_moves",
+          result.valid ? "Sent a lost game as a win" : `Moves failed the replay: ${result.reason}`,
+          { sessionId, levelId: session.levelId, moveCount: Array.isArray(moves) ? moves.length : null },
+        );
         throw httpError(400, result.valid ? "The level was not won." : `The moves did not check out (${result.reason}).`);
       }
       session.status = "verified";

@@ -21,6 +21,8 @@ import {
     verifyCandyLevel,
 } from "../controllers/candyCascadeController.js";
 
+import { getBanStatus, rejectBanned } from "../services/moderation.js";
+
 import {
     getGlobalLeaderboard,
     getEventLeaderboard,
@@ -44,20 +46,24 @@ router.get("/ping", (req, res) => res.sendStatus(204));
 // Profile Sub-Router
 router.use("/profile", profileRouter);
 
-// Game Signatures & Configs 
-router.get("/race/config", getRaceConfig);
-router.post("/race/signature", generateRaceSignature);
-router.post("/fishing/signature", generateFishingSignature);
-router.post("/fruitninja/signature", generateFruitNinjaSignature);
-router.post("/proof-of-patience/signature", generateProofOfPatienceSignature);
-router.post("/candy-cascade/session", startCandySession);
-router.post("/candy-cascade/verify", verifyCandyLevel);
+// Bans: the site asks this when a wallet connects. Every route below that plays a game or pays HP
+// goes through rejectBanned.
+router.get("/ban/:wallet", getBanStatus);
 
-// Points Management 
-router.post("/points/verify", verifyPoints);
-router.post("/points/add", addPoints);
+// Game Signatures & Configs
+router.get("/race/config", getRaceConfig);
+router.post("/race/signature", rejectBanned, generateRaceSignature);
+router.post("/fishing/signature", rejectBanned, generateFishingSignature);
+router.post("/fruitninja/signature", rejectBanned, generateFruitNinjaSignature);
+router.post("/proof-of-patience/signature", rejectBanned, generateProofOfPatienceSignature);
+router.post("/candy-cascade/session", rejectBanned, startCandySession);
+router.post("/candy-cascade/verify", rejectBanned, verifyCandyLevel);
+
+// Points Management
+router.post("/points/verify", rejectBanned, verifyPoints);
+router.post("/points/add", rejectBanned, addPoints);
 router.get("/points/get", getPoints);
-router.post("/points/claim", claimTask);
+router.post("/points/claim", rejectBanned, claimTask);
 // router.post("/points/vote", addVotePoints);
 
 // Leaderboards & Events 

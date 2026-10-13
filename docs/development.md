@@ -124,6 +124,44 @@ NFTs from the collections in `CollectionConfig` raise a player's HP multiplier (
 - Contracts and the NFT indexer: `npm test` in `contract/` (runs against a local Hardhat chain, including an end-to-end Candy Cascade test that replays real games).
 - Candy Cascade rules: `npm test` in the [candy-Cascade](https://github.com/Nabilislam722/candy-Cascade) repo.
 
+## Bans and suspicious activity
+
+**Blocklist.** Wallets in the `blocklist` collection can't play or earn HP. Every route that starts or signs a game, or pays HP, runs through `rejectBanned` (`backend/services/moderation.js`), which answers a banned wallet with a 403 and `banned: true`. When a banned wallet connects, the site shows a "You are banned" screen on every page, with the ban's reason and end date. Each entry has:
+
+| Field | Meaning |
+| --- | --- |
+| `wallet` | The banned address (stored lowercase) |
+| `reason` | Shown to the player |
+| `notes` | Internal only, never shown |
+| `bannedBy` | Who added the ban |
+| `expiresAt` | When the ban ends; empty for a permanent ban |
+
+**Suspicious-activity log.** When the backend catches something that looks like cheating, it saves an entry in `suspiciousactivities` with the wallet, a type, a message, details, IP and browser. Entries are kept for 180 days. Logging never bans anyone by itself. What gets logged:
+
+| Type | What happened |
+| --- | --- |
+| `claimed_foreign_tx` | Claimed HP for a transaction another wallet sent |
+| `claimed_foreign_level` | Claimed HP for a Candy Cascade level another wallet cleared |
+| `score_mismatch` | Claimed a different score than the transaction recorded |
+| `pop_implausible_score` | A Proof of Patience score that the run's answers, length or fire rate couldn't produce |
+| `candy_tampered_moves` | Candy Cascade moves that fail the server's replay |
+| `candy_lost_game_submitted` | A lost Candy Cascade game sent as a win |
+| `candy_start_reused` | A level start reused for a different level or wallet |
+| `candy_foreign_start` | Asked for a board with a transaction that doesn't start that level for that wallet |
+
+**Managing bans.** Run the admin script from the repo root on the server:
+
+```bash
+node backend/scripts/blocklist.js top --days 30                    # wallets with the most suspicious events
+node backend/scripts/blocklist.js suspicious 0xWallet               # one wallet's events
+node backend/scripts/blocklist.js ban 0xWallet --reason "Faked scores" --days 7 --by yourname
+node backend/scripts/blocklist.js ban 0xWallet --reason "Repeated cheating"   # permanent
+node backend/scripts/blocklist.js unban 0xWallet
+node backend/scripts/blocklist.js list
+```
+
+Banned wallets can still call the game contracts directly, but without the server's signatures they can't save results, and `/api/points/add` won't credit them.
+
 ## Environment variables
 
 Frontend (`client/.env`):

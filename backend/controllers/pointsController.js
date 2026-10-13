@@ -10,6 +10,7 @@ import {
 import { provider, getServerWallet } from "../config/provider.js";
 import { findLevelCleared } from "../services/candyCascade.js";
 import { nft } from "../services/nft.js";
+import { logSuspicious } from "../services/moderation.js";
 
 // Helper function to sign the verification payload
 async function generateCryptoSignature(level, kills, points, nonce, walletAddress, targetAddress, chainId) {
@@ -100,6 +101,9 @@ export const addPoints = async (req, res) => {
 
     // Transactions are public: without this, anyone could claim another player's unprocessed tx.
     if (receipt.from.toLowerCase() !== wallet.toLowerCase()) {
+      logSuspicious(req, wallet, "claimed_foreign_tx", "Tried to claim HP for a transaction another wallet sent", {
+        txHash, gameId, sender: receipt.from,
+      });
       return res.status(400).json({ error: 'Transaction was not sent by this wallet' });
     }
 
@@ -171,6 +175,9 @@ export const addPoints = async (req, res) => {
         return res.status(400).json({ error: 'Transaction did not clear a Candy Cascade level' });
       }
       if (cleared.player.toLowerCase() !== wallet.toLowerCase()) {
+        logSuspicious(req, wallet, "claimed_foreign_level", "Tried to claim HP for a Candy Cascade level another wallet cleared", {
+          txHash, player: cleared.player,
+        });
         return res.status(400).json({ error: 'Level was cleared by a different wallet' });
       }
       onChainScore = Math.max(0, Number(cleared.score) - Number(cleared.previousBest));
@@ -191,6 +198,9 @@ export const addPoints = async (req, res) => {
     }
 
     if (gameId !== "racing_game" && gameId !== "candy_cascade" && onChainScore !== pointsRequested) {
+      logSuspicious(req, wallet, "score_mismatch", "Claimed a different score than the transaction recorded", {
+        txHash, gameId, onChainScore, claimed: pointsRequested,
+      });
       return res.status(400).json({ error: `Score mismatch: on-chain=${onChainScore}, claimed=${pointsRequested}` });
     }
 
