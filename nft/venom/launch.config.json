@@ -1,0 +1,30 @@
+{
+  "name": "Venom",
+  "symbol": "VENOM",
+  "supply": 50,
+  "description": "The #27 Venom, the OP bike of Moto Rush on HairGames: the fastest, strongest bike in the garage, with its own turbo two-stroke voice. Holders ride it in Moto Rush and earn an extra +0.2x Hair Points multiplier in Moto Rush.",
+  "externalUrl": "https://game.hairtoken.xyz",
+
+  "image": "ipfs://bafybeiepu4vcpagocy5era2lsrj6qfpuo73gu6insql4wg2fktc63aslje",
+
+  "royalty": { "bps": 500, "recipient": "0x595988eDD58E2EfE11d7F9e2005c58716e58388E" },
+  "chain": { "name": "Hemi", "chainId": 43111 },
+  "mintora": { "marketplace": "0xf93AF302727E0ef59522Cd9D9Ff19Ba6b5BB7755" },
+
+  "hairgames": {
+    "multiplier": 1.0,
+    "gameBonus": { "moto_rush": 0.2 },
+    "emoji": "🏍️",
+    "color": "#7b3fe4"
+  },
+
+  "bike": {
+    "name": "#27 Venom",
+    "number": 27,
+    "class": "OP",
+    "engine": "Turbo two-stroke",
+    "gears": 5,
+    "ratings": { "speed": 6, "power": 6, "handling": 6 },
+    "physics": { "speed": 75, "torque": 27, "lean": 1.45, "spin": 7.2 }
+  }
+}

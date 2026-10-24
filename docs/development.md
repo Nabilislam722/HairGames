@@ -118,6 +118,8 @@ NFTs from the collections in `CollectionConfig` raise a player's HP multiplier (
 - **New collections:** a collection added to `CollectionConfig` is picked up on the next pass and backfilled from its `startBlock`. Set `startBlock` to the contract's deploy block; from 0, a backfill takes a few minutes.
 - **Hold period:** a newly received NFT counts toward the multiplier only after `NFT_HOLD_HOURS` (default 24), so one NFT can't be passed between wallets to boost each of them. HP crediting reads the multiplier fresh from the index.
 - **Profiles:** the profile endpoint reads the index (no chain calls). At most every 10 minutes per wallet, it double-checks on-chain balances in the background and repairs any difference.
+- **Our own NFTs:** everything for them lives in `nft/`, a Hardhat project of its own kept apart from the game contracts in `contract/`. That covers contracts, deploy scripts, admin tasks, tests, and a launch kit per collection. Venom deploys with `npm run deploy:venom` in `nft/`; `nft/venom/README.md` walks through it. `nft/contracts/mocks/MockERC721.sol` holds test-only collections for indexer tests.
+- **Per-game bonuses:** a collection's optional `gameBonus` (for example `{ moto_rush: 0.2 }`) adds to the multiplier in that game only, past the 1.5× cap, once per collection however many of its NFTs a wallet holds. The key is the `gameId` the game sends to `/api/points/add`. Give such a collection `multiplier: 1` if it shouldn't raise the regular multiplier too. The Venom NFT (`nft/venom/`) works this way.
 
 ## Tests
 
@@ -171,6 +173,8 @@ Frontend (`client/.env`):
 | `VITE_API_URL` | Backend base URL (defaults to `http://localhost:3000`) |
 | `VITE_VOTING_CONTRACT_ADDRESS` | Voting contract used on the dashboard |
 | `VITE_CANDY_CASCADE_CONTRACT` | CandyCascade contract. Without it, the game runs in local play with nothing saved on chain |
+| `VITE_MOTO_RUSH_CONTRACT` | MotoRush contract. With it, levels and stars are saved on chain and each level can be completed once; without it, Moto Rush is free play with progress kept in the browser |
+| `VITE_VENOM_CONTRACT` | Venom NFT contract (`nft/`). Only Venom holders can ride the #27 Venom in Moto Rush; without it, the Venom stays locked for everyone |
 
 Backend (`.env` in the directory you start the backend from):
 
@@ -184,6 +188,7 @@ Backend (`.env` in the directory you start the backend from):
 | `RACE_INITIAL_POINTS`, `RACE_POINTS_DECREMENT_PER_SECOND` | Racing game scoring |
 | `CANDY_CASCADE_CONTRACT` | CandyCascade contract address (sessions, verification and HP crediting) |
 | `CANDY_CASCADE_CORE_DIR` | Optional: where the backend loads the Candy Cascade engine from (default: the game source in `client/`) |
+| `MOTO_RUSH_DIR` | Optional: where the backend loads the Moto Rush physics from to replay rides (default: `client/public/moto-rush`) |
 | `NFT_HOLD_HOURS` | Hours a newly received NFT is held before it counts toward the multiplier (default `24`) |
 
 Contracts (`contract/.env`):

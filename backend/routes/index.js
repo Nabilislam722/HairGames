@@ -21,6 +21,11 @@ import {
     verifyCandyLevel,
 } from "../controllers/candyCascadeController.js";
 
+import {
+    startMotoSession,
+    verifyMotoRide,
+} from "../controllers/motoRushController.js";
+
 import { getBanStatus, rejectBanned } from "../services/moderation.js";
 
 import {
@@ -58,6 +63,8 @@ router.post("/fruitninja/signature", rejectBanned, generateFruitNinjaSignature);
 router.post("/proof-of-patience/signature", rejectBanned, generateProofOfPatienceSignature);
 router.post("/candy-cascade/session", rejectBanned, startCandySession);
 router.post("/candy-cascade/verify", rejectBanned, verifyCandyLevel);
+router.post("/moto-rush/session", rejectBanned, startMotoSession);
+router.post("/moto-rush/verify", rejectBanned, verifyMotoRide);
 
 // Points Management
 router.post("/points/verify", rejectBanned, verifyPoints);

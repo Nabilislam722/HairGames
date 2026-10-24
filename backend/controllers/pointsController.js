@@ -1,14 +1,18 @@
 import { ethers } from "ethers";
 import UserProfile from "../models/UserProfile.js";
 import EventProfile from "../models/EventProfile.js";
-import { 
-  ECOSYSTEM_CONTRACTS, 
-  GENERIC_GAME_ABI, 
-  GAME_CONFIG, 
-  SUBMIT_LEVEL_SCORE_SELECTOR 
+import ProcessedTx from "../models/ProcessedTx.js";
+import MotoSession from "../models/MotoSession.js";
+import {
+  ECOSYSTEM_CONTRACTS,
+  GENERIC_GAME_ABI,
+  GAME_CONFIG,
+  MOTO_RUSH,
+  SUBMIT_LEVEL_SCORE_SELECTOR
 } from "../config/constants.js";
 import { provider, getServerWallet } from "../config/provider.js";
 import { findLevelCleared } from "../services/candyCascade.js";
+import { STAR_HP, findLevelCompleted } from "../services/motoRush.js";
 import { nft } from "../services/nft.js";
 import { logSuspicious } from "../services/moderation.js";
 
@@ -69,11 +73,15 @@ export const verifyPoints = async (req, res) => {
  * POST /api/points/add
  */
 export const addPoints = async (req, res) => {
-  const { wallet, txHash, score, gameId } = req.body;
+  const { wallet, score, gameId } = req.body;
+  const txHash = typeof req.body.txHash === "string" ? req.body.txHash.trim().toLowerCase() : "";
 
   try {
-    if (!wallet || !txHash) {
+    if (!wallet || !ethers.isAddress(wallet) || !/^0x[0-9a-f]{64}$/.test(txHash)) {
       return res.status(400).json({ error: 'Missing wallet or txHash' });
+    }
+    if (!Object.hasOwn(ECOSYSTEM_CONTRACTS, gameId)) {
+      return res.status(400).json({ error: 'Unknown game' });
     }
 
     let pointsRequested = 0;
@@ -84,7 +92,7 @@ export const addPoints = async (req, res) => {
       }
     }
 
-    const alreadyProcessed = await UserProfile.findOne({ processedHashes: txHash });
+    const alreadyProcessed = (await ProcessedTx.exists({ _id: txHash })) || (await UserProfile.exists({ processedHashes: txHash }));
     if (alreadyProcessed) {
       return res.status(400).json({ error: 'Transaction already processed' });
     }
@@ -94,8 +102,8 @@ export const addPoints = async (req, res) => {
       return res.status(400).json({ error: 'Transaction failed or not found' });
     }
 
-    const targetAddress = ECOSYSTEM_CONTRACTS[gameId] || ECOSYSTEM_CONTRACTS["default_legacy"];
-    if (receipt.to.toLowerCase() !== targetAddress.toLowerCase()) {
+    const targetAddress = ECOSYSTEM_CONTRACTS[gameId];
+    if (receipt.to?.toLowerCase() !== targetAddress.toLowerCase()) {
       return res.status(400).json({ error: 'Transaction not sent to game contract' });
     }
 
@@ -114,6 +122,7 @@ export const addPoints = async (req, res) => {
 
     const inputData = tx.data;
     let onChainScore;
+    let motoVenomRide = false;
     const abiCoder = new ethers.AbiCoder();
 
     if (gameId === "racing_game") {
@@ -182,6 +191,21 @@ export const addPoints = async (req, res) => {
       }
       onChainScore = Math.max(0, Number(cleared.score) - Number(cleared.previousBest));
 
+    } else if (gameId === "moto_rush") {
+      const completed = findLevelCompleted(receipt, targetAddress);
+      if (!completed) {
+        return res.status(400).json({ error: 'Transaction did not complete a Moto Rush level' });
+      }
+      if (completed.player.toLowerCase() !== wallet.toLowerCase()) {
+        logSuspicious(req, wallet, "claimed_foreign_level", "Tried to claim HP for a Moto Rush level another wallet completed", {
+          txHash, player: completed.player,
+        });
+        return res.status(400).json({ error: 'Level was completed by a different wallet' });
+      }
+      onChainScore = STAR_HP[Number(completed.stars)] ?? 0;
+      const session = await MotoSession.findOne({ sessionId: String(completed.sessionId).toLowerCase() });
+      motoVenomRide = !!session?.venomBonus;
+
     } else {
       const SELECTOR_16 = ethers.id("submitGuess(uint16)").slice(0, 10);
       const SELECTOR_256 = ethers.id("submitGuess(uint256)").slice(0, 10);
@@ -197,7 +221,7 @@ export const addPoints = async (req, res) => {
       }
     }
 
-    if (gameId !== "racing_game" && gameId !== "candy_cascade" && onChainScore !== pointsRequested) {
+    if (gameId !== "racing_game" && gameId !== "candy_cascade" && gameId !== "moto_rush" && onChainScore !== pointsRequested) {
       logSuspicious(req, wallet, "score_mismatch", "Claimed a different score than the transaction recorded", {
         txHash, gameId, onChainScore, claimed: pointsRequested,
       });
@@ -207,18 +231,36 @@ export const addPoints = async (req, res) => {
     const walletLower = wallet.toLowerCase();
     // Fresh from the NFT index: only NFTs held past the hold period count, so passing one NFT
     // between wallets can't boost each of them.
-    const userMultiplier = await nft.walletMultiplier(walletLower);
+    const userMultiplier = gameId === "moto_rush"
+      ? Number(Math.min(
+          (await nft.walletNfts(walletLower)).multiplier + (motoVenomRide ? MOTO_RUSH.VENOM_BONUS : 0),
+          MOTO_RUSH.MAX_MULTIPLIER,
+        ).toFixed(2))
+      : await nft.walletMultiplier(walletLower, gameId);
     const pointsToAdd = Math.round(onChainScore * userMultiplier);
 
-    const user = await UserProfile.findOneAndUpdate(
-      { wallet: walletLower },
-      {
-        $inc: { points: pointsToAdd },
-        $push: { processedHashes: txHash },
-        $set: { lastSyncedAt: new Date() },
-      },
-      { upsert: true, new: true }
-    );
+    try {
+      await ProcessedTx.create({ _id: txHash, wallet: walletLower, gameId, baseHp: onChainScore, hp: pointsToAdd, multiplier: userMultiplier });
+    } catch (err) {
+      if (err.code === 11000) return res.status(400).json({ error: 'Transaction already processed' });
+      throw err;
+    }
+
+    let user;
+    try {
+      user = await UserProfile.findOneAndUpdate(
+        { wallet: walletLower },
+        {
+          $inc: { points: pointsToAdd },
+          $push: { processedHashes: txHash },
+          $set: { lastSyncedAt: new Date() },
+        },
+        { upsert: true, new: true }
+      );
+    } catch (err) {
+      await ProcessedTx.deleteOne({ _id: txHash }).catch(() => {});
+      throw err;
+    }
 
     await EventProfile.findOneAndUpdate(
       { wallet: walletLower },

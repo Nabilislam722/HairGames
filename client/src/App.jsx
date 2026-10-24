@@ -17,6 +17,7 @@ import RacingGamePage from "@/games/racing/RacingGamePage";
 import FishingGamePage from "@/games/fishing/FishingGamePage";
 import ProofOfPatiencePage from "@/games/proof-of-patience/ProofOfPatiencePage";
 import CandyCascadePage from "@/games/candy-cascade/CandyCascadePage";
+import MotoRushPage from "@/games/moto-rush/MotoRushPage";
 
 function Router() {
   return (
@@ -31,6 +32,7 @@ function Router() {
         <Route path="/game/fishing_game" component={FishingGamePage} />
         <Route path="/game/proof_of_patience" component={ProofOfPatiencePage} />
         <Route path="/game/candy_cascade" component={CandyCascadePage} />
+        <Route path="/game/moto_rush" component={MotoRushPage} />
         <Route path="/leaderboard" component={Leaderboard} />
         <Route path="/profile" component={Profile} />
         <Route path="/eventrank" component={EventRank} />

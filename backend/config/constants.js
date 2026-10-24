@@ -6,7 +6,11 @@ export const ECOSYSTEM_CONTRACTS = {
   "default_legacy": "0x61A86E5B2075d0E6ff659a6b29D1E367CAa6a8E5",
   "proof_of_patience": "0x760d91401Afb3499cf1BD0256b30485BDa40728C",
   "candy_cascade":"0xadDfFAdc18554f8711058bdbDeF7fC687091A69b",
+  "moto_rush": "0x5568E1d5C919b41fA6eaBE227a3E5cc25d89c3Bd",
 };
+
+export const VENOM_NFT = "0xD8AeD81836D037598D14B96BBD6Db3ea7e90f615";
+export const MOTO_RUSH = { VENOM_BONUS: 0.2, MAX_MULTIPLIER: 1.7 };
 
 export const GENERIC_GAME_ABI = [
   {

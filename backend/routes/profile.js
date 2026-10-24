@@ -3,6 +3,7 @@ import { ethers } from "ethers";
 import UserProfile from "../models/UserProfile.js";
 import { nft } from "../services/nft.js";
 import { mongoNftStore } from "../services/nftStore.js";
+import { MOTO_RUSH, VENOM_NFT } from "../config/constants.js";
 
 const router = express.Router();
 
@@ -40,12 +41,18 @@ router.get("/:wallet", async (req, res) => {
     await UserProfile.updateOne({ wallet: walletLower }, { $set: { rank: globalRank } });
     await mongoNftStore.saveProfileCache(walletLower, holdings, multiplier);
 
+    const holdsVenom = holdings.some((h) => h.contractAddress === VENOM_NFT.toLowerCase());
+    const motoRushVenomMultiplier = holdsVenom
+      ? Number(Math.min(multiplier + MOTO_RUSH.VENOM_BONUS, MOTO_RUSH.MAX_MULTIPLIER).toFixed(2))
+      : null;
+
     return res.json({
       wallet: user.wallet,
       points: user.points,
       nftHoldings: holdings, // each with `active` and `countsFrom`: NFTs count after a hold period
       multiplier,
       pendingMultiplier,
+      motoRushVenomMultiplier,
       completedTasks: user.completedTasks || [],
       rank: globalRank,
       lastSyncedAt: new Date(),

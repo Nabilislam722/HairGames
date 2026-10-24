@@ -7,6 +7,7 @@
     "compile": "hardhat compile",
     "deploy": "hardhat run scripts/deploy.js --network hemi",
     "deploy:candy": "hardhat run scripts/deploy-candy-cascade.js --network hemi",
+    "deploy:moto": "hardhat run scripts/deploy-moto-rush.js --network hemi",
     "test": "hardhat test"
   },
   "devDependencies": {

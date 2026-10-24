@@ -6,6 +6,8 @@ const collectionConfigSchema = new mongoose.Schema({
   address: { type: String, required: true, unique: true, lowercase: true, index: true },
   name: { type: String, required: true },
   multiplier: { type: Number, required: true, default: 1.0 }, // 1.25 adds +0.25 per NFT held
+  gameBonus: { type: Map, of: Number }, // e.g. { moto_rush: 0.2 }
+  holdHours: { type: Number, min: 0 }, // unset = NFT_HOLD_HOURS
   startBlock: { type: Number, default: 0 },
   imageUrl: { type: String },
   emoji: { type: String },

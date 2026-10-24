@@ -84,6 +84,18 @@ const QUESTS = [
 
 const GAMES = [
   {
+    id: "moto_rush",
+    title: "Moto Rush",
+    description: "Gas, lean and flip through 500 tracks across five worlds of loops, stairs and table jumps. Free play for now.",
+    entryFee: 0.000008, 
+    image: "/game_assets/motoRushBanner.jpg",
+    logo: "/game_assets/motoRushLogo.jpg",
+    category: "Racing",
+    accent: "#f7a21b",
+    status: "active",
+    difficulty: "Medium",
+  },
+  {
     id: "candy_cascade",
     title: "Candy Cascade",
     description: "Swap. Match. Watch it all come tumbling down. 500 levels of match-3, with your progress saved on chain.",

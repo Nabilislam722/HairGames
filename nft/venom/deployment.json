@@ -1,0 +1,19 @@
+{
+  "hemi": {
+    "address": "0xD8AeD81836D037598D14B96BBD6Db3ea7e90f615",
+    "deployBlock": 5536881,
+    "txHash": "0x7be2b71e839701eacaaf91477b26a41712753acb89ba96ce1871a09cd5f6143d",
+    "owner": "0x595988eDD58E2EfE11d7F9e2005c58716e58388E",
+    "deployedAt": "2026-10-18T07:41:23.954Z",
+    "constructorArgs": [
+      "Venom",
+      "VENOM",
+      "50",
+      "\"description\":\"The #27 Venom, the OP bike of Moto Rush on HairGames: the fastest, strongest bike in the garage, with its own turbo two-stroke voice. Holders ride it in Moto Rush and earn an extra +0.2x Hair Points multiplier in Moto Rush.\",\"image\":\"ipfs://bafybeiepu4vcpagocy5era2lsrj6qfpuo73gu6insql4wg2fktc63aslje\",\"external_url\":\"https://game.hairtoken.xyz\"",
+      "{\"trait_type\":\"Bike\",\"value\":\"#27 Venom\"},{\"trait_type\":\"Number\",\"value\":27},{\"trait_type\":\"Class\",\"value\":\"OP\"},{\"trait_type\":\"Engine\",\"value\":\"Turbo two-stroke\"},{\"trait_type\":\"Gears\",\"display_type\":\"number\",\"value\":5},{\"trait_type\":\"Speed\",\"display_type\":\"number\",\"value\":6},{\"trait_type\":\"Power\",\"display_type\":\"number\",\"value\":6},{\"trait_type\":\"Handling\",\"display_type\":\"number\",\"value\":6},{\"trait_type\":\"Motor Speed\",\"display_type\":\"number\",\"value\":75},{\"trait_type\":\"Torque\",\"display_type\":\"number\",\"value\":27},{\"trait_type\":\"Lean\",\"display_type\":\"number\",\"value\":1.45},{\"trait_type\":\"Flip Spin\",\"display_type\":\"number\",\"value\":7.2},{\"trait_type\":\"Moto Rush HP Bonus\",\"value\":\"+0.2x\"}",
+      "{\"name\":\"Venom\",\"description\":\"The #27 Venom, the OP bike of Moto Rush on HairGames: the fastest, strongest bike in the garage, with its own turbo two-stroke voice. Holders ride it in Moto Rush and earn an extra +0.2x Hair Points multiplier in Moto Rush.\",\"image\":\"ipfs://bafybeiepu4vcpagocy5era2lsrj6qfpuo73gu6insql4wg2fktc63aslje\",\"external_link\":\"https://game.hairtoken.xyz\",\"seller_fee_basis_points\":500,\"fee_recipient\":\"0x595988eDD58E2EfE11d7F9e2005c58716e58388E\"}",
+      "0x595988eDD58E2EfE11d7F9e2005c58716e58388E",
+      "500"
+    ]
+  }
+}

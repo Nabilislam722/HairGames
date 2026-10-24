@@ -29,10 +29,10 @@ const ERC721_ABI = [
 const DEFAULTS = {
   pollMs: 10_000,
   confirmations: 3,
-  holdHours: undefined, // from NFT_HOLD_HOURS, else 24
+  holdHours: undefined, 
   chunk: { start: 20_000, min: 100, max: 100_000 }, // blocks per getLogs; adapts to the RPC
   rpcTimeoutMs: 30_000,
-  reconcileEveryMs: 10 * 60_000, // per wallet
+  reconcileEveryMs: 10 * 60_000, 
   now: () => Date.now(),
 };
 
@@ -86,6 +86,17 @@ export function computeMultiplier(holdings, collections) {
   let bonus = 0;
   for (const holding of holdings) if (holding.active) bonus += bonusOf.get(holding.contractAddress) ?? 0;
   return Number((1 + Math.min(Math.max(bonus, 0), MAX_BONUS)).toFixed(2));
+}
+
+export function computeGameBonuses(holdings, collections) {
+  const held = new Set(holdings.filter((h) => h.active).map((h) => h.contractAddress));
+  const bonuses = {};
+  for (const c of collections) {
+    if (!c.gameBonus || !held.has(c.address.toLowerCase())) continue;
+    const entries = c.gameBonus instanceof Map ? [...c.gameBonus] : Object.entries(c.gameBonus);
+    for (const [gameId, bonus] of entries) bonuses[gameId] = Number(((bonuses[gameId] ?? 0) + bonus).toFixed(2));
+  }
+  return bonuses;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,7 +230,7 @@ export function createNftIndexer({ provider, store, ...options }) {
 
     const holdings = (await store.tokensOwnedBy(wallet, indexed)).map((t) => {
       const c = byAddress.get(t.contract);
-      const countsFrom = new Date(t.acquiredAt).getTime() + hold;
+      const countsFrom = new Date(t.acquiredAt).getTime() + (c.holdHours != null ? c.holdHours * 3_600_000 : hold);
       return {
         contractAddress: t.contract,
         tokenId: t.tokenId,
@@ -228,6 +239,7 @@ export function createNftIndexer({ provider, store, ...options }) {
         emoji: c.emoji || "🔮",
         color: c.color || "#a78bfa",
         imageUrl: c.imageUrl,
+        gameBonus: c.gameBonus ? Object.fromEntries(c.gameBonus instanceof Map ? c.gameBonus : Object.entries(c.gameBonus)) : undefined,
         countsFrom: new Date(countsFrom),
         active: countsFrom <= now,
       };
@@ -246,6 +258,7 @@ export function createNftIndexer({ provider, store, ...options }) {
       holdings,
       multiplier: computeMultiplier(holdings, collections),
       pendingMultiplier: computeMultiplier(holdings.map((h) => ({ ...h, active: true })), collections),
+      gameBonuses: computeGameBonuses(holdings, collections),
     };
   }
 
@@ -349,7 +362,10 @@ export function createNftIndexer({ provider, store, ...options }) {
     start,
     indexOnce,
     walletNfts,
-    walletMultiplier: async (wallet) => (await walletNfts(wallet)).multiplier,
+    walletMultiplier: async (wallet, gameId) => {
+      const { multiplier, gameBonuses } = await walletNfts(wallet);
+      return Number((multiplier + (gameBonuses[gameId] ?? 0)).toFixed(2));
+    },
     reconcileWallet,
     refreshProfiles,
   };

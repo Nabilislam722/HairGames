@@ -214,6 +214,11 @@ function NFTCard({ nft, index }) {
       <div className="px-3 py-2.5">
         <p className="text-sm font-semibold text-white truncate">{nft.name}</p>
         <p className="text-xs text-white/45 truncate">{nft.collectionName}</p>
+        {nft.gameBonus?.moto_rush > 0 && (
+          <p className="mt-1 text-[11px] font-medium text-lime-300 truncate" title="Added in Moto Rush when you ride the #27 Venom">
+            +{nft.gameBonus.moto_rush}× in Moto Rush on the Venom
+          </p>
+        )}
       </div>
     </motion.div>
   );
@@ -376,6 +381,7 @@ export default function Profile() {
           nftHoldings: data.nftHoldings || [],
           multiplier: data.multiplier ?? 1.0,
           pendingMultiplier: data.pendingMultiplier ?? data.multiplier ?? 1.0,
+          motoRushVenomMultiplier: data.motoRushVenomMultiplier ?? null,
           completedTasks: data.completedTasks || [],
           rank: data.rank ?? null,
           twitter: xStatus.connected ? xStatus.handle : null,
@@ -463,10 +469,13 @@ export default function Profile() {
   /*  Loading  */
   if (loading) return <ProfileSkeleton />;
 
-  const { points, nftHoldings, multiplier, pendingMultiplier, rank, twitter, discord } = profile;
-  const multiplierNote = pendingMultiplier > multiplier
-    ? `Rises to ${Number(pendingMultiplier).toFixed(2)}× as new NFTs settle in`
-    : nftHoldings.length > 0 ? "Applied to every score" : "Hold NFTs to boost it";
+  const { points, nftHoldings, multiplier, pendingMultiplier, motoRushVenomMultiplier, rank, twitter, discord } = profile;
+  const multiplierNote = [
+    pendingMultiplier > multiplier
+      ? `Rises to ${Number(pendingMultiplier).toFixed(2)}× as new NFTs settle in`
+      : nftHoldings.length > 0 ? "Applied to every score" : "Hold NFTs to boost it",
+    motoRushVenomMultiplier ? `${Number(motoRushVenomMultiplier).toFixed(2)}× in Moto Rush on the Venom` : null,
+  ].filter(Boolean).join(" · ");
   const lvlInfo = getLevelInfo(points);
   const roadmap = getRoadmap(points);
   const LevelIcon = lvlInfo.icon;
