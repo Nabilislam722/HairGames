@@ -735,7 +735,7 @@
     if (CHAIN) {
       r.result = { t, stars, prevTime: null, isBest: false, newBikes: [] };
       if (r.session) {
-        toPage({ type: 'finished', sessionId: r.session, levelId: r.li + 1, bike: r.bi, inputs: r.rec.runs, reviveStep: r.reviveStep, rules: chain.rules });
+        toPage({ type: 'finished', sessionId: r.session, levelId: r.li + 1, bike: r.bi, stars, timeMs: Math.round(t * 1000), inputs: r.rec.runs, reviveStep: r.reviveStep, rules: chain.rules });
       }
       return;
     }

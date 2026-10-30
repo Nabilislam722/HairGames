@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { ArrowLeft, Trophy, ShieldAlert, CheckCircle2, Loader2, Flag } from "lucide-react";
 import RacingGame from "./components/RacingGame";
 import { Button } from "@/components/ui/button";
+import { hpForScore } from "@/lib/hp";
 import { ethers } from "ethers";
 
 const GAME_COST_ETH = "0.000017";
@@ -259,7 +260,7 @@ export default function RacingGamePage() {
           <div className="absolute top-6 right-6 z-20 flex flex-col items-end gap-1 pointer-events-none animate-in fade-in slide-in-from-top-4 duration-300">
             <div className="text-xs font-mono uppercase tracking-widest text-zinc-400">Current Score</div>
             <div className="text-4xl sm:text-5xl font-black font-mono tracking-tighter text-orange-500 drop-shadow-[0_0_15px_rgba(249,115,22,0.4)] transition-all tabular-nums">
-              {points.toLocaleString()}
+              {hpForScore("racing_game", points).toLocaleString()}
             </div>
           </div>
         )}

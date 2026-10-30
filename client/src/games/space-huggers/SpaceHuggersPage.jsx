@@ -1,6 +1,7 @@
 import { useEffect, useState, useRef } from "react";
 import { Link } from "wouter";
 import { Button } from "@/components/ui/button";
+import { hpForScore } from "@/lib/hp";
 import { ArrowLeft, Loader2, AlertCircle } from "lucide-react";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi';
 import { parseEther } from "viem";
@@ -193,7 +194,7 @@ export default function SpaceHuggersGame() {
           </h2>
           {currentLevelData && (
             <p className="text-neutral-400 mt-2 text-sm font-mono bg-white/5 border border-white/10 px-4 py-1.5 rounded">
-              Level: {currentLevelData.level} | Kills: {currentLevelData.kills} | Points: {currentLevelData.score !== null ? currentLevelData.score : "Calculating..."}
+              Level: {currentLevelData.level} | Kills: {currentLevelData.kills} | Points: {currentLevelData.score !== null ? hpForScore("space_huggers", currentLevelData.score) : "Calculating..."}
             </p>
           )}
           <p className="text-xs text-neutral-500 mt-4 font-mono animate-bounce">

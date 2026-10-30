@@ -7,12 +7,13 @@ import {
   ECOSYSTEM_CONTRACTS,
   GENERIC_GAME_ABI,
   GAME_CONFIG,
+  GAME_HP,
   MOTO_RUSH,
   SUBMIT_LEVEL_SCORE_SELECTOR
 } from "../config/constants.js";
 import { provider, getServerWallet } from "../config/provider.js";
 import { findLevelCleared } from "../services/candyCascade.js";
-import { STAR_HP, findLevelCompleted } from "../services/motoRush.js";
+import { STAR_HP, findLevelCompleted, multiplierReasons as motoMultiplierReasons } from "../services/motoRush.js";
 import { nft } from "../services/nft.js";
 import { logSuspicious } from "../services/moderation.js";
 
@@ -228,19 +229,28 @@ export const addPoints = async (req, res) => {
       return res.status(400).json({ error: `Score mismatch: on-chain=${onChainScore}, claimed=${pointsRequested}` });
     }
 
+    const baseHp = gameId === "moto_rush"
+      ? onChainScore
+      : Math.min(Math.round(onChainScore * (GAME_HP.SCALE[gameId] ?? 1)), GAME_HP.MAX_PER_PLAY);
+
     const walletLower = wallet.toLowerCase();
     // Fresh from the NFT index: only NFTs held past the hold period count, so passing one NFT
     // between wallets can't boost each of them.
-    const userMultiplier = gameId === "moto_rush"
-      ? Number(Math.min(
-          (await nft.walletNfts(walletLower)).multiplier + (motoVenomRide ? MOTO_RUSH.VENOM_BONUS : 0),
-          MOTO_RUSH.MAX_MULTIPLIER,
-        ).toFixed(2))
-      : await nft.walletMultiplier(walletLower, gameId);
-    const pointsToAdd = Math.round(onChainScore * userMultiplier);
+    let userMultiplier, multiplierReasons;
+    if (gameId === "moto_rush") {
+      const { holdings, multiplier } = await nft.walletNfts(walletLower);
+      userMultiplier = Number(Math.min(
+        multiplier + (motoVenomRide ? MOTO_RUSH.VENOM_BONUS : 0),
+        MOTO_RUSH.MAX_MULTIPLIER,
+      ).toFixed(2));
+      multiplierReasons = motoMultiplierReasons({ holdings, nftMultiplier: multiplier, venomRide: motoVenomRide, applied: userMultiplier });
+    } else {
+      userMultiplier = await nft.walletMultiplier(walletLower, gameId);
+    }
+    const pointsToAdd = Math.round(baseHp * userMultiplier);
 
     try {
-      await ProcessedTx.create({ _id: txHash, wallet: walletLower, gameId, baseHp: onChainScore, hp: pointsToAdd, multiplier: userMultiplier });
+      await ProcessedTx.create({ _id: txHash, wallet: walletLower, gameId, baseHp, hp: pointsToAdd, multiplier: userMultiplier });
     } catch (err) {
       if (err.code === 11000) return res.status(400).json({ error: 'Transaction already processed' });
       throw err;
@@ -274,8 +284,9 @@ export const addPoints = async (req, res) => {
     return res.json({
       wallet: user.wallet,
       points: user.points,
-      baseScore: onChainScore,
+      baseScore: baseHp,
       multiplierApplied: userMultiplier,
+      multiplierReasons,
       added: pointsToAdd,
       txHash,
     });

@@ -2,6 +2,7 @@ import { initAssets } from "./assets";
 import { playCatchSound, playHurtSound, playPortalSound, playBGM, stopBGM } from "./audio";
 import { ThreeRenderer, WORLD_W, WORLD_H } from "./ThreeRenderer";
 import { LEVELSConfig } from "./levels";
+import { MAX_HP_PER_PLAY } from "@/lib/hp";
 import {
   checkCol,
   Particle,
@@ -208,9 +209,13 @@ export class GameEngine {
     this.updateStatsUI();
   }
 
+  // The score is the HP a run earns, so it stops at the per-play maximum.
+  addScore(points) {
+    this.score = Math.min(this.score + points, MAX_HP_PER_PLAY);
+  }
+
   enterPortal() {
-    this.score += this.level * 100;
-    this.score += this.lives * 50;
+    this.addScore(this.level * 100 + this.lives * 50);
     if (this.level >= 5) {
       this.gameState = "VICTORY";
       this.setGameStateUI("VICTORY");
@@ -296,7 +301,7 @@ export class GameEngine {
       }
       t.update(dt, this);
       if (checkCol(t.getRect(), this.player.getRect())) {
-        this.score += t.points;
+        this.addScore(t.points);
         this.fishCollected++;
         this.totalFish++;
         this.targets.splice(i, 1);

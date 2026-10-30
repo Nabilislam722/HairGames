@@ -27,3 +27,13 @@ export const GAME_CONFIG = {
   RACE_INITIAL_POINTS: Number(process.env.RACE_INITIAL_POINTS) || 15000,
   RACE_POINTS_DECREMENT_PER_SECOND: Number(process.env.RACE_POINTS_DECREMENT_PER_SECOND) || 50
 };
+
+export const GAME_HP = {
+  MAX_PER_PLAY: 3000,
+  SCALE: {
+    racing_game: 0.2,       // 15,000 at most
+    proof_of_patience: 0.2, // 15,000 at most
+    candy_cascade: 0.2,     // a 3-star clear scores about 11,000
+    space_huggers: 0.3,     // a full level from level 10 on scores about 9,750
+  },
+};

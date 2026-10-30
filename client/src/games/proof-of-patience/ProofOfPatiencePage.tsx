@@ -50,6 +50,7 @@ import { ProducerRack } from "./components/ProducerRack";
 import { ShowHeader } from "./components/ShowHeader";
 import { AttractOverlay, ResultOverlay } from "./components/StageOverlays";
 import { ThumbBar } from "./components/ThumbBar";
+import { hpForScore } from "@/lib/hp";
 
 const CONTRACT_ADDRESS = "0x760d91401Afb3499cf1BD0256b30485BDa40728C";
 const GAME_COST_ETH = "0.000008";
@@ -264,7 +265,7 @@ function scaled(game, amount) {
 
 function syncHud(game) {
   return {
-    score: scaled(game, game.score),
+    score: hpForScore("proof_of_patience", scaled(game, game.score)),
     time: Math.max(0, ROUND_SECONDS - game.elapsed),
     backlog: game.backlog,
     combo: game.combo,
@@ -894,7 +895,7 @@ export default function ProofOfPatience() {
         const next = frameRef.current;
         next.phase = game.phase;
         next.elapsed = game.elapsed;
-        next.score = scaled(game, game.score);
+        next.score = hpForScore("proof_of_patience", scaled(game, game.score));
         next.combo = game.combo;
         next.backlog = game.backlog;
         next.answered = game.answered;

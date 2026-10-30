@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "wouter";
-import { ArrowLeft, Check, Loader2, AlertCircle } from "lucide-react";
+import { ArrowLeft, Check, Loader2, AlertCircle, Star } from "lucide-react";
 import { useAccount, usePublicClient, useReadContract, useWriteContract } from "wagmi";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { formatEther } from "viem";
@@ -99,6 +99,7 @@ export default function MotoRushPage() {
   const pendingStart = useRef(null);
   const [starting, setStarting] = useState(null);
   const [save, setSave] = useState(null);
+  const [result, setResult] = useState(null);
 
   const onChain = !!CONTRACT;
   const frameSrc = onChain ? `${GAME_SRC}?chain` : GAME_SRC;
@@ -167,6 +168,7 @@ export default function MotoRushPage() {
         });
       }
       const { levelId, timeMs, stars, sessionId, signature, submitAfter } = current.verified;
+      setResult((r) => ({ ...r, stars, timeMs }));
       if (!current.txHash) {
         step = "clock";
         setSave({ step });
@@ -193,17 +195,18 @@ export default function MotoRushPage() {
       }
       step = "points";
       setSave({ step });
-      let added = 0, multiplier = 1;
+      let added = 0, multiplier = 1, reasons, already = false;
       try {
-        ({ added = 0, multiplierApplied: multiplier = 1 } = await postJson("/api/points/add", {
+        ({ added = 0, multiplierApplied: multiplier = 1, multiplierReasons: reasons } = await postJson("/api/points/add", {
           wallet: address, txHash: current.txHash, score: STAR_HP[stars] ?? 0, gameId: "moto_rush",
         }));
       } catch (error) {
         if (!/already processed/i.test(error.message)) throw error;
+        already = true;
       }
       job.current = null;
-      setSave({ step: "done", added, multiplier });
-      setTimeout(() => setSave((s) => (s?.step === "done" ? null : s)), 2600);
+      setResult((r) => ({ ...r, added, multiplier, reasons, already }));
+      setSave({ step: "done" });
     } catch (error) {
       console.error("Moto Rush save failed:", error);
       const message = friendlyError(error);
@@ -212,9 +215,10 @@ export default function MotoRushPage() {
     }
   }, [address, post, publicClient, readProgress, waitForChainTime, writeContractAsync]);
 
-  const skipSave = () => {
+  const closeSave = () => {
     job.current = null;
     setSave(null);
+    setResult(null);
   };
 
   const handlers = useRef({});
@@ -246,8 +250,9 @@ export default function MotoRushPage() {
         setStarting((s) => ({ step: s?.step ?? "wallet", error: friendlyError(error) }));
       }
     },
-    finished: ({ sessionId, bike, inputs, reviveStep, rules }) => {
+    finished: ({ sessionId, bike, inputs, reviveStep, rules, stars, timeMs }) => {
       job.current = { sessionId, bike, inputs, reviveStep, rules };
+      setResult(stars ? { stars, timeMs } : null);
       runSave();
     },
   };
@@ -326,17 +331,12 @@ export default function MotoRushPage() {
           steps={SAVE_STEPS}
           step={save.step}
           error={save.error}
+          top={result && <RideResult result={result} />}
         >
-          {save.step === "done" && (
-            <p className="text-sm text-emerald-300">
-              {save.added > 0
-                ? `+${save.added.toLocaleString()} Hair Points${save.multiplier > 1 ? ` (${Number(save.multiplier).toFixed(2)}× multiplier)` : ""}`
-                : "Saved on chain."}
-            </p>
-          )}
+          {save.step === "done" && <Button className="w-full" onClick={closeSave}>Continue</Button>}
           {save.error && (
             <div className="flex gap-2">
-              <Button variant="outline" className="flex-1" onClick={skipSave}>
+              <Button variant="outline" className="flex-1" onClick={closeSave}>
                 {save.step === "points" ? "Continue" : "Skip"}
               </Button>
               <Button className="flex-1" onClick={runSave}>Retry</Button>
@@ -348,14 +348,93 @@ export default function MotoRushPage() {
   );
 }
 
-function StepsOverlay({ title, steps, step, error, children }) {
+function RideResult({ result }) {
+  const base = STAR_HP[result.stars] ?? 0;
+  const multiplier = Number(result.multiplier ?? 1);
+
+  return (
+    <div className="mb-5 rounded-xl border border-white/10 bg-white/5 px-4 py-4 text-center">
+      <div className="flex justify-center gap-2" role="img" aria-label={`${result.stars} of 3 stars`}>
+        {[1, 2, 3].map((i) => (
+          <Star key={i} className={`h-10 w-10 ${i <= result.stars ? "fill-amber-400 text-amber-400" : "text-white/20"}`} />
+        ))}
+      </div>
+      <p className="mt-1 text-sm font-semibold text-white/70">
+        {result.stars} star{result.stars > 1 ? "s" : ""}
+        {result.timeMs != null && ` · ${(result.timeMs / 1000).toFixed(2)} s`}
+      </p>
+      {result.added > 0 ? (
+        <>
+          <p className="mt-3 text-2xl font-bold text-emerald-300">+{result.added.toLocaleString()} Hair Points</p>
+          <p className="text-xs text-white/50">
+            {base.toLocaleString()} HP{multiplier > 1 ? ` × ${multiplier.toFixed(2)} multiplier` : ""}
+          </p>
+          {result.reasons && <MultiplierReasons reasons={result.reasons} multiplier={multiplier} />}
+        </>
+      ) : result.already ? (
+        <>
+          <p className="mt-3 text-2xl font-bold text-white">{base.toLocaleString()} HP</p>
+          <p className="text-xs text-white/50">These Hair Points were already added to your account.</p>
+        </>
+      ) : (
+        <>
+          <p className="mt-3 text-2xl font-bold text-white">{base.toLocaleString()} HP</p>
+          <p className="text-xs text-white/50">Your multiplier is added when the level is saved.</p>
+        </>
+      )}
+    </div>
+  );
+}
+
+const signed = (n) => `${n < 0 ? "−" : "+"}${Math.abs(n).toFixed(2)}`;
+const shortDate = (iso) => new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+
+function MultiplierReasons({ reasons, multiplier }) {
+  const counted = reasons.filter((r) => !r.countsFrom && !r.hint);
+  const notCounted = reasons.filter((r) => r.countsFrom || r.hint);
+
+  return (
+    <div className="mt-4 border-t border-white/10 pt-3 text-left text-xs">
+      <p className="mb-2 font-semibold uppercase tracking-wide text-white/40">Your multiplier</p>
+      {counted.length === 0 ? (
+        <p className="text-white/50">1.00× · no multiplier NFTs counted on this wallet.</p>
+      ) : (
+        <ul className="space-y-1">
+          <li className="flex justify-between gap-3 text-white/60"><span>Base</span><span className="tabular-nums">1.00×</span></li>
+          {counted.map((r) => (
+            <li key={r.label} className="flex justify-between gap-3 text-white/80">
+              <span>{r.label}</span>
+              <span className={`tabular-nums ${r.bonus < 0 ? "text-rose-300" : "text-emerald-300"}`}>{signed(r.bonus)}</span>
+            </li>
+          ))}
+          <li className="flex justify-between gap-3 border-t border-white/10 pt-1 font-semibold text-white">
+            <span>Total</span><span className="tabular-nums">{multiplier.toFixed(2)}×</span>
+          </li>
+        </ul>
+      )}
+      {notCounted.length > 0 && (
+        <ul className="mt-3 space-y-1 text-white/40">
+          {notCounted.map((r) => (
+            <li key={r.label} className="flex justify-between gap-3">
+              <span>{r.hint ? `${r.label} next time` : `${r.label} · counts from ${shortDate(r.countsFrom)}`}</span>
+              <span className="tabular-nums">{signed(r.bonus)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function StepsOverlay({ title, steps, step, error, top, children }) {
   const activeIndex = step === "done" ? steps.length : steps.findIndex((s) => s.key === step);
 
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" role="dialog" aria-modal="true" aria-label={title}>
       <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-background p-6 shadow-2xl">
         <h2 className="text-lg font-bold text-white mb-4">{title}</h2>
-        <ol className="space-y-3">
+        {top}
+        {step !== "done" && <ol className="space-y-3">
           {steps.map((s, i) => {
             const state = i < activeIndex ? "done" : i === activeIndex ? (error ? "error" : "active") : "todo";
             return (
@@ -372,7 +451,7 @@ function StepsOverlay({ title, steps, step, error, children }) {
               </li>
             );
           })}
-        </ol>
+        </ol>}
         {error && (
           <p className="mt-5 text-sm text-white/60 bg-rose-500/10 border border-rose-500/20 rounded-lg px-3 py-2 wrap-break-word">{error}</p>
         )}

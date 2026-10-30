@@ -36,7 +36,7 @@ Partner games from the Hemi ecosystem, like the open-world MMORPG **Bro Town**, 
 
 1. **Connect your wallet** on the Hemi network.
 2. **Play a game.** Runs are recorded through each game's smart contract, with a small entry or save fee.
-3. **Earn Hair Points (HP).** Your score turns into HP once its transaction is confirmed. Holding NFTs from ecosystem collections raises your multiplier, up to 1.5×.
+3. **Earn Hair Points (HP).** Your score turns into HP once its transaction is confirmed. A Moto Rush level pays 5,000 to 10,000 HP by its stars; in every other game the score you see is the HP you earn, up to 3,000 a play. Holding NFTs from ecosystem collections raises your multiplier, up to 1.5×.
 4. **Climb.** Compete on the global leaderboard and the weekly event, rank up from Rookie to Immortal on your profile, finish bonus tasks, and vote for your favourite game every day.
 
 ## Fair play

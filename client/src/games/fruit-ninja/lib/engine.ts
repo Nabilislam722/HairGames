@@ -10,6 +10,7 @@ import type {
   ActiveAbility,
 } from "./types";
 import { FRUITS, BOMB, ABILITY_FRUITS, randomFruit } from "./fruits";
+import { MAX_HP_PER_PLAY } from "@/lib/hp";
 
 let idCounter = 1;
 const nextId = () => idCounter++;
@@ -23,11 +24,11 @@ const POINT_LOCK_DURATION = 10;
 const MULTIPLIER_DURATION = 8;
 
 const LEVELS: LevelConfig[] = [
-  { level: 1, label: "Orchard", targetScore: 500, spawnIntervalStart: 1.2, maxDifficulty: 3, bombChanceMax: 0.07, abilityChance: 0, allowFrenzy: false, allowGlitch: false },
-  { level: 2, label: "Citrus Grove", targetScore: 800, spawnIntervalStart: 1.1, maxDifficulty: 7, bombChanceMax: 0.08, abilityChance: 0.02, allowFrenzy: false, allowGlitch: false },
-  { level: 3, label: "Lychee Labyrinth", targetScore: 1000, spawnIntervalStart: 0.8, maxDifficulty: 8, bombChanceMax: 0.1, abilityChance: 0.1, allowFrenzy: false, allowGlitch: false },
-  { level: 4, label: "Berry Blitz", targetScore: 1500, spawnIntervalStart: 0.75, maxDifficulty: 9.5, bombChanceMax: 0.15, abilityChance: 0.1, allowFrenzy: false, allowGlitch: true },
-  { level: 5, label: "Fruit Frenzy", targetScore: 2000, spawnIntervalStart: 0.65, maxDifficulty: 11, bombChanceMax: 0.25, abilityChance: 0.2, allowFrenzy: true, allowGlitch: true },
+  { level: 1, label: "Orchard", targetScore: 200, spawnIntervalStart: 1.2, maxDifficulty: 3, bombChanceMax: 0.07, abilityChance: 0, allowFrenzy: false, allowGlitch: false },
+  { level: 2, label: "Citrus Grove", targetScore: 500, spawnIntervalStart: 1.1, maxDifficulty: 7, bombChanceMax: 0.08, abilityChance: 0.02, allowFrenzy: false, allowGlitch: false },
+  { level: 3, label: "Lychee Labyrinth", targetScore: 800, spawnIntervalStart: 0.8, maxDifficulty: 8, bombChanceMax: 0.1, abilityChance: 0.1, allowFrenzy: false, allowGlitch: false },
+  { level: 4, label: "Berry Blitz", targetScore: 1000, spawnIntervalStart: 0.75, maxDifficulty: 9.5, bombChanceMax: 0.15, abilityChance: 0.1, allowFrenzy: false, allowGlitch: true },
+  { level: 5, label: "Fruit Frenzy", targetScore: 1200, spawnIntervalStart: 0.65, maxDifficulty: 11, bombChanceMax: 0.25, abilityChance: 0.2, allowFrenzy: true, allowGlitch: true },
 ];
 
 export function getLevelConfig(level: number): LevelConfig {
@@ -460,7 +461,8 @@ function sliceObject(s: GameState, o: FlyingObject, sliceDir: Vec2) {
     gained = 0;
   }
 
-  s.score += gained;
+  // The score is the HP a run earns, so it stops at the per-play maximum.
+  s.score = Math.min(s.score + gained, MAX_HP_PER_PLAY);
   if (!o.frenzy) {
     s.levelScore += gained;
   }

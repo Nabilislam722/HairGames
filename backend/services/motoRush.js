@@ -4,6 +4,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import vm from "node:vm";
 import { ethers } from "ethers";
+import { MOTO_RUSH, VENOM_NFT } from "../config/constants.js";
+import { MAX_BONUS } from "./nftIndexer.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
@@ -29,6 +31,39 @@ export const MAX_STEPS = 120 * 60 * 15;
 const MAX_INPUT_RUNS = 50_000;
 
 export const STAR_HP = { 1: 5000, 2: 7000, 3: 10000 };
+
+const round2 = (n) => Number(n.toFixed(2));
+
+// What a Moto Rush multiplier is made of, for the result screen: 1 + the bonus of every reason
+// without `countsFrom` or `hint` equals `applied`. Those two are bonuses that didn't count this time.
+export function multiplierReasons({ holdings, nftMultiplier, venomRide, applied }) {
+  const groups = new Map();
+  for (const h of holdings) {
+    if (!h.active || !(h.bonus > 0)) continue;
+    const g = groups.get(h.collectionName) ?? { name: h.name, count: 0, bonus: 0 };
+    g.count++;
+    g.bonus += h.bonus;
+    groups.set(h.collectionName, g);
+  }
+  const reasons = [...groups].map(([collection, g]) => ({
+    label: g.count > 1 ? `${g.count} ${collection} NFTs` : g.name,
+    bonus: round2(g.bonus),
+  }));
+  const nftCut = round2(nftMultiplier - 1 - reasons.reduce((sum, r) => sum + r.bonus, 0));
+  if (nftCut < 0) reasons.push({ label: `NFT bonus cap (+${MAX_BONUS.toFixed(2)} max)`, bonus: nftCut });
+  const venom = venomRide ? MOTO_RUSH.VENOM_BONUS : 0;
+  if (venomRide) reasons.push({ label: "Riding the Venom", bonus: venom });
+  const cut = round2(applied - nftMultiplier - venom);
+  if (cut < 0) reasons.push({ label: `Moto Rush cap (${MOTO_RUSH.MAX_MULTIPLIER.toFixed(2)}× max)`, bonus: cut });
+
+  for (const h of holdings) {
+    if (!h.active && h.bonus > 0) reasons.push({ label: h.name, bonus: h.bonus, countsFrom: h.countsFrom });
+  }
+  if (!venomRide && holdings.some((h) => h.active && h.contractAddress === VENOM_NFT.toLowerCase())) {
+    reasons.push({ label: "Ride the Venom", bonus: MOTO_RUSH.VENOM_BONUS, hint: true });
+  }
+  return reasons;
+}
 
 export function rulesFingerprint(gameDir = GAME_DIR) {
   const hash = createHash("sha256");

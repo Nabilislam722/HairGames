@@ -9,6 +9,12 @@ import { maybeDropPowerUp } from './powerups';
 import { spawnAsteroidWave, updateAsteroids, spawnAsteroidDebris, createAsteroid } from './asteroids';
 import { grantDroneIfMissing, tickDrones, updateDroneMissiles } from './drone';
 import { TOTAL_LEVELS, WAVES_PER_LEVEL } from './constants';
+import { MAX_HP_PER_PLAY } from '@/lib/hp';
+
+// The score is the HP a run earns, so it stops at the per-play maximum.
+function addScore(s: GameState, points: number) {
+  s.score = Math.min(s.score + points, MAX_HP_PER_PLAY);
+}
 
 const ASTEROID_PHASE_DURATION = 18000;
 
@@ -164,7 +170,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
             s.particles = [...s.particles, ...makeHitSpark(b.x + b.width / 2, b.y + b.height / 2, b.color)];
             if (a.hp <= 0) {
               a.active = false;
-              s.score += Math.floor(a.size * 3 + s.level * 10);
+              addScore(s, Math.floor(a.size * 3 + s.level * 10));
               s.particles = [...s.particles, ...spawnAsteroidDebris(a)];
             }
             break;
@@ -183,7 +189,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
           s.particles = [...s.particles, ...makeHitSpark(b.x + b.width / 2, b.y + b.height / 2, '#ffaa55')];
           if (a.hp <= 0) {
             a.active = false;
-            s.score += Math.floor(a.size * 3 + s.level * 10);
+            addScore(s, Math.floor(a.size * 3 + s.level * 10));
             s.particles = [...s.particles, ...spawnAsteroidDebris(a)];
             s.screenShake = Math.max(s.screenShake, a.size > 30 ? 8 : 4);
             if (a.size > 30 && Math.random() < 0.2) {
@@ -295,7 +301,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
         s.particles = [...s.particles, ...makeHitSpark(e.x + e.width / 2, e.y + e.height / 2, '#ff8800')];
         if (e.hp <= 0) {
           e.active = false;
-          s.score += e.scoreValue;
+          addScore(s, e.scoreValue);
           s.particles = [...s.particles, ...spawnDropParticles(e.x + e.width / 2, e.y + e.height / 2)];
           const pu = maybeDropPowerUp(e.x + e.width / 2, e.y + e.height / 2, false, s.score);
           if (pu) s.powerUps = [...s.powerUps, pu];
@@ -353,7 +359,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
         s.particles = [...s.particles, ...makeHitSpark(b.x + b.width / 2, b.y + b.height / 2, b.color)];
         if (e.hp <= 0) {
           e.active = false;
-          s.score += e.scoreValue;
+          addScore(s, e.scoreValue);
           s.screenShake = Math.max(s.screenShake, e.type === 'boss' ? 20 : 5);
           s.particles = [...s.particles, ...spawnDropParticles(e.x + e.width / 2, e.y + e.height / 2)];
           const pu = maybeDropPowerUp(e.x + e.width / 2, e.y + e.height / 2, e.type === 'boss', s.score);
@@ -375,7 +381,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
         s.particles = [...s.particles, ...makeHitSpark(b.x + b.width / 2, b.y + b.height / 2, b.color)];
         if (e.hp <= 0) {
           e.active = false;
-          s.score += e.scoreValue;
+          addScore(s, e.scoreValue);
           s.screenShake = Math.max(s.screenShake, e.type === 'boss' ? 20 : 5);
           s.particles = [...s.particles, ...spawnDropParticles(e.x + e.width / 2, e.y + e.height / 2)];
           const pu = maybeDropPowerUp(e.x + e.width / 2, e.y + e.height / 2, e.type === 'boss', s.score);
@@ -437,7 +443,7 @@ export function tick(state: GameState, input: InputState, dt: number): GameState
     if (!s.player.invincible && rectsOverlap(e, { x: px, y: py, width: pw, height: ph, active: true })) {
       if (e.type !== 'boss') {
         e.active = false;
-        s.score += Math.floor(e.scoreValue / 2);
+        addScore(s, Math.floor(e.scoreValue / 2));
         s.particles = [...s.particles, ...spawnDropParticles(e.x + e.width / 2, e.y + e.height / 2)];
       }
       let dmg = 25;

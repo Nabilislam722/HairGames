@@ -3,7 +3,7 @@ import { EPISODES, EPISODE_SIZE, LEVELS, episodeOf } from './core/levels.js';
 import { createRng } from './core/rng.js';
 import { connectHost } from './host.js';
 import { Hud } from './ui/hud.js';
-import { formatNumber, goalIcon, goalLabel, goalTargets } from './ui/goals.js';
+import { formatPoints, goalIcon, goalLabel, goalTargets } from './ui/goals.js';
 import { renderMap } from './ui/map.js';
 import { loadProgress, saveProgress, totalStars } from './ui/progress.js';
 import { Sound } from './view/audio.js';
@@ -305,7 +305,7 @@ export class App {
     const goals = goalTargets(level);
     const goalItems = goals
       .map(
-        (g) => `<li class="modal-goal"><img src="${goalIcon(g)}" alt=""><strong>${g.type === 'score' ? formatNumber(g.target) : g.target}</strong><span>${escapeHtml(goalLabel(g))}</span></li>`,
+        (g) => `<li class="modal-goal"><img src="${goalIcon(g)}" alt=""><strong>${g.type === 'score' ? formatPoints(g.target) : g.target}</strong><span>${escapeHtml(goalLabel(g))}</span></li>`,
       )
       .join('');
     const challenge = level.challenge
@@ -522,7 +522,7 @@ export class App {
         <p class="modal-sub">${pick(WIN_LINES)}</p>
         <div class="result-stars" role="img" aria-label="${result.stars} of 3 stars">${stars}</div>
         <p class="result-score" id="result-score">0</p>
-        <p class="result-best${newBest ? ' new' : ''}">${newBest ? 'New best score!' : `Best ${formatNumber(session.prevBest)}`}</p>
+        <p class="result-best${newBest ? ' new' : ''}">${newBest ? 'New best score!' : `Best ${formatPoints(session.prevBest)}`}</p>
         <div class="modal-actions">
           ${canReplay ? '<button class="btn btn-quiet" type="button" data-action="replay">Replay</button>' : ''}
           <button class="btn btn-mint" type="button" data-action="next">${next ? 'Next level' : 'Level map'}</button>
@@ -542,7 +542,7 @@ export class App {
     const start = performance.now();
     const count = (now) => {
       const k = Math.min(1, (now - start) / 1200);
-      scoreEl.textContent = formatNumber(result.score * (1 - (1 - k) ** 3));
+      scoreEl.textContent = formatPoints(result.score * (1 - (1 - k) ** 3));
       if (k < 1 && scoreEl.isConnected) requestAnimationFrame(count);
     };
     requestAnimationFrame(count);
@@ -569,7 +569,7 @@ export class App {
     const items = engine.goals
       .map((g) => {
         const met = g.left <= 0;
-        const value = met ? 'Done' : g.type === 'score' ? formatNumber(g.left) : g.left;
+        const value = met ? 'Done' : g.type === 'score' ? formatPoints(g.left) : g.left;
         const caption = met ? escapeHtml(goalLabel(g)) : g.type === 'score' ? 'points to go' : `${escapeHtml(goalLabel(g))} left`;
         return `<li class="modal-goal${met ? ' met' : ''}"><img src="${goalIcon(g)}" alt=""><strong>${value}</strong><span>${caption}</span></li>`;
       })

@@ -19,7 +19,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#ef5350",
     seed: "#1b1b1b",
     radius: 58,
-    points: 30,
+    points: 15,
   },
   {
     id: "orange",
@@ -29,7 +29,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#ffb74d",
     seed: "#e65100",
     radius: 46,
-    points: 25,
+    points: 10,
   },
   {
     id: "apple",
@@ -39,7 +39,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#fff3e0",
     seed: "#6d4c41",
     radius: 44,
-    points: 20,
+    points: 10,
   },
   {
     id: "lemon",
@@ -49,7 +49,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#fff59d",
     seed: "#c0ca33",
     radius: 40,
-    points: 20,
+    points: 10,
   },
   {
     id: "kiwi",
@@ -59,7 +59,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#dcedc8",
     seed: "#33691e",
     radius: 42,
-    points: 20,
+    points: 10,
   },
   {
     id: "strawberry",
@@ -69,7 +69,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#ff80ab",
     seed: "#fffde7",
     radius: 40,
-    points: 20,
+    points: 10,
   },
   {
     id: "dragonfruit",
@@ -79,7 +79,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#f8bbd0",
     seed: "#311b92",
     radius: 50,
-    points: 30,
+    points: 15,
   },
   {
     id: "blueberry",
@@ -89,7 +89,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#9fa8da",
     seed: "#1a237e",
     radius: 34,
-    points: 20,
+    points: 10,
   },
   {
     id: "mango",
@@ -99,7 +99,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#ffe082",
     seed: "#bf360c",
     radius: 48,
-    points: 25,
+    points: 15,
   },
   {
     id: "pomelo",
@@ -109,7 +109,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#f1f8e9",
     seed: "#558b2f",
     radius: 56,
-    points: 25,
+    points: 15,
   },
   {
     id: "lychee",
@@ -119,7 +119,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#fffde7",
     seed: "#880e4f",
     radius: 38,
-    points: 15,
+    points: 7,
   },
   {
     id: "persimmon",
@@ -129,7 +129,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#ffccbc",
     seed: "#bf360c",
     radius: 44,
-    points: 15,
+    points: 7,
   },
   {
     id: "grape",
@@ -139,7 +139,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#ce93d8",
     seed: "#4a148c",
     radius: 36,
-    points: 20,
+    points: 10,
   },
   {
     id: "coconut",
@@ -149,7 +149,7 @@ export const FRUITS: FruitKind[] = [
     inner: "#fff8e1",
     seed: "#3e2723",
     radius: 52,
-    points: 25,
+    points: 10,
   },
 ];
 

@@ -1,4 +1,4 @@
-import { formatNumber, goalIcon, goalLabel } from './goals.js';
+import { formatPoints, goalIcon, goalLabel } from './goals.js';
 
 // Star markers sit evenly along the meter; the fill moves piecewise between thresholds.
 const MARKS = [0.28, 0.6, 0.9];
@@ -83,9 +83,9 @@ export class Hud {
     const shown = this.goalShown[index];
     const count = li.querySelector('.goal-count');
     if (goal.type === 'score') {
-      count.textContent = formatNumber(goal.target);
+      count.textContent = formatPoints(goal.target);
       li.classList.toggle('done', goal.left <= 0);
-      li.setAttribute('aria-label', `Reach ${formatNumber(goal.target)} points`);
+      li.setAttribute('aria-label', `Reach ${formatPoints(goal.target)} points`);
       return;
     }
     count.textContent = String(Math.max(0, shown));
@@ -122,7 +122,7 @@ export class Hud {
         const gap = this.targetScore - this.shownScore;
         this.shownScore += gap * Math.min(1, dt * 9) + Math.sign(gap) * Math.min(Math.abs(gap), dt * 60);
         if (Math.abs(this.targetScore - this.shownScore) < 1) this.shownScore = this.targetScore;
-        this.el.score.textContent = formatNumber(this.shownScore);
+        this.el.score.textContent = formatPoints(this.shownScore);
         this.raf = this.shownScore === this.targetScore ? 0 : requestAnimationFrame(step);
       };
       this.raf = requestAnimationFrame(step);

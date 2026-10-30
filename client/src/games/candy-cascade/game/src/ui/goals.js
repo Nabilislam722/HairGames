@@ -30,4 +30,5 @@ export function goalTargets(level) {
   });
 }
 
-export const formatNumber = (n) => Math.round(n).toLocaleString('en-US');
+// Points show as the HP they earn: × 0.2, at most 3,000 (candy_cascade in GAME_HP, backend/config/constants.js).
+export const formatPoints = (n) => Math.min(Math.round(n * 0.2), 3000).toLocaleString('en-US');

@@ -239,6 +239,7 @@ export function createNftIndexer({ provider, store, ...options }) {
         emoji: c.emoji || "🔮",
         color: c.color || "#a78bfa",
         imageUrl: c.imageUrl,
+        bonus: Number((c.multiplier - 1).toFixed(2)),
         gameBonus: c.gameBonus ? Object.fromEntries(c.gameBonus instanceof Map ? c.gameBonus : Object.entries(c.gameBonus)) : undefined,
         countsFrom: new Date(countsFrom),
         active: countsFrom <= now,
@@ -250,7 +251,8 @@ export function createNftIndexer({ provider, store, ...options }) {
     if (pending.size) {
       for (const h of await store.cachedHoldings(wallet)) {
         if (!pending.has(h.contractAddress)) continue;
-        holdings.push({ ...h, tokenId: String(h.tokenId), imageUrl: byAddress.get(h.contractAddress)?.imageUrl, active: true });
+        const c = byAddress.get(h.contractAddress);
+        holdings.push({ ...h, tokenId: String(h.tokenId), imageUrl: c.imageUrl, bonus: Number((c.multiplier - 1).toFixed(2)), active: true });
       }
     }
 

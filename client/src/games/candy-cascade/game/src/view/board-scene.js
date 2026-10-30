@@ -1,4 +1,5 @@
 import { THEMES } from '../core/levels.js';
+import { formatPoints } from '../ui/goals.js';
 import { Special, isColorless } from '../core/pieces.js';
 import { RAINBOW } from './fx.js';
 import { Tweener, clamp, ease, lerp, spring } from './motion.js';
@@ -731,7 +732,7 @@ export class BoardScene {
 
   scorePopup(cell, points, color) {
     const [x, y] = this.center(cell);
-    this.fx.text(`+${points}`, x, y, { style: 'score', color: color >= 0 ? CANDY_COLORS[color] : NEUTRAL_COLOR });
+    this.fx.text(`+${formatPoints(points)}`, x, y, { style: 'score', color: color >= 0 ? CANDY_COLORS[color] : NEUTRAL_COLOR });
   }
 
   cascade(n) {

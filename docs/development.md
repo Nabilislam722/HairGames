@@ -79,7 +79,7 @@ Progress (highest cleared level, best score and stars per level) lives in the `C
 3. The game records every move. When the level is won, the page sends the moves to `POST /api/candy-cascade/verify`.
 4. The server replays the moves with the game's own engine and signs only the score and stars the replay produced. It never uses a score from the client. It also checks that the start was mined and is still the open run, and binds the signature to that run.
 5. The player submits `submitLevel(...)`. The contract checks the signature against the open run, then closes it, so one start can save at most one win. It also checks the level order and the fee.
-6. `POST /api/points/add` reads the `LevelCleared` event and credits HP for **improvement over the previous best** on that level. Replays that don't beat it earn nothing.
+6. `POST /api/points/add` reads the `LevelCleared` event and credits HP for **improvement over the previous best** on that level, scaled like every other game's score (see [HP per play](#hp-per-play)). Replays that don't beat it earn nothing.
 
 A level with all **3 stars is finished**. The contract won't start it again and the backend won't issue a board for it, so players move on to new levels instead of farming old ones. Levels with 1 or 2 stars can be replayed to earn the rest.
 
@@ -107,6 +107,27 @@ The game has 500 levels in 25 episodes.
 ### Deploying the contract
 
 In `contract/.env`, set `SIGNER_ADDRESS` to the address of the backend's `SERVER_PRIVATE_KEY`, then run `npm run deploy:candy` in `contract/`. The fee is set in `scripts/deploy-candy-cascade.js`.
+
+## HP per play
+
+`POST /api/points/add` turns the score in a confirmed transaction into HP, then applies the player's NFT multiplier:
+
+- **Moto Rush** pays by stars: 10,000 HP for 3, 7,000 for 2 and 5,000 for 1 (`STAR_HP` in `backend/services/motoRush.js`).
+- **Every other game** pays at most 3,000 HP a play (`GAME_HP` in `backend/config/constants.js`), and the score a game shows is the HP the play earns:
+  - Games whose score the server checks or works out keep it on chain unchanged; the server multiplies it by the game's scale, and the game shows it already scaled (`client/src/lib/hp.js`, and `formatPoints` in Candy Cascade's `ui/goals.js`).
+  - Games whose score comes straight from the browser keep their points small in the game itself and stop the score at 3,000.
+
+| Game (`gameId`) | How | A top run |
+|---|---|---|
+| Need for Hair (`racing_game`) | scale 0.2 | 15,000 on chain, 3,000 HP |
+| Proof of Patience (`proof_of_patience`) | scale 0.2 | 15,000 on chain, 3,000 HP |
+| Candy Cascade (`candy_cascade`) | scale 0.2, paid on improvement over your best | about 11,000 on chain for a 3-star clear, 2,200 HP |
+| Space Huggers (`space_huggers`) | scale 0.3 | about 9,750 on chain for a full level from level 10 on, 2,925 HP |
+| Max Prø Fishing (`fishing_party`) | points in the game, stops at 3,000 | 3,000 |
+| Max Fruit Slicer (`fruit_ninja`) | points in the game, stops at 3,000 | 3,000 |
+| Void Striker (`default_legacy`) | points in the game, stops at 3,000 | 3,000 |
+
+The candy bundle in `client/public/candy-cascade` is built from `client/src/games/candy-cascade/game`; a change to how it shows points goes in both.
 
 ## NFT multiplier indexer
 
