@@ -8,7 +8,7 @@ How the HairGames code is organised, and how to work on it. For an overview of t
 HairGames/
 ├── client/                  React + Vite frontend
 │   ├── index.html
-│   ├── public/              Static files served as-is (sprites, game assets, Space Huggers and Candy Cascade builds)
+│   ├── public/              Static files served as-is (sprites, game assets, and the Space Huggers, Candy Cascade and Moto Rush games)
 │   └── src/
 │       ├── main.jsx         Providers (wagmi, RainbowKit, React Query)
 │       ├── App.jsx          Route table
@@ -25,10 +25,10 @@ HairGames/
 ├── backend/                 Express API (port 3000)
 │   ├── server.js            Entry point
 │   ├── config/              Database, RPC provider, contract addresses
-│   ├── controllers/         Request handlers (auth, games, points, stats, Candy Cascade)
+│   ├── controllers/         Request handlers (auth, games, points, stats, Candy Cascade, Moto Rush)
 │   ├── models/              Mongoose models
 │   ├── routes/              Route definitions, mounted under /api
-│   └── services/            NFT indexer, Candy Cascade replay and signing
+│   └── services/            NFT indexer, Candy Cascade and Moto Rush replay and signing
 ├── contract/                Hardhat project: Solidity game contracts, deploy scripts and tests
 └── docs/                    Guides like this one
 ```
@@ -47,6 +47,7 @@ games/<game-name>/
 
 | Folder | Route |
 | --- | --- |
+| `moto-rush` | `/game/moto_rush` |
 | `candy-cascade` | `/game/candy_cascade` |
 | `proof-of-patience` | `/game/proof_of_patience` |
 | `fruit-ninja` | `/game/max_fruitninja` |
@@ -57,7 +58,7 @@ games/<game-name>/
 
 To add a game, create a folder with that shape, register its page in `client/src/App.jsx`, and add it to `GAMES` in `client/src/pages/Dashboard.jsx`.
 
-Space Huggers and Candy Cascade are standalone builds served from `client/public/` and embedded in an iframe by their page.
+Space Huggers, Candy Cascade and Moto Rush are standalone games served from `client/public/` and embedded in an iframe by their page.
 
 ### Naming conventions
 
@@ -108,11 +109,58 @@ The game has 500 levels in 25 episodes.
 
 In `contract/.env`, set `SIGNER_ADDRESS` to the address of the backend's `SERVER_PRIVATE_KEY`, then run `npm run deploy:candy` in `contract/`. The fee is set in `scripts/deploy-candy-cascade.js`.
 
+## Moto Rush
+
+The game is plain JavaScript in `client/public/moto-rush/`, with no build step. `client/src/games/moto-rush/MotoRushPage.jsx` loads it in an iframe and handles the wallet, the transactions and the result box. The page and the game talk through `postMessage`.
+
+| File | What it does |
+| --- | --- |
+| `js/game.js` | Menus, level list, garage, controls, game loop, and the messages to the page |
+| `js/sim.js` | Physics for one ride: bike, rider, flips, crashes, finish and stars. The bikes are in `BIKES` |
+| `js/levels.js` | The 500 tracks |
+| `js/detmath.js` | Math functions that give the same result in every browser and on the server. Loads before planck |
+| `vendor/planck.min.js` | The planck.js physics engine |
+| `js/render.js`, `js/audio.js`, `js/opbike.js` | Drawing, sound, and the #27 Venom's artwork |
+
+**Levels.** The first 9 levels are built by hand. The rest come from a seeded generator, so every player gets the same tracks, and they move to the next world every 5 levels: jungle, desert, ice, meadow, cave. A level's `stars` holds the finish times for 3 and 2 stars. Finishing at all earns 1 star, and every landed flip takes 1 second off the time. Add `#autopilot` to the game's URL to let the built-in driver ride every level.
+
+**Bikes.** Four bikes unlock with total stars: at 0, 5, 12 and 20. The #27 Venom is only for holders of the Venom NFT (`nft/venom/`). It's the fastest bike and gets one revive per run. A ride on it adds 0.2 to the HP multiplier, up to 1.7× (`MOTO_RUSH` in `backend/config/constants.js`). The server checks the bike when it verifies a ride.
+
+### On-chain saves and anti-cheat
+
+Progress (the levels completed, with time and stars) lives in the `MotoRush` contract. Without `VITE_MOTO_RUSH_CONTRACT`, the page runs the game as free play: progress stays in the browser and no HP is paid.
+
+1. Every attempt starts on chain: the player sends `startLevel(levelId)`, which opens a numbered run on their next level. Levels unlock in order. A new start replaces any open run, so crashing or quitting never leaves a player stuck.
+2. The page sends the start transaction to `POST /api/moto-rush/session`. The server checks it (sender, contract, level), even while it is still pending, checks that the level is the player's next one, and returns a session id. Each start transaction gets one session.
+3. The game records the controls (gas, brake, lean back, lean forward) for every physics step, 120 a second. At the finish, the page sends them to `POST /api/moto-rush/verify` with the bike and the step of any revive.
+4. The server checks that the player may ride that bike, replays the ride with the game's own physics, and signs only a ride that reached the finish, with the time and stars the replay produced. It never uses a time from the client. It also checks that the start was mined and is still the open run, and binds the signature to that run.
+5. The player submits `submitLevel(...)`. The contract checks the signature against the open run, closes it and locks the level. It also refuses a finish time shorter than the time since the run was opened, so the page waits for the chain's clock (`submitAfter`) before asking the wallet.
+6. `POST /api/points/add` reads the `LevelCompleted` event and pays by stars (see [HP per play](#hp-per-play)), plus the Venom bonus if the ride used it.
+
+Each level can be completed **once**, whatever its stars. The contract won't start it again, so its HP is paid once.
+
+The backend loads the physics from `client/public/moto-rush/` (`MOTO_RUSH_DIR` to change it). The game and the backend both hash `js/detmath.js`, `vendor/planck.min.js`, `js/levels.js` and `js/sim.js`. If the hashes differ, the backend refuses to sign and the player is told to reload and ride the level again.
+
+### Changing the game
+
+- A change to any of the four hashed files changes how rides replay. Deploy the client and the backend together. A ride recorded before the change can't be saved and has to be ridden again.
+- Other files (`game.js`, `render.js`, `audio.js`, `opbike.js`, `index.html`) only need a client deploy.
+
+### Adding levels
+
+1. In `js/levels.js`, raise `TOTAL` and give each new level an entry in `GEN_FIX` (the generator re-roll that rides cleanly), `GEN_TIMES` (the starter bike's autopilot time, which sets the 2-star time) and `GEN_THREE` (the 3-star time). A level without them gets 60 and 80 seconds.
+2. Raise `LEVEL_COUNT` in `backend/services/motoRush.js`.
+3. Have the contract owner call `setLevelCount(n)`. No redeploy is needed.
+
+### Deploying the contract
+
+In `contract/.env`, set `SIGNER_ADDRESS` to the address of the backend's `SERVER_PRIVATE_KEY`, and optionally `MOTO_SUBMISSION_FEE_ETH` (default `0.000008`). Run `npm run deploy:moto` in `contract/`. Then put the new address in `ECOSYSTEM_CONTRACTS.moto_rush` in `backend/config/constants.js`, and in `VITE_MOTO_RUSH_CONTRACT` in `client/.env`.
+
 ## HP per play
 
 `POST /api/points/add` turns the score in a confirmed transaction into HP, then applies the player's NFT multiplier:
 
-- **Moto Rush** pays by stars: 10,000 HP for 3, 7,000 for 2 and 5,000 for 1 (`STAR_HP` in `backend/services/motoRush.js`).
+- **Moto Rush** pays by stars: 10,000 HP for 3, 7,000 for 2 and 5,000 for 1 (`STAR_HP` in `backend/services/motoRush.js`). A ride on the #27 Venom raises its multiplier to as much as 1.7× (see [Moto Rush](#moto-rush)).
 - **Every other game** pays at most 3,000 HP a play (`GAME_HP` in `backend/config/constants.js`), and the score a game shows is the HP the play earns:
   - Games whose score the server checks or works out keep it on chain unchanged; the server multiplies it by the game's scale, and the game shows it already scaled (`client/src/lib/hp.js`, and `formatPoints` in Candy Cascade's `ui/goals.js`).
   - Games whose score comes straight from the browser keep their points small in the game itself and stop the score at 3,000.
@@ -140,7 +188,7 @@ NFTs from the collections in `CollectionConfig` raise a player's HP multiplier (
 - **Hold period:** a newly received NFT counts toward the multiplier only after `NFT_HOLD_HOURS` (default 24), so one NFT can't be passed between wallets to boost each of them. HP crediting reads the multiplier fresh from the index.
 - **Profiles:** the profile endpoint reads the index (no chain calls). At most every 10 minutes per wallet, it double-checks on-chain balances in the background and repairs any difference.
 - **Our own NFTs:** everything for them lives in `nft/`, a Hardhat project of its own kept apart from the game contracts in `contract/`. That covers contracts, deploy scripts, admin tasks, tests, and a launch kit per collection. Venom deploys with `npm run deploy:venom` in `nft/`; `nft/venom/README.md` walks through it. `nft/contracts/mocks/MockERC721.sol` holds test-only collections for indexer tests.
-- **Per-game bonuses:** a collection's optional `gameBonus` (for example `{ moto_rush: 0.2 }`) adds to the multiplier in that game only, past the 1.5× cap, once per collection however many of its NFTs a wallet holds. The key is the `gameId` the game sends to `/api/points/add`. Give such a collection `multiplier: 1` if it shouldn't raise the regular multiplier too. The Venom NFT (`nft/venom/`) works this way.
+- **Per-game bonuses:** a collection's optional `gameBonus` (for example `{ candy_cascade: 0.2 }`) adds to the multiplier in that game only, past the 1.5× cap, once per collection however many of its NFTs a wallet holds. The key is the `gameId` the game sends to `/api/points/add`. Give such a collection `multiplier: 1` if it shouldn't raise the regular multiplier too. Moto Rush doesn't use `gameBonus`: the Venom NFT (`nft/venom/`) adds its bonus there only on rides made on the #27 Venom (see [Moto Rush](#moto-rush)).
 
 ## Tests
 
@@ -164,13 +212,19 @@ NFTs from the collections in `CollectionConfig` raise a player's HP multiplier (
 | Type | What happened |
 | --- | --- |
 | `claimed_foreign_tx` | Claimed HP for a transaction another wallet sent |
-| `claimed_foreign_level` | Claimed HP for a Candy Cascade level another wallet cleared |
+| `claimed_foreign_level` | Claimed HP for a Candy Cascade or Moto Rush level another wallet finished |
 | `score_mismatch` | Claimed a different score than the transaction recorded |
 | `pop_implausible_score` | A Proof of Patience score that the run's answers, length or fire rate couldn't produce |
 | `candy_tampered_moves` | Candy Cascade moves that fail the server's replay |
 | `candy_lost_game_submitted` | A lost Candy Cascade game sent as a win |
 | `candy_start_reused` | A level start reused for a different level or wallet |
 | `candy_foreign_start` | Asked for a board with a transaction that doesn't start that level for that wallet |
+| `moto_tampered_inputs` | Moto Rush controls that fail the server's replay |
+| `moto_unfinished_ride_submitted` | A Moto Rush ride that crashed or didn't reach the finish, sent as a finish |
+| `moto_start_reused` | A Moto Rush level start reused for a different level or wallet |
+| `moto_foreign_start` | Asked for a ride session with a transaction that doesn't start that level for that wallet |
+| `moto_locked_bike` | Rode a bike the wallet's stars haven't unlocked |
+| `moto_venom_without_nft` | Rode the #27 Venom without holding a Venom NFT |
 
 **Managing bans.** Run the admin script from the repo root on the server:
 
@@ -217,6 +271,7 @@ Contracts (`contract/.env`):
 | Variable | Purpose |
 | --- | --- |
 | `DEPLOYER_PRIVATE_KEY` | Deploys contracts to Hemi (Hardhat also expects a valid key when running tests) |
-| `SIGNER_ADDRESS` | Address of the backend's `SERVER_PRIVATE_KEY`, set as the trusted signer when deploying CandyCascade |
+| `SIGNER_ADDRESS` | Address of the backend's `SERVER_PRIVATE_KEY`, set as the trusted signer when deploying CandyCascade and MotoRush |
+| `MOTO_SUBMISSION_FEE_ETH` | Optional: the fee to save a Moto Rush level, in ETH (default `0.000008`) |
 
 Never commit `.env` files. They are already in `.gitignore`.
