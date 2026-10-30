@@ -16,6 +16,7 @@ import { findLevelCleared } from "../services/candyCascade.js";
 import { STAR_HP, findLevelCompleted, multiplierReasons as motoMultiplierReasons } from "../services/motoRush.js";
 import { nft } from "../services/nft.js";
 import { logSuspicious } from "../services/moderation.js";
+import { Award } from "lucide-react";
 
 // Helper function to sign the verification payload
 async function generateCryptoSignature(level, kills, points, nonce, walletAddress, targetAddress, chainId) {
@@ -320,6 +321,8 @@ export const getPoints = async (req, res) => {
  * POST /api/points/claim
  */
 export const claimTask = async (req, res) => {
+  // HAIR Points to add
+  let AWARD_HP = 100;
   const { wallet, task } = req.body;
   const walletLower = wallet?.toLowerCase();
 
@@ -332,11 +335,17 @@ export const claimTask = async (req, res) => {
     if (user && user.completedTasks && user.completedTasks.includes(task)) {
       return res.status(400).json({ error: "Task already completed", alreadyDone: true });
     }
+    if(task === 'hairy_holder'){
+       AWARD_HP = 10000;
+    }
+    else if(task === 'hair_discord'){
+       AWARD_HP = 2000;
+    }
 
     const updatedUser = await UserProfile.findOneAndUpdate(
       { wallet: walletLower, completedTasks: { $ne: task } },
       {
-        $inc: { points: 100 },
+        $inc: { points: AWARD_HP },
         $addToSet: { completedTasks: task },
         $set: { lastSyncedAt: new Date() }
       },
