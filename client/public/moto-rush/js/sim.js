@@ -19,8 +19,9 @@
     { name: 'Viper Z', sprite: 'bike4', wheel: 'wheel4', w: 170, h: 89, R: [28, 70], F: [150, 74], seat: [78, 22],
       speed: 66, torque: 23, lean: 1.25, spin: 6.4, backSpin: 2.1, unlock: 20, stats: [5, 5, 5], sound: 'viper', voice: 'Growling turbo four' },
     // OP bike: drawn in js/opbike.js. Only #27 Venom NFT holders can ride it (see NFT in game.js).
+    // landAssist steadies it for a moment after each jump lands (see step).
     { name: '#27 Venom', sprite: 'bike5', wheel: 'wheel5', wheelFront: 'wheel5f', w: 178, h: 113, R: [28, 79], F: [150, 79], seat: [66, 27],
-      speed: 75, torque: 27, lean: 1.45, spin: 7.2, unlock: 0, nft: true, revive: true, stats: [6, 6, 6], sound: 'op', voice: 'Turbo two-stroke' },
+      speed: 75, torque: 27, lean: 1.45, spin: 7.2, unlock: 0, nft: true, revive: true, landAssist: true, stats: [6, 6, 6], sound: 'op', voice: 'Turbo two-stroke' },
   ];
   const RIDER = { sprite: 'rider1', w: 93, h: 157, scale: 0.8, hip: [14, 86], head: [60, 19], headR: 18, center: [46, 80] };
 
@@ -62,6 +63,7 @@
       this.saves = [];
       this.lastSave = -1;
       this.revives = 0;
+      this.sinceLand = Infinity; // seconds since the last jump touched down
       this._buildTrack();
       this._buildBike();
       this.world.on('pre-solve', c => this._preSolve(c));
@@ -200,7 +202,8 @@
       // (Not inside loops, where "the ground below" isn't the surface the bike is on.)
       const cp = b.chassis.getPosition();
       const inLoop = this.loops.some(l => Math.hypot(cp.x - l.cx, cp.y - l.cy) < l.R + 1);
-      if (this.rearGround && !this.frontGround && lean <= 0 && this.state !== 'crashed' && !inLoop) {
+      const landing = d.landAssist && this.sinceLand < 0.3 && this.state === 'racing' && !inLoop;
+      if (!landing && this.rearGround && !this.frontGround && lean <= 0 && this.state !== 'crashed' && !inLoop) {
         const rp = b.rearW.getPosition();
         const slope = this.groundAngleAt(rp.x, rp.y);
         if (slope !== null) {
@@ -209,6 +212,21 @@
             b.chassis.applyTorque(-b.inertia * ((pitch - 0.25) * 70 + Math.max(0, av) * 9), true);
             // and ease the throttle like a wheelie-control system would
             if (inp.gas) b.rearJ.setMaxMotorTorque(d.torque * Math.max(0.25, 1 - (pitch - 0.25) * 2.5));
+          }
+        }
+      }
+      // Landing help (bikes with landAssist): for 0.3 s after a jump touches down, fading out, pull the nose down
+      // even past the wheelie assist's range and ease the throttle while it's up, so gas on a rear-wheel landing
+      // is less likely to throw the bike over.
+      if (landing) {
+        const rp = b.rearW.getPosition();
+        const slope = this.groundAngleAt(rp.x, rp.y);
+        if (slope !== null) {
+          const pitch = Math.atan2(Math.sin(b.chassis.getAngle() - slope), Math.cos(b.chassis.getAngle() - slope));
+          if (pitch > 0.25 && pitch < 2.3) {
+            const push = -(pitch - 0.25) * 25;
+            b.chassis.applyTorque(b.inertia * push * (1 - this.sinceLand / 0.3), true);
+            if (inp.gas && this.rearGround && !this.frontGround) b.rearJ.setMaxMotorTorque(d.torque * Math.max(0.2, 1 - (pitch - 0.25)));
           }
         }
       }
@@ -221,6 +239,7 @@
     _afterStep(dt) {
       const b = this.bike, ch = b.chassis;
       const p = ch.getPosition();
+      this.sinceLand += dt;
 
       // Loop halves: once the bike is past the top, swap which half is solid; reset when it has left the loop.
       for (const l of this.loops) {
@@ -275,6 +294,7 @@
           this.events.push({ type: 'flip', n, back: rot > 0 });
         }
         if (this.airTime > 0.35) this.events.push({ type: 'land', air: this.airTime });
+        if (this.airTime > 0.3) this.sinceLand = 0;
       }
 
       if (this.state === 'racing') {
@@ -328,7 +348,7 @@
       s.loops.forEach((l, k) => Object.assign(this.loops[k], l));
       this.flips = s.flips; this.bonus = s.bonus;
       this.rearGround = this.frontGround = true; this.bodyGround = false;
-      this.inAir = false; this.airTime = 0; this.stillTime = 0; this.lean = this.leanVis = 0;
+      this.inAir = false; this.airTime = 0; this.stillTime = 0; this.lean = this.leanVis = 0; this.sinceLand = Infinity;
       this.state = 'revived';
       this.revives++;
       this.events.push({ type: 'revive' });
