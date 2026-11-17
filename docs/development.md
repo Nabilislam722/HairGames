@@ -8,7 +8,7 @@ How the HairGames code is organised, and how to work on it. For an overview of t
 HairGames/
 ├── client/                  React + Vite frontend
 │   ├── index.html
-│   ├── public/              Static files served as-is (sprites, game assets, and the Space Huggers, Candy Cascade and Moto Rush games)
+│   ├── public/              Static files served as-is (sprites, game assets, and the Space Huggers, Candy Cascade, Moto Rush and Pixel Fighters games)
 │   └── src/
 │       ├── main.jsx         Providers (wagmi, RainbowKit, React Query)
 │       ├── App.jsx          Route table
@@ -48,6 +48,7 @@ games/<game-name>/
 | Folder | Route |
 | --- | --- |
 | `moto-rush` | `/game/moto_rush` |
+| `pixel-fighter` | `/game/pixel_fighter` |
 | `candy-cascade` | `/game/candy_cascade` |
 | `proof-of-patience` | `/game/proof_of_patience` |
 | `fruit-ninja` | `/game/max_fruitninja` |
@@ -58,7 +59,7 @@ games/<game-name>/
 
 To add a game, create a folder with that shape, register its page in `client/src/App.jsx`, and add it to `GAMES` in `client/src/pages/Dashboard.jsx`.
 
-Space Huggers, Candy Cascade and Moto Rush are standalone games served from `client/public/` and embedded in an iframe by their page.
+Space Huggers, Candy Cascade, Moto Rush and Pixel Fighters are standalone games served from `client/public/` and embedded in an iframe by their page.
 
 ### Naming conventions
 
@@ -156,12 +157,51 @@ The backend loads the physics from `client/public/moto-rush/` (`MOTO_RUSH_DIR` t
 
 In `contract/.env`, set `SIGNER_ADDRESS` to the address of the backend's `SERVER_PRIVATE_KEY`, and optionally `MOTO_SUBMISSION_FEE_ETH` (default `0.000008`). Run `npm run deploy:moto` in `contract/`. Then put the new address in `ECOSYSTEM_CONTRACTS.moto_rush` in `backend/config/constants.js`, and in `VITE_MOTO_RUSH_CONTRACT` in `client/.env`.
 
+## Pixel Fighters
+
+A pixel-art fighting game against the CPU: eight fighters, three CPU levels, best of three 60-second rounds. Its source is [lilach777/pixel-fighter](https://github.com/lilach777/pixel-fighter) (React and TypeScript). The HairGames changes are on a `hairgames` branch of a copy of that repo, whose `npm run build:hairgames -- <path to this repo>` writes two things here:
+
+- `client/public/pixel-fighter/`: the game, built to run in an iframe at `/pixel-fighter/`.
+- `backend/services/pixelFighterEngine.js`: the game's engine (`shared/src/hairgames/replay.ts` and the core it uses), bundled for the backend to replay matches.
+
+`client/src/games/pixel-fighter/PixelFighterPage.jsx` loads the game with `?chain` and handles the wallet, the transactions and the result box. It switches the wallet to Hemi before each transaction (`useHemiNetwork` in `client/src/lib/`, which the layout also uses to ask any wallet on another network to switch). The game and the page talk through `postMessage` (the protocol is described in the game's `client/src/hairgames/bridge.ts`). In HairGames the game hides Online Versus and fixes the rules (`hgRules` in the game's `shared/src/hairgames/replay.ts`), so the Options screen can't change the round time or match length. The rules also give the player a handicap: their attacks reach 24 pixels further (`PLAYER_REACH`) and the CPU deals 70% of its normal damage on Easy and Normal and 55% on Hard (`CPU_DAMAGE`).
+
+**Controls.** WASD or the arrow keys move, left click is a light attack, right click a heavy one (with down: a sweep), Q the special, E the ultimate, and Space blocks in place. On phones held upright the game screen sits on top with a D-pad and skill buttons (ATTACK, HEAVY, BLOCK, SKILL, ULT, named after the fighter's moves) below it; held sideways, the controls sit either side of the screen.
+
+The source code is MIT. The character artwork is not: its README says it is used with its owners' permission and may not be reused outside that project without permission.
+
+### On-chain saves and anti-cheat
+
+Results live in the `PixelFighter` contract. Without `VITE_PIXEL_FIGHTER_CONTRACT`, the page runs the game as free play and no HP is paid.
+
+1. The player picks a fighter and a CPU level, and sends `startMatch(difficulty)`, which opens a numbered run. A new start replaces any open run, so quitting never leaves a player stuck.
+2. The page sends the start transaction to `POST /api/pixel-fighter/session`. The server checks it (sender, contract, CPU level), even while it is still pending, then picks the CPU's fighter and the seed of its AI. Each start transaction gets one session.
+3. The game records the player's input every frame (60 a second). When the match ends, the page sends the inputs to `POST /api/pixel-fighter/verify`.
+4. The server replays the match with the game's own engine, against the same CPU, and signs only a finished match, with the score, result and length its replay produced. It never uses a score from the client. It also checks that the start was mined and is still the open run, and binds the signature to that run and its CPU level.
+5. The player submits `submitMatch(...)`. The contract checks the signature and closes the run. It refuses a match shorter than the time since the run was opened, so the page waits for the chain's clock (`submitAfter`) before asking the wallet.
+6. `POST /api/points/add` reads the `MatchCompleted` event and pays its score as HP.
+
+**Hair Points:** a fixed amount for every finished match, won or lost, by CPU level: **5,000 on Easy, 7,000 on Normal, 7,500 on Hard** (`MATCH_HP` in the game's `shared/src/hairgames/replay.ts`), before the NFT multiplier. It is saved on chain as the match's score; the backend caps it at `GAME_HP.MAX_BY_GAME.pixel_fighter` (7,500). The server still replays every match, so only a match that was really played to the end is paid, and the contract refuses a save sooner than the match's own length after its start.
+
+The game build and `pixelFighterEngine.js` both carry the engine's fingerprint (`RULES_ID`). If they differ, the backend refuses to sign and the player is told to reload and play again. **Restart the backend after replacing `pixelFighterEngine.js`**: a running backend keeps replaying with the engine it loaded at startup.
+
+### Changing the game
+
+- Make the change in the pixel-fighter repo, run its tests (`npm test`), then `npm run build:hairgames -- <path to this repo>`, and commit both outputs here.
+- Restart `npm run dev` and the backend afterwards. The build replaces `client/public/pixel-fighter/` with new file names, which a running Vite dev server doesn't pick up: the game frame then shows the site's own 404 page. The backend keeps replaying with the engine it loaded at startup.
+- A change to the engine or the scoring changes the fingerprint: deploy the client and the backend together. A match played before the change can't be saved.
+- A change that only touches the game's screens keeps the fingerprint and only needs a client deploy.
+
+### Deploying the contract
+
+In `contract/.env`, set `SIGNER_ADDRESS` to the address of the backend's `SERVER_PRIVATE_KEY`, and optionally `PIXEL_FIGHTER_SUBMISSION_FEE_ETH` (default `0.000008`). Run `npm run deploy:pixel` in `contract/`. Then put the new address in `ECOSYSTEM_CONTRACTS.pixel_fighter` in `backend/config/constants.js`, and in `VITE_PIXEL_FIGHTER_CONTRACT` in `client/.env`.
+
 ## HP per play
 
 `POST /api/points/add` turns the score in a confirmed transaction into HP, then applies the player's NFT multiplier:
 
-- **Moto Rush** pays by stars: 10,000 HP for 3, 7,000 for 2 and 5,000 for 1 (`STAR_HP` in `backend/services/motoRush.js`). A ride on the #27 Venom raises its multiplier to as much as 1.7× (see [Moto Rush](#moto-rush)).
-- **Every other game** pays at most 3,000 HP a play (`GAME_HP` in `backend/config/constants.js`), and the score a game shows is the HP the play earns:
+- **Moto Rush** pays by stars: 2,000 HP for 3, 1,000 for 2 and 500 for 1 (`STAR_HP` in `backend/services/motoRush.js`). A ride on the #27 Venom raises its multiplier to as much as 1.7× (see [Moto Rush](#moto-rush)).
+- **Every other game** pays at most 3,000 HP a play (`GAME_HP` in `backend/config/constants.js`; Pixel Fighters has its own cap of 7,500 in `GAME_HP.MAX_BY_GAME`), and the score a game shows is the HP the play earns:
   - Games whose score the server checks or works out keep it on chain unchanged; the server multiplies it by the game's scale, and the game shows it already scaled (`client/src/lib/hp.js`, and `formatPoints` in Candy Cascade's `ui/goals.js`).
   - Games whose score comes straight from the browser keep their points small in the game itself and stop the score at 3,000.
 
@@ -171,6 +211,7 @@ In `contract/.env`, set `SIGNER_ADDRESS` to the address of the backend's `SERVER
 | Proof of Patience (`proof_of_patience`) | scale 0.2 | 15,000 on chain, 3,000 HP |
 | Candy Cascade (`candy_cascade`) | scale 0.2, paid on improvement over your best | about 11,000 on chain for a 3-star clear, 2,200 HP |
 | Space Huggers (`space_huggers`) | scale 0.3 | about 9,750 on chain for a full level from level 10 on, 2,925 HP |
+| Pixel Fighters (`pixel_fighter`) | a fixed amount per finished match by CPU level (its own cap) | 5,000 Easy, 7,000 Normal, 7,500 Hard |
 | Max Prø Fishing (`fishing_party`) | points in the game, stops at 3,000 | 3,000 |
 | Max Fruit Slicer (`fruit_ninja`) | points in the game, stops at 3,000 | 3,000 |
 | Void Striker (`default_legacy`) | points in the game, stops at 3,000 | 3,000 |
@@ -194,6 +235,7 @@ NFTs from the collections in `CollectionConfig` raise a player's HP multiplier (
 
 - Contracts and the NFT indexer: `npm test` in `contract/` (runs against a local Hardhat chain, including an end-to-end Candy Cascade test that replays real games).
 - Candy Cascade rules: `npm test` in the [candy-Cascade](https://github.com/Nabilislam722/candy-Cascade) repo.
+- Pixel Fighters replay and scoring: `npm test` in the pixel-fighter repo (`tests/unit/hairgames.test.ts`). The `PixelFighter` contract has its own test in `contract/test/`.
 
 ## Bans and suspicious activity
 
@@ -249,6 +291,7 @@ Frontend (`client/.env`):
 | `VITE_VOTING_CONTRACT_ADDRESS` | Voting contract used on the dashboard |
 | `VITE_CANDY_CASCADE_CONTRACT` | CandyCascade contract. Without it, the game runs in local play with nothing saved on chain |
 | `VITE_MOTO_RUSH_CONTRACT` | MotoRush contract. With it, levels and stars are saved on chain and each level can be completed once; without it, Moto Rush is free play with progress kept in the browser |
+| `VITE_PIXEL_FIGHTER_CONTRACT` | PixelFighter contract. With it, every match is started and saved on chain and earns HP; without it, Pixel Fighters is free play |
 | `VITE_VENOM_CONTRACT` | Venom NFT contract (`nft/`). Only Venom holders can ride the #27 Venom in Moto Rush; without it, the Venom stays locked for everyone |
 
 Backend (`.env` in the directory you start the backend from):
@@ -271,7 +314,8 @@ Contracts (`contract/.env`):
 | Variable | Purpose |
 | --- | --- |
 | `DEPLOYER_PRIVATE_KEY` | Deploys contracts to Hemi (Hardhat also expects a valid key when running tests) |
-| `SIGNER_ADDRESS` | Address of the backend's `SERVER_PRIVATE_KEY`, set as the trusted signer when deploying CandyCascade and MotoRush |
+| `SIGNER_ADDRESS` | Address of the backend's `SERVER_PRIVATE_KEY`, set as the trusted signer when deploying CandyCascade, MotoRush and PixelFighter |
 | `MOTO_SUBMISSION_FEE_ETH` | Optional: the fee to save a Moto Rush level, in ETH (default `0.000008`) |
+| `PIXEL_FIGHTER_SUBMISSION_FEE_ETH` | Optional: the fee to save a Pixel Fighters match, in ETH (default `0.000008`) |
 
 Never commit `.env` files. They are already in `.gitignore`.

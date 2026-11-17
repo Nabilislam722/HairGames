@@ -30,7 +30,7 @@ export const STEP = 1 / 120;
 export const MAX_STEPS = 120 * 60 * 15;
 const MAX_INPUT_RUNS = 50_000;
 
-export const STAR_HP = { 1: 5000, 2: 7000, 3: 10000 };
+export const STAR_HP = { 1: 500, 2: 1000, 3: 2000 };
 
 const round2 = (n) => Number(n.toFixed(2));
 

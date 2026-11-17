@@ -26,6 +26,11 @@ import {
     verifyMotoRide,
 } from "../controllers/motoRushController.js";
 
+import {
+    startPixelSession,
+    verifyPixelMatch,
+} from "../controllers/pixelFighterController.js";
+
 import { getBanStatus, rejectBanned } from "../services/moderation.js";
 
 import {
@@ -65,6 +70,8 @@ router.post("/candy-cascade/session", rejectBanned, startCandySession);
 router.post("/candy-cascade/verify", rejectBanned, verifyCandyLevel);
 router.post("/moto-rush/session", rejectBanned, startMotoSession);
 router.post("/moto-rush/verify", rejectBanned, verifyMotoRide);
+router.post("/pixel-fighter/session", rejectBanned, startPixelSession);
+router.post("/pixel-fighter/verify", rejectBanned, verifyPixelMatch);
 
 // Points Management
 router.post("/points/verify", rejectBanned, verifyPoints);

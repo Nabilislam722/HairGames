@@ -84,6 +84,18 @@ const QUESTS = [
 
 const GAMES = [
   {
+    id: "pixel_fighter",
+    title: "Pixel Fighters",
+    description: "Pick a fighter and take on the CPU. Best of three, every match replayed and saved on chain.",
+    entryFee: 0.000006,
+    image: "/game_assets/pixelFighterBanner.jpg",
+    logo: "/game_assets/pixelFighterLogo.jpg",
+    category: "Fighting",
+    accent: "#b44dff",
+    status: "active",
+    difficulty: "Medium",
+  },
+  {
     id: "moto_rush",
     title: "Moto Rush",
     description: "Gas, lean and flip through 500 tracks across five worlds of loops, stairs and table jumps.",

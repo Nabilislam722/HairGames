@@ -50,7 +50,8 @@ const MOTO_ABI = [
   },
 ];
 
-const STAR_HP = { 1: 5000, 2: 7000, 3: 10000 };
+// Same as STAR_HP in backend/services/motoRush.js, which is what's actually paid.
+const STAR_HP = { 1: 500, 2: 1000, 3: 2000 };
 
 const START_STEPS = [
   { key: "wallet", label: "Confirm the level start in your wallet" },

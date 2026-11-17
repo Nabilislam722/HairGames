@@ -5,6 +5,7 @@ import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { useAccount } from "wagmi";
 import { motion, AnimatePresence } from "framer-motion";
 import { CURRENT_SEASON } from "@/lib/season";
+import { useHemiNetwork } from "@/lib/useHemiNetwork";
 import "@/styles/globals.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -361,6 +362,8 @@ export function Layout({ children }) {
   const [scrolled, setScrolled] = useState(false);
   const [location] = useLocation();
   const { address, isConnected } = useAccount();
+  // Every page: a wallet on another network is asked to switch to Hemi.
+  useHemiNetwork();
   const points = useHairPoints(isConnected ? address : null, location);
   const ban = useBanStatus(isConnected ? address : null);
   const isGamePage = location.startsWith("/game/");
