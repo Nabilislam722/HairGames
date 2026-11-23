@@ -1,15 +1,26 @@
 import { useEffect, useState } from "react";
+import { Link } from "wouter";
 import { useAccount } from "wagmi";
-import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { motion, MotionConfig } from "framer-motion";
+import { formatEther } from "viem";
 import {
-  Layers, Trophy, Shield, Crown, Copy, Check, Sprout, Play, Gem, Gift, Vault,
-  HelpCircle, Lock, BadgeCheck, TriangleAlert, RotateCw, ChevronDown, Map as MapIcon, Clock3
+  Crown, Copy, Check, Gift, Vault, HelpCircle, Lock, BadgeCheck, TriangleAlert, RotateCw, ChevronDown, Clock3,
+  ArrowRight, ArrowUpRight,
 } from "lucide-react";
-import { MdLocalFireDepartment } from "react-icons/md";
-import { RiCopperCoinFill } from "react-icons/ri";
 import { FaXTwitter, FaDiscord } from "react-icons/fa6";
-
+import { LEVELS, levelIndex, getLevelInfo } from "@/lib/levels";
+import { GAMES } from "@/lib/games";
+import { usePlayerActivity, perDay, EXPLORER_URL } from "@/lib/activity";
+import { useGameSession } from "@/lib/gameSession";
+import { MOCK_DATA, mockProfile } from "@/lib/mockData";
+import { AddressAvatar, shortAddress } from "@/components/arena/AddressAvatar";
+import { SectionHead } from "@/components/arena/Heads";
+import { ConnectPrompt } from "@/components/arena/ConnectPrompt";
+import { SegBar } from "@/components/arena/SegBar";
+import { RankBadge } from "@/components/arena/RankBadge";
+import { TrendCard, SessionTrendCard, TREND_ORANGE, TREND_LIME } from "@/components/arena/TrendCards";
+import { RecentPlays } from "@/components/arena/RecentPlays";
+import "@/styles/hg.css";
+import "@/styles/profile.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
@@ -19,41 +30,16 @@ const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 const NFT_IMAGE_FALLBACK = "https://amaranth-imperial-otter-134.mypinata.cloud/ipfs/bafybeicdxf6wh2i7jtkinytziitfhv4nagmkvmzaraoy5b2ris27jiu7ae";
 
 // How many NFTs show before the "Show all" toggle kicks in.
-const NFT_PREVIEW_COUNT = 6;
+const NFT_PREVIEW_COUNT = 12;
 
-// Single source of truth for level thresholds. Each level's ceiling is the
-// next level's min (so the header/level bars always agree), and rank order
-// here also drives the roadmap render order.
-const LEVELS = [
-  { level: 1, title: "Rookie",   min: 0,        color: "#94a3b8", icon: Sprout },
-  { level: 2, title: "Player",   min: 50000,    color: "#10b981", icon: Play },
-  { level: 3, title: "Veteran",  min: 150000,   color: "#3b82f6", icon: Shield },
-  { level: 4, title: "Elite",    min: 4000000,  color: "#a855f7", icon: Gem },
-  { level: 5, title: "Legend",   min: 10000000, color: "#fb923c", icon: Crown },
-  { level: 6, title: "Immortal", min: 25000000, color: "#f43f5e", icon: Trophy },
-];
+const STATUS_LABEL = {
+  complete: "Unlocked",
+  active: "Current",
+  next: "Up next",
+  locked: "Locked",
+};
 
-const LABEL = "font-mono text-[11px] uppercase tracking-[0.14em] text-white/50";
-const PANEL = "rounded-2xl border border-white/8 bg-white/3";
-
-/* Helpers */
-function shortenAddr(addr) {
-  if (!addr) return "";
-  return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
-}
-
-function levelIndex(points) {
-  return Math.max(0, LEVELS.findLastIndex(l => points >= l.min));
-}
-
-function getLevelInfo(points) {
-  const idx = levelIndex(points);
-  const current = LEVELS[idx];
-  const next = LEVELS[idx + 1];
-  const max = next ? next.min : current.min;
-  const pct = next ? Math.min(100, Math.round(((points - current.min) / (max - current.min)) * 100)) : 100;
-  return { ...current, max, pct, next, isMaxed: !next };
-}
+const sum = (list) => list.reduce((a, b) => a + b, 0);
 
 function getRoadmap(points) {
   const activeIdx = levelIndex(points);
@@ -67,132 +53,31 @@ function getRoadmap(points) {
   });
 }
 
-// Deterministic string hash + seeded PRNG — no crypto needed, just needs to
-// produce the same pattern for the same address every time.
-function hashCode(str) {
-  let hash = 0;
-  for (let i = 0; i < str.length; i++) {
-    hash = (hash << 5) - hash + str.charCodeAt(i);
-    hash |= 0;
-  }
-  return hash;
-}
-
-function mulberry32(seed) {
-  let t = seed >>> 0;
-  return function () {
-    t = (t + 0x6d2b79f5) | 0;
-    let r = Math.imul(t ^ (t >>> 15), 1 | t);
-    r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) ^ r;
-    return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
-  };
-}
+// Hours until a newly received NFT starts counting toward the multiplier.
+const hoursUntil = (date) => Math.max(1, Math.ceil((new Date(date).getTime() - Date.now()) / 3_600_000));
 
 /*  Sub-components  */
 
-// Deterministic, symmetric pixel-pattern identicon generated from the
-// wallet address — same wallet always renders the same pattern, no image
-// upload or external avatar service needed.
-function AddressAvatar({ address, className = "" }) {
-  const size = 96;
-  const grid = 6;
-  const cell = size / grid;
-  const rand = mulberry32(hashCode((address || "").toLowerCase()));
-  const hue = Math.floor(rand() * 360);
-  const bg = `hsl(${hue}, 60%, 15%)`;
-  const fg = `hsl(${(hue + 45) % 360}, 78%, 58%)`;
-
-  const half = Math.ceil(grid / 2);
-  const cells = [];
-  for (let y = 0; y < grid; y++) {
-    for (let x = 0; x < half; x++) {
-      if (rand() > 0.58) {
-        cells.push([x, y]);
-        const mirrorX = grid - 1 - x;
-        if (mirrorX !== x) cells.push([mirrorX, y]);
-      }
-    }
-  }
-
-  return (
-    <svg viewBox={`0 0 ${size} ${size}`} width="100%" height="100%" className={className}>
-      <rect width={size} height={size} fill={bg} />
-      {cells.map(([x, y], i) => (
-        <rect key={i} x={x * cell} y={y * cell} width={cell} height={cell} fill={fg} />
-      ))}
-    </svg>
-  );
-}
-
-function SocialPill({ icon: Icon, label, handle, onConnect }) {
+function SocialButton({ icon: Icon, label, handle, onConnect }) {
   if (handle) {
     return (
-      <span
-        title={`${label} connected`}
-        className="inline-flex items-center gap-2 h-8 pl-2.5 pr-3 rounded-full border border-emerald-500/30 bg-emerald-500/10 text-emerald-300 text-xs font-medium"
-      >
-        <Icon className="w-3.5 h-3.5 shrink-0" />
-        <span className="max-w-40 truncate">{handle}</span>
-        <Check className="w-3 h-3 shrink-0" />
+      <span className="social on" title={`${label} connected`}>
+        <Icon size={13} /> <span>{handle}</span> <Check size={12} />
       </span>
     );
   }
   return (
-    <button
-      type="button"
-      onClick={onConnect}
-      className="inline-flex items-center gap-2 h-8 px-3 rounded-full border border-white/10 bg-white/5 text-white/70 text-xs font-medium transition-colors hover:bg-white/10 hover:text-white hover:border-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60"
-    >
-      <Icon className="w-3.5 h-3.5" />
-      Connect {label}
+    <button type="button" className="social" onClick={onConnect}>
+      <Icon size={13} /> Connect {label}
     </button>
   );
 }
 
-function StatCard({ icon: Icon, label, value, sub, color, delay = 0 }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 12 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ delay, duration: 0.35, ease: "easeOut" }}
-      className={`relative group overflow-hidden ${PANEL} p-4 sm:p-5 flex items-center gap-4`}
-    >
-      <div
-        className="absolute -top-8 -right-8 w-28 h-28 rounded-full opacity-10 blur-2xl transition-opacity duration-300 group-hover:opacity-20"
-        style={{ background: color }}
-      />
-      <div
-        className="relative w-11 h-11 rounded-xl flex items-center justify-center shrink-0"
-        style={{ background: `${color}1a`, border: `1px solid ${color}33` }}
-      >
-        <Icon className="w-5 h-5" style={{ color }} />
-      </div>
-      <div className="relative min-w-0">
-        <p className={LABEL}>{label}</p>
-        <p className="font-display font-black text-2xl text-white leading-tight truncate tabular-nums">{value}</p>
-        {sub && <p className="text-xs text-white/45 truncate">{sub}</p>}
-      </div>
-    </motion.div>
-  );
-}
-
-// Hours until a newly received NFT starts counting toward the multiplier.
-const hoursUntil = (date) => Math.max(1, Math.ceil((new Date(date).getTime() - Date.now()) / 3_600_000));
-
-function NFTCard({ nft, index }) {
-  const tint = nft.color || "#a78bfa";
+function NFTCard({ nft }) {
   const counting = nft.active !== false;
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ delay: 0.04 * Math.min(index, 8), duration: 0.3, ease: "easeOut" }}
-      className="group relative rounded-xl border border-white/8 bg-white/3 overflow-hidden transition-colors duration-300 hover:border-white/20"
-    >
-      <div
-        className="w-full aspect-square relative overflow-hidden"
-        style={{ background: `linear-gradient(135deg, ${tint}18, ${tint}08)` }}
-      >
+    <div className="nft">
+      <div className="nft-art">
         <img
           src={nft.imageUrl || NFT_IMAGE_FALLBACK}
           alt={nft.name}
@@ -200,146 +85,85 @@ function NFTCard({ nft, index }) {
           onError={(e) => {
             if (e.currentTarget.src !== NFT_IMAGE_FALLBACK) e.currentTarget.src = NFT_IMAGE_FALLBACK;
           }}
-          className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
         />
-        <span
-          className="absolute top-2 left-2 inline-flex items-center gap-1 rounded-full bg-black/60 backdrop-blur-sm px-2 py-0.5 text-[10px] font-medium text-white"
-          title={counting ? "Counts toward your multiplier" : "New NFTs count toward your multiplier after a holding period"}
-        >
-          {counting
-            ? <><BadgeCheck className="w-3 h-3 text-emerald-400" /> Verified</>
-            : <><Clock3 className="w-3 h-3 text-amber-300" /> Counts in {hoursUntil(nft.countsFrom)}h</>}
-        </span>
+        {counting ? (
+          <span className="pill-lime" title="Counts toward your multiplier"><BadgeCheck size={11} /> Verified</span>
+        ) : (
+          <span className="pill" title="New NFTs count toward your multiplier after a holding period">
+            <Clock3 size={11} /> Counts in {hoursUntil(nft.countsFrom)}h
+          </span>
+        )}
       </div>
-      <div className="px-3 py-2.5">
-        <p className="text-sm font-semibold text-white truncate">{nft.name}</p>
-        <p className="text-xs text-white/45 truncate">{nft.collectionName}</p>
+      <div className="nft-body">
+        <p className="nft-name">{nft.name}</p>
+        <p className="nft-coll">{nft.collectionName}</p>
         {nft.gameBonus?.moto_rush > 0 && (
-          <p className="mt-1 text-[11px] font-medium text-lime-300 truncate" title="Added in Moto Rush when you ride the #27 Venom">
+          <p className="nft-bonus" title="Added in Moto Rush when you ride the #27 Venom">
             +{nft.gameBonus.moto_rush}× in Moto Rush on the Venom
           </p>
         )}
       </div>
-    </motion.div>
+    </div>
   );
 }
 
-const STATUS_LABEL = {
-  complete: "Unlocked",
-  active: "Current",
-  next: "Up next",
-  locked: "Locked",
-};
-
-function RoadmapStep({ item, points, lineLit, isLast }) {
-  const { level, title, min, color, icon: Icon, status, pct } = item;
-  const litUp = status === "complete" || status === "active";
-  // Rookie is the base rank — its node is a fixed dark badge rather than
-  // tinted with its own (deliberately muted) color.
-  const nodeColor = title === "Rookie" ? "#0f172a" : color;
-
-  const statusColor = status === "complete" ? "#34d399"
-    : status === "active" ? color
-    : status === "next" ? "rgba(255,255,255,0.6)"
-    : "rgba(255,255,255,0.35)";
-
+function RankStep({ item, points }) {
+  const { level, title, min, color, status, pct } = item;
+  const state = status === "complete" ? "reached" : status;
   return (
-    <li className="relative flex gap-3.5">
-      {!isLast && (
-        <span
-          aria-hidden="true"
-          className="absolute left-[17px] top-10 -bottom-1 w-0.5 rounded-full"
-          style={{ background: lineLit ? `${color}99` : "rgba(255,255,255,0.08)" }}
-        />
-      )}
-
-      <div
-        className="relative z-10 w-9 h-9 rounded-full flex items-center justify-center shrink-0"
-        style={litUp
-          ? { background: nodeColor, border: `1px solid ${color}80`, boxShadow: status === "active" ? `0 0 0 4px ${color}26, 0 0 18px ${color}55` : undefined }
-          : { background: "#17110b", border: `1px solid ${status === "next" ? `${color}66` : "rgba(255,255,255,0.1)"}` }
-        }
-      >
-        <Icon className="w-4 h-4" style={{ color: litUp ? "#fff" : status === "next" ? color : "rgba(255,255,255,0.3)" }} />
-      </div>
-
-      <div
-        className={`flex-1 min-w-0 rounded-xl px-3 py-2 mb-3 ${status === "active" ? "border" : ""}`}
-        style={status === "active" ? { background: `${color}10`, borderColor: `${color}40` } : undefined}
-      >
-        <div className="flex items-center justify-between gap-2">
-          <p className="font-display font-bold text-sm" style={{ color: litUp ? "#fff" : "rgba(255,255,255,0.6)" }}>
-            {title}
-          </p>
-          <span
-            className="inline-flex items-center gap-1 font-mono text-[10px] uppercase tracking-[0.12em] shrink-0"
-            style={{ color: statusColor }}
-          >
-            {status === "complete" && <Check className="w-3 h-3" />}
-            {status === "locked" && <Lock className="w-3 h-3" />}
+    <li className={`step ${state}`} style={{ "--sc": color }}>
+      <RankBadge level={item} size={52} className="step-badge" />
+      <p className="step-title">{title}</p>
+      <p className="step-min">Level {level} · {min === 0 ? "Starting rank" : `${min.toLocaleString()} HP`}</p>
+      <div className="step-status">
+        {status === "next" ? (
+          <>
+            <SegBar value={pct} max={100} segments={8} label={`Progress to ${title}`} />
+            <p className="step-togo">{pct}% · {(min - points).toLocaleString()} HP to go</p>
+          </>
+        ) : (
+          <span className={status === "complete" ? "pill-lime" : "pill"} style={status === "active" ? { color } : undefined}>
+            {status === "complete" && <Check size={10} />}
+            {status === "locked" && <Lock size={10} />}
             {STATUS_LABEL[status]}
           </span>
-        </div>
-        <p className="text-xs text-white/40 mt-0.5">
-          Level {level} · {min === 0 ? "Starting rank" : `${min.toLocaleString()} HP`}
-        </p>
-
-        {status === "next" && (
-          <div className="mt-2.5">
-            <div className="h-1.5 rounded-full bg-white/8 overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{ width: `${pct}%`, background: `linear-gradient(90deg, ${color}80, ${color})` }}
-              />
-            </div>
-            <p className="text-[11px] text-white/50 mt-1.5">
-              {pct}% · {(min - points).toLocaleString()} HP to go
-            </p>
-          </div>
         )}
       </div>
     </li>
   );
 }
 
-function ComingSoonTile({ icon: Icon, title, text, color }) {
+function ComingSoon({ icon: Icon, title, text, color }) {
   return (
-    <div className="flex items-center gap-3.5 rounded-2xl border border-dashed border-white/12 bg-white/2 p-4">
-      <div
-        className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0"
-        style={{ background: `${color}14`, border: `1px solid ${color}26` }}
-      >
-        <Icon className="w-4.5 h-4.5" style={{ color }} />
+    <div className="soon-item" style={{ "--c": color }}>
+      <span className="soon-icon"><Icon size={18} /></span>
+      <div>
+        <p className="soon-title">{title}</p>
+        <p className="soon-text">{text}</p>
       </div>
-      <div className="flex-1 min-w-0">
-        <p className="font-display font-bold text-sm text-white/80">{title}</p>
-        <p className="text-xs text-white/40 truncate">{text}</p>
-      </div>
-      <span className="font-mono text-[10px] uppercase tracking-[0.12em] text-white/45 bg-white/6 border border-white/10 px-2 py-1 rounded-md shrink-0">
-        Coming soon
-      </span>
+      <span className="pill">Coming soon</span>
     </div>
   );
 }
 
 function ProfileSkeleton() {
-  const block = "rounded-2xl bg-white/4 border border-white/6";
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-5 animate-pulse" aria-busy="true" aria-label="Loading profile">
-      <div className={`${block} rounded-3xl h-72 sm:h-64`} />
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        {[0, 1, 2].map(i => <div key={i} className={`${block} h-24`} />)}
+    <div className="hg" aria-busy="true" aria-label="Loading profile">
+      <div className="ptop">
+        <div className="skel" style={{ height: 300 }} />
+        <div className="trends">
+          {[0, 1, 2].map(i => <div key={i} className="skel" style={{ height: 230 }} />)}
+        </div>
       </div>
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        <div className={`${block} lg:col-span-3 h-80`} />
-        <div className={`${block} lg:col-span-2 h-80`} />
-      </div>
+      <div className="skel" style={{ height: 320 }} />
     </div>
   );
 }
 
 export default function Profile() {
   const { address, isConnected } = useAccount();
+  const session = useGameSession();
+  const activity = usePlayerActivity(address, GAMES);
   const [profile, setProfile] = useState({
     points: 0,
     nftHoldings: [],
@@ -389,8 +213,13 @@ export default function Profile() {
         });
         setLoadError(false);
       } catch (error) {
-        console.error("Failed syncing profile metadata parameters:", error);
-        setLoadError(true);
+        if (MOCK_DATA) {
+          setProfile(mockProfile());
+          setLoadError(false);
+        } else {
+          console.error("Failed syncing profile metadata parameters:", error);
+          setLoadError(true);
+        }
       } finally {
         setLoading(false);
       }
@@ -419,49 +248,17 @@ export default function Profile() {
   };
 
   /* ── Not connected ── */
-  if (!isConnected) {
+  if (!isConnected || !address) {
     return (
-      <div className="w-full min-h-[65vh] flex items-center justify-center">
-        <motion.div
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.4, ease: "easeOut" }}
-          className="relative w-full max-w-md rounded-3xl border border-white/10 bg-white/3 p-8 text-center overflow-hidden"
-        >
-          <div
-            aria-hidden="true"
-            className="absolute -top-24 left-1/2 -translate-x-1/2 w-72 h-72 opacity-20 blur-3xl"
-            style={{ background: "radial-gradient(circle, hsl(var(--primary)), transparent 70%)" }}
-          />
-          <div className="relative">
-            <div className="w-16 h-16 mx-auto mb-5 rounded-2xl bg-primary/10 border border-primary/25 flex items-center justify-center">
-              <Shield className="w-7 h-7 text-primary" />
-            </div>
-            <h2 className="font-display font-black text-2xl text-white mb-2">Your profile awaits</h2>
-            <p className="text-sm text-white/55 mb-6 leading-relaxed">
-              Connect your wallet to see your Hair Points, global rank and NFT multiplier.
-            </p>
-            <div className="flex justify-center">
-              <ConnectButton chainStatus="icon" showBalance={false} />
-            </div>
-
-            <div className="mt-8 pt-6 border-t border-white/8">
-              <p className={LABEL}>{LEVELS.length} ranks to climb</p>
-              <div className="flex justify-center gap-2 mt-3">
-                {LEVELS.map(({ level, title, color, icon: Icon }) => (
-                  <span
-                    key={level}
-                    title={title}
-                    className="w-9 h-9 rounded-full flex items-center justify-center"
-                    style={{ background: `${color}1a`, border: `1px solid ${color}40` }}
-                  >
-                    <Icon className="w-4 h-4" style={{ color }} />
-                  </span>
-                ))}
-              </div>
+      <div className="hg">
+        <ConnectPrompt title="Your profile awaits" text="Connect your wallet to see your Hair Points, global rank and NFT multiplier.">
+          <div>
+            <p className="ph-eyebrow" style={{ justifyContent: "center", marginBottom: 12 }}>{LEVELS.length} ranks to climb</p>
+            <div className="ranks-row">
+              {LEVELS.map(l => <RankBadge key={l.level} level={l} size={44} labelled />)}
             </div>
           </div>
-        </motion.div>
+        </ConnectPrompt>
       </div>
     );
   }
@@ -473,273 +270,171 @@ export default function Profile() {
   const multiplierNote = [
     pendingMultiplier > multiplier
       ? `Rises to ${Number(pendingMultiplier).toFixed(2)}× as new NFTs settle in`
-      : nftHoldings.length > 0 ? "Applied to every score" : "Hold NFTs to boost it",
+      : nftHoldings.length > 0 ? `${Number(multiplier).toFixed(2)}× applied to every score` : "Hold NFTs to boost your multiplier",
     motoRushVenomMultiplier ? `${Number(motoRushVenomMultiplier).toFixed(2)}× in Moto Rush on the Venom` : null,
   ].filter(Boolean).join(" · ");
   const lvlInfo = getLevelInfo(points);
   const roadmap = getRoadmap(points);
-  const LevelIcon = lvlInfo.icon;
   const visibleNfts = showAllNfts ? nftHoldings : nftHoldings.slice(0, NFT_PREVIEW_COUNT);
 
-  return (
-    <MotionConfig reducedMotion="user">
-      <div className="w-full max-w-6xl mx-auto space-y-5">
+  const playsByDay = perDay(activity.plays.filter(p => p.kind === "start"));
+  const playsThisWeek = sum(playsByDay.slice(7));
+  const playsLastWeek = sum(playsByDay.slice(0, 7));
+  const playsChange = playsLastWeek ? ((playsThisWeek - playsLastWeek) / playsLastWeek) * 100 : null;
+  const spendByDay = perDay(activity.plays, p => Number(formatEther(p.cost)));
 
-        {loadError && (
-          <div role="alert" className="flex items-center gap-3 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3">
-            <TriangleAlert className="w-4 h-4 text-red-400 shrink-0" />
-            <p className="flex-1 text-sm text-red-100/85">
-              We couldn't load your profile. The numbers below may be out of date.
-            </p>
+  return (
+    <div className="hg">
+
+      {loadError && (
+        <div role="alert" className="alert">
+          <TriangleAlert size={16} />
+          <p>We couldn't load your profile. The numbers below may be out of date.</p>
+          <button type="button" className="btn btn-ghost" onClick={retryLoad}>
+            <RotateCw size={12} /> Retry
+          </button>
+        </div>
+      )}
+
+      {/* ══ Identity, rank and trends ══════════════════════════════════ */}
+      <section className="ptop" style={{ "--rc": lvlInfo.color }}>
+        <div className="pid">
+          <p className="pid-hey">Hey <b>{address.slice(0, 6)}</b>, here's your season so far.</p>
+
+          <div className="pid-row">
+            <span className="pid-avatar"><AddressAvatar address={address} /></span>
+            <div className="pid-who">
+              <h1 className="pid-name">{shortAddress(address)}</h1>
+              <div className="pid-tags">
+                {rank && <span className="pill">#{rank.toLocaleString()} global</span>}
+                {rank && rank <= 10 && <span className="pill-lime"><Crown size={11} /> Top 10</span>}
+              </div>
+            </div>
             <button
               type="button"
-              onClick={retryLoad}
-              className="inline-flex items-center gap-1.5 h-8 px-3 rounded-lg bg-white/10 text-xs font-medium text-white hover:bg-white/15 transition-colors"
+              className="btn btn-ghost btn-sm"
+              onClick={copyAddr}
+              aria-label={copied ? "Address copied" : "Copy wallet address"}
             >
-              <RotateCw className="w-3.5 h-3.5" /> Retry
+              {copied ? <Check size={11} /> : <Copy size={11} />} {copied ? "Copied" : "Copy"}
             </button>
           </div>
-        )}
 
-        {/* ══ Identity Card ══════════════════════════════════════════════ */}
-        <motion.section
-          initial={{ opacity: 0, y: -12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.45, ease: "easeOut" }}
-          className="relative rounded-3xl border border-white/10 bg-white/3 overflow-hidden"
-        >
-          <div
-            aria-hidden="true"
-            className="absolute -top-20 -right-20 w-80 h-80 opacity-15 blur-3xl"
-            style={{ background: `radial-gradient(circle, ${lvlInfo.color}, transparent 70%)` }}
-          />
-
-          <div className="relative p-5 sm:p-8 flex flex-col md:flex-row md:items-center gap-6">
-
-            <div className="flex items-start sm:items-center gap-4 sm:gap-5 flex-1 min-w-0">
-              {/* Avatar */}
-              <div className="relative shrink-0">
-                <div
-                  className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl overflow-hidden"
-                  style={{ border: `2px solid ${lvlInfo.color}66`, boxShadow: `0 0 32px ${lvlInfo.color}26` }}
-                >
-                  <AddressAvatar address={address} />
-                </div>
-                <div
-                  className="absolute -bottom-2 -right-2 w-7 h-7 rounded-lg flex items-center justify-center font-mono font-black text-[11px] ring-4 ring-background"
-                  style={{ background: lvlInfo.color, color: "#000" }}
-                  title={`Level ${lvlInfo.level}`}
-                >
-                  {lvlInfo.level}
-                </div>
-              </div>
-
-              {/* Identity Info */}
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap mb-2">
-                  <span
-                    className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-[0.12em] font-bold px-2.5 py-1 rounded-full"
-                    style={{ background: `${lvlInfo.color}1a`, color: lvlInfo.color, border: `1px solid ${lvlInfo.color}40` }}
-                  >
-                    <LevelIcon className="w-3.5 h-3.5" /> {lvlInfo.title}
-                  </span>
-                  {rank && rank <= 10 && (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 font-mono text-[11px] uppercase tracking-[0.12em] font-bold text-amber-400">
-                      <Crown className="w-3.5 h-3.5" /> Top 10
-                    </span>
-                  )}
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <h1 className="font-display font-black text-2xl sm:text-3xl text-white tracking-tight truncate">
-                    {shortenAddr(address)}
-                  </h1>
-                  <button
-                    type="button"
-                    onClick={copyAddr}
-                    aria-label={copied ? "Address copied" : "Copy wallet address"}
-                    className="inline-flex cursor-pointer items-center gap-1.5 h-8 px-2.5 rounded-lg bg-white/6 border border-white/10 text-xs font-medium text-white/60 hover:text-white hover:bg-white/10 transition-colors shrink-0"
-                  >
-                    {copied ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Copy className="w-3.5 h-3.5" />}
-                    <span className="hidden sm:inline">{copied ? "Copied" : "Copy"}</span>
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap gap-2 mt-3">
-                  <SocialPill icon={FaDiscord} label="Discord" handle={discord} onConnect={connectDiscord} />
-                  <SocialPill icon={FaXTwitter} label="X" handle={twitter && `@${twitter}`} onConnect={connectTwitter} />
-                </div>
-              </div>
-            </div>
-
-            {/* Points */}
-            <div className="shrink-0 pt-5 md:pt-0 md:pl-8 border-t md:border-t-0 md:border-l border-white/8 md:text-right">
-              <p className={`${LABEL} flex items-center gap-1.5 md:justify-end`}>
-                <RiCopperCoinFill className="w-3.5 h-3.5 text-orange-400" /> Hair Points
-              </p>
-              <p className="font-display font-black text-4xl sm:text-5xl text-white leading-none mt-2 tabular-nums">
-                {points.toLocaleString()}
-              </p>
-              <p className="text-xs text-white/45 mt-2">Lifetime total</p>
-            </div>
+          <div className="pid-socials">
+            <SocialButton icon={FaDiscord} label="Discord" handle={discord} onConnect={connectDiscord} />
+            <SocialButton icon={FaXTwitter} label="X" handle={twitter && `@${twitter}`} onConnect={connectTwitter} />
           </div>
 
-          {/* Level Progress */}
-          <div className="relative border-t border-white/8 px-5 sm:px-8 py-5 bg-black/10">
-            <div className="flex items-end justify-between gap-4 mb-3">
-              <div className="min-w-0">
-                <p className={LABEL}>Level {lvlInfo.level} progress</p>
-                <p className="text-sm text-white/65 mt-1">
-                  {lvlInfo.isMaxed ? (
-                    <>Top rank reached: <span className="font-semibold" style={{ color: lvlInfo.color }}>{lvlInfo.title}</span></>
-                  ) : (
-                    <>
-                      <span className="font-semibold text-white tabular-nums">{(lvlInfo.max - points).toLocaleString()} HP</span>
-                      {" "}to <span className="font-semibold" style={{ color: lvlInfo.next.color }}>{lvlInfo.next.title}</span>
-                    </>
-                  )}
-                </p>
-              </div>
-              <p className="font-display font-black text-2xl leading-none tabular-nums" style={{ color: lvlInfo.color }}>
-                {lvlInfo.pct}%
-              </p>
-            </div>
-            <div className="h-2.5 rounded-full bg-white/8 overflow-hidden">
-              <motion.div
-                initial={{ width: 0 }}
-                animate={{ width: `${lvlInfo.pct}%` }}
-                transition={{ duration: 1, delay: 0.3, ease: "easeOut" }}
-                className="h-full rounded-full"
-                style={{ background: `linear-gradient(90deg, ${lvlInfo.color}80, ${lvlInfo.color})`, boxShadow: `0 0 12px ${lvlInfo.color}66` }}
+          <div className="pid-rank">
+            <RankBadge level={lvlInfo} size={64} />
+            <div className="pid-rank-body">
+              <p className="pid-rank-name">{lvlInfo.title} <span className="pill-lime">Level {lvlInfo.level}</span></p>
+              <SegBar
+                value={lvlInfo.isMaxed ? 1 : points - lvlInfo.min}
+                max={lvlInfo.isMaxed ? 1 : lvlInfo.max - lvlInfo.min}
+                segments={12}
+                label={`Level ${lvlInfo.level} progress`}
               />
-            </div>
-            {!lvlInfo.isMaxed && (
-              <div className="flex justify-between mt-2 font-mono text-[11px] text-white/40 tabular-nums">
-                <span>{lvlInfo.min.toLocaleString()} HP</span>
-                <span>{lvlInfo.max.toLocaleString()} HP</span>
-              </div>
-            )}
-          </div>
-        </motion.section>
-
-        {/* ══ Stat Cards ═════════════════════════════════════════════════ */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <StatCard
-            icon={Trophy} label="Global Rank" value={rank ? `#${rank.toLocaleString()}` : "—"}
-            sub={!rank ? "Play a game to get ranked" : rank <= 10 ? "Top 10 player" : "Across all players"}
-            color="#a855f7" delay={0.08}
-          />
-          <StatCard
-            icon={MdLocalFireDepartment} label="Multiplier" value={`${Number(multiplier).toFixed(2)}×`}
-            sub={multiplierNote}
-            color="#f97316" delay={0.12}
-          />
-          <StatCard
-            icon={Layers} label="NFTs Owned" value={nftHoldings.length}
-            sub="Verified holdings" color="#3b82f6" delay={0.16}
-          />
-        </div>
-
-        {/* ══ NFT Holdings + Level Roadmap ═══════════════════════════════ */}
-        <div className="grid grid-cols-1 lg:grid-cols-5 gap-4 items-start">
-
-          {/* NFT Collection Grid */}
-          <motion.section
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2, duration: 0.4 }}
-            className={`lg:col-span-3 ${PANEL} p-5`}
-          >
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="font-display font-bold text-base text-white flex items-center gap-2">
-                <Layers className="w-4 h-4 text-sky-400" /> NFT Holdings
-                <span className="px-2 py-0.5 rounded-full bg-white/8 text-white/60 text-[11px] font-mono">
-                  {nftHoldings.length}
-                </span>
-              </h2>
-              {nftHoldings.length > NFT_PREVIEW_COUNT && (
-                <button
-                  type="button"
-                  onClick={() => setShowAllNfts(v => !v)}
-                  aria-expanded={showAllNfts}
-                  className="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-orange-300 transition-colors"
-                >
-                  {showAllNfts ? "Show less" : `Show all ${nftHoldings.length}`}
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showAllNfts ? "rotate-180" : ""}`} />
-                </button>
-              )}
-            </div>
-
-            {nftHoldings.length > 0 ? (
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                {visibleNfts.map((nft, i) => (
-                  <NFTCard key={`${nft.contractAddress}-${nft.tokenId}`} nft={nft} index={i} />
-                ))}
-              </div>
-            ) : (
-              <div className="py-12 px-4 text-center rounded-xl border border-dashed border-white/10">
-                <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-white/5 flex items-center justify-center">
-                  <Layers className="w-5 h-5 text-white/30" />
-                </div>
-                <p className="text-sm font-semibold text-white/70">No supported NFTs yet</p>
-                <p className="text-xs text-white/45 mt-1 max-w-xs mx-auto leading-relaxed">
-                  Hold an NFT from an ecosystem collection to raise your scoring multiplier.
-                </p>
-              </div>
-            )}
-          </motion.section>
-
-          {/* Level Roadmap */}
-          <motion.section
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.26, duration: 0.4 }}
-            className={`lg:col-span-2 ${PANEL} p-5`}
-          >
-            <div className="flex items-center justify-between gap-3 mb-4">
-              <h2 className="font-display font-bold text-base text-white flex items-center gap-2">
-                <MapIcon className="w-4 h-4 text-yellow-400" /> Rank Roadmap
-              </h2>
-              <button
-                type="button"
-                onClick={() => setShowHelp(v => !v)}
-                aria-expanded={showHelp}
-                className="inline-flex items-center gap-1 text-xs font-medium text-white/50 hover:text-white transition-colors"
-              >
-                <HelpCircle className="w-3.5 h-3.5" /> How it works
-              </button>
-            </div>
-
-            {showHelp && (
-              <p className="mb-4 rounded-xl bg-white/4 border border-white/8 p-3 text-xs text-white/60 leading-relaxed">
-                Every game you submit on-chain adds Hair Points to your total. Your multiplier, raised by
-                verified NFTs, is applied to each score before it's added. A newly received NFT starts
-                counting after a short holding period. Ranks unlock automatically as your total grows.
+              <p className="pid-next">
+                {lvlInfo.isMaxed
+                  ? "Top rank reached"
+                  : `${(lvlInfo.max - points).toLocaleString()} HP to ${lvlInfo.next.title} · ${lvlInfo.pct}%`}
               </p>
-            )}
-
-            <ol>
-              {roadmap.map((item, i) => (
-                <RoadmapStep
-                  key={item.level}
-                  item={item}
-                  points={points}
-                  lineLit={item.status === "complete"}
-                  isLast={i === roadmap.length - 1}
-                />
-              ))}
-            </ol>
-          </motion.section>
-
+            </div>
+          </div>
         </div>
 
-        {/* ══ Coming Soon ════════════════════════════════════════════════ */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <ComingSoonTile icon={Gift} title="Hairdrop" text="Claim points" color="#ec4899" />
-          <ComingSoonTile icon={Vault} title="Vault" text="Staking" color="#10b981" />
+        <div className="trends hg-stagger">
+          <TrendCard
+            color={TREND_ORANGE}
+            label="Total points"
+            badge={`${Number(multiplier).toFixed(2)}x`}
+            badgeTone={multiplier > 1 ? "up" : "flat"}
+            value={points.toLocaleString()}
+            unit="HP"
+            data={activity.hpByDay}
+            footer={<Link href="/leaderboard" className="sc-link">Leaderboard <ArrowRight size={12} /></Link>}
+          />
+          <TrendCard
+            color={TREND_ORANGE}
+            label="Plays this week"
+            badge={playsChange == null ? null : `${playsChange >= 0 ? "+" : ""}${playsChange.toFixed(1)}%`}
+            badgeTone={playsChange >= 0 ? "up" : "down"}
+            value={playsThisWeek}
+            data={playsByDay}
+            footer={<Link href="/dashboard" className="sc-link">Play a game <ArrowRight size={12} /></Link>}
+          />
+          {session.enabled ? (
+            <SessionTrendCard session={session} data={spendByDay} />
+          ) : (
+            <TrendCard
+              color={TREND_LIME}
+              label="Spent this week"
+              value={sum(spendByDay.slice(7)).toFixed(6).replace(/\.?0+$/, "")}
+              unit="ETH"
+              data={spendByDay}
+              footer={(
+                <a className="sc-link" href={`${EXPLORER_URL}/address/${address}`} target="_blank" rel="noopener noreferrer">
+                  Explorer <ArrowUpRight size={12} />
+                </a>
+              )}
+            />
+          )}
         </div>
+      </section>
 
-      </div>
-    </MotionConfig>
+      {/* ══ Recent plays ═══════════════════════════════════════════════ */}
+      <RecentPlays activity={activity} address={address} />
+
+      {/* ══ Rank roadmap ═══════════════════════════════════════════════ */}
+      <section className="sec">
+        <SectionHead title="Rank roadmap">
+          <button type="button" className="btn btn-ghost" onClick={() => setShowHelp(v => !v)} aria-expanded={showHelp}>
+            <HelpCircle size={12} /> How it works
+          </button>
+        </SectionHead>
+        {showHelp && (
+          <p className="help">
+            Every game you submit on-chain adds Hair Points to your total. Your multiplier, raised by
+            verified NFTs, is applied to each score before it's added. A newly received NFT starts
+            counting after a short holding period. Ranks unlock automatically as your total grows.
+          </p>
+        )}
+        <ol className="track hg-stagger">
+          {roadmap.map(item => <RankStep key={item.level} item={item} points={points} />)}
+        </ol>
+      </section>
+
+      {/* ══ NFTs ═══════════════════════════════════════════════════════ */}
+      <section className="sec">
+        <SectionHead title="NFT holdings" count={nftHoldings.length}>
+          <span className="sh-note">{multiplierNote}</span>
+          {nftHoldings.length > NFT_PREVIEW_COUNT && (
+            <button type="button" className="btn btn-ghost" onClick={() => setShowAllNfts(v => !v)} aria-expanded={showAllNfts}>
+              {showAllNfts ? "Show less" : `Show all ${nftHoldings.length}`}
+              <ChevronDown size={12} style={{ transform: showAllNfts ? "rotate(180deg)" : undefined }} />
+            </button>
+          )}
+        </SectionHead>
+        {nftHoldings.length > 0 ? (
+          <div className="nft-grid hg-stagger">
+            {visibleNfts.map(nft => <NFTCard key={`${nft.contractAddress}-${nft.tokenId}`} nft={nft} />)}
+          </div>
+        ) : (
+          <div className="tbl-empty">
+            No supported NFTs yet. Hold an NFT from an ecosystem collection to raise your scoring multiplier.
+          </div>
+        )}
+      </section>
+
+      {/* ══ Coming soon ════════════════════════════════════════════════ */}
+      <section className="sec">
+        <SectionHead title="Coming soon" />
+        <div className="soon hg-stagger">
+          <ComingSoon icon={Gift} title="Hairdrop" text="Claim points" color="#ec4899" />
+          <ComingSoon icon={Vault} title="Vault" text="Staking" color="#10b981" />
+        </div>
+      </section>
+    </div>
   );
 }

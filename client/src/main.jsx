@@ -8,6 +8,7 @@ import { queryClient } from "./lib/queryClient";
 import { hemi } from "./lib/hemi";
 import { http } from "wagmi";
 import { Web3Provider } from "./lib/web3";
+import { GameSessionProvider } from "./lib/gameSession";
 import "@rainbow-me/rainbowkit/styles.css";
 
 
@@ -32,7 +33,9 @@ ReactDOM.createRoot(document.getElementById("root")).render(
           overlayBlur: 'small',
         })}>
         <Web3Provider>
-          <App />
+          <GameSessionProvider>
+            <App />
+          </GameSessionProvider>
         </Web3Provider>
       </RainbowKitProvider>
     </QueryClientProvider>

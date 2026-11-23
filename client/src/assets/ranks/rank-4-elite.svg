@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Elite rank">
+<defs>
+<linearGradient id="el-wing" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#c084fc"/><stop offset="1" stop-color="#7e22ce"/></linearGradient>
+<linearGradient id="el-tbl" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d8b4fe"/></linearGradient>
+</defs>
+
+<path d="M40 50 C30 38 18 30 4 30 C8 40 13 46 20 50 C11 51 5 55 2 61 C12 64 21 62 30 59 C22 64 17 70 15 77 C26 76 34 70 40 64 Z" transform="translate(0 4) translate(40 56) scale(1.0 1.0) translate(-40 -56)" fill="#3b0764" stroke="#3b0764" stroke-width="2.5" stroke-linejoin="round" opacity="1"/>
+<g transform="translate(128 0) scale(-1 1)"><path d="M40 50 C30 38 18 30 4 30 C8 40 13 46 20 50 C11 51 5 55 2 61 C12 64 21 62 30 59 C22 64 17 70 15 77 C26 76 34 70 40 64 Z" transform="translate(0 4) translate(40 56) scale(1.0 1.0) translate(-40 -56)" fill="#3b0764" stroke="#3b0764" stroke-width="2.5" stroke-linejoin="round" opacity="1"/></g>
+<path d="M40 50 C30 38 18 30 4 30 C8 40 13 46 20 50 C11 51 5 55 2 61 C12 64 21 62 30 59 C22 64 17 70 15 77 C26 76 34 70 40 64 Z" transform="translate(0 0) translate(40 56) scale(1.0 1.0) translate(-40 -56)" fill="url(#el-wing)" stroke="#3b0764" stroke-width="2.5" stroke-linejoin="round" opacity="1"/>
+<g transform="translate(128 0) scale(-1 1)"><path d="M40 50 C30 38 18 30 4 30 C8 40 13 46 20 50 C11 51 5 55 2 61 C12 64 21 62 30 59 C22 64 17 70 15 77 C26 76 34 70 40 64 Z" transform="translate(0 0) translate(40 56) scale(1.0 1.0) translate(-40 -56)" fill="url(#el-wing)" stroke="#3b0764" stroke-width="2.5" stroke-linejoin="round" opacity="1"/></g>
+<path d="M10 36 C20 37 28 42 36 50" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.5" stroke-linecap="round"/>
+<path d="M118 36 C108 37 100 42 92 50" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.5" stroke-linecap="round"/>
+<polygon points="44,28 84,28 102,52 64,108 26,52" transform="translate(0 4)" fill="#3b0764" stroke="#3b0764" stroke-width="7" stroke-linejoin="round"/>
+<polygon points="44,28 84,28 102,52 64,108 26,52" fill="#3b0764" stroke="#3b0764" stroke-width="7" stroke-linejoin="round"/>
+<polygon points="26,52 44,28 47,52" fill="#d8b4fe"/>
+<polygon points="44,28 64,52 47,52" fill="#f3e8ff"/>
+<polygon points="44,28 84,28 64,52" fill="url(#el-tbl)"/>
+<polygon points="84,28 81,52 64,52" fill="#c084fc"/>
+<polygon points="84,28 102,52 81,52" fill="#a855f7"/>
+<polygon points="26,52 47,52 64,108" fill="#a855f7"/>
+<polygon points="47,52 64,52 64,108" fill="#c084fc"/>
+<polygon points="64,52 81,52 64,108" fill="#7e22ce"/>
+<polygon points="81,52 102,52 64,108" fill="#6b21a8"/>
+<path d="M26 52 L102 52 M44 28 L47 52 M44 28 L64 52 M84 28 L64 52 M84 28 L81 52 M47 52 L64 108 M64 52 L64 108 M81 52 L64 108" stroke="#fff" stroke-opacity=".35" stroke-width="1" fill="none"/>
+<polygon points="44,28 84,28 102,52 64,108 26,52" fill="none" stroke="#3b0764" stroke-width="3" stroke-linejoin="round"/>
+<path d="M52 32 Q53.68 36.32 58 38 Q53.68 39.68 52 44 Q50.32 39.68 46 38 Q50.32 36.32 52 32 Z" fill="#fff" opacity="1"/>
+<path d="M98 15 Q99.96 20.04 105 22 Q99.96 23.96 98 29 Q96.04 23.96 91 22 Q96.04 20.04 98 15 Z" fill="#c084fc" opacity="1"/>
+<path d="M29 94 Q30.12 96.88 33 98 Q30.12 99.12 29 102 Q27.88 99.12 25 98 Q27.88 96.88 29 94 Z" fill="#a855f7" opacity="0.9"/>
+
+</svg>

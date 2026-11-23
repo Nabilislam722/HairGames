@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Veteran rank">
+<defs>
+<linearGradient id="vt-ring" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#93c5fd"/><stop offset="0.5" stop-color="#3b82f6"/><stop offset="1" stop-color="#1d4ed8"/></linearGradient>
+<linearGradient id="vt-core" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#1d4ed8"/><stop offset="1" stop-color="#1e3a8a"/></linearGradient>
+<linearGradient id="vt-em" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#dbeafe"/></linearGradient>
+</defs>
+
+<path d="M64 10 L106 24 V58 C106 86 88 106 64 118 C40 106 22 86 22 58 V24 Z" transform="translate(0 4)" fill="#1e3a8a" stroke="#1e3a8a" stroke-width="6" stroke-linejoin="round"/>
+<path d="M64 10 L106 24 V58 C106 86 88 106 64 118 C40 106 22 86 22 58 V24 Z" fill="url(#vt-ring)" stroke="url(#vt-ring)" stroke-width="6" stroke-linejoin="round"/>
+<path d="M64 25 L93 34.5 V58 C93 79 80 94 64 103 C48 94 35 79 35 58 V34.5 Z" fill="url(#vt-core)" stroke="#1e3a8a" stroke-width="4" stroke-linejoin="round"/>
+<path d="M64 17 L100 29 V58 C100 82 85 99 64 110 C43 99 28 82 28 58 V29 Z" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.5" stroke-linejoin="round"/>
+<g transform="translate(0 3)" opacity=".5">
+  <polygon points="64.00,38.00 67.29,46.47 76.36,46.98 69.33,52.73 71.64,61.52 64.00,56.60 56.36,61.52 58.67,52.73 51.64,46.98 60.71,46.47" fill="#1e3a8a" stroke="#1e3a8a" stroke-width="2" stroke-linejoin="round"/>
+  <path d="M47 70 L64 80 L81 70 M47 83 L64 93 L81 83" fill="none" stroke="#1e3a8a" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<polygon points="64.00,38.00 67.29,46.47 76.36,46.98 69.33,52.73 71.64,61.52 64.00,56.60 56.36,61.52 58.67,52.73 51.64,46.98 60.71,46.47" fill="url(#vt-em)" stroke="url(#vt-em)" stroke-width="2" stroke-linejoin="round"/>
+<path d="M47 70 L64 80 L81 70 M47 83 L64 93 L81 83" fill="none" stroke="url(#vt-em)" stroke-width="6" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M24 26 L64 12 L104 26 V40 Q64 26 24 40 Z" fill="#fff" opacity=".22"/>
+
+</svg>

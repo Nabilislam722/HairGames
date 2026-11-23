@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Rookie rank">
+<defs>
+<linearGradient id="rk-ring" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e2e8f0"/><stop offset="1" stop-color="#64748b"/></linearGradient>
+<linearGradient id="rk-core" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#94a3b8"/><stop offset="1" stop-color="#334155"/></linearGradient>
+<linearGradient id="rk-em" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e2e8f0"/></linearGradient>
+</defs>
+
+<circle cx="64" cy="68" r="48" fill="#334155"/>
+<circle cx="64" cy="64" r="48" fill="url(#rk-ring)"/>
+<circle cx="64" cy="64" r="37" fill="#334155"/>
+<circle cx="64" cy="64" r="35" fill="url(#rk-core)"/>
+<circle cx="64" cy="64" r="42.5" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.5"/>
+<g fill="#334155" opacity=".45" transform="translate(0 3)">
+  <path d="M64 88 V60" stroke="#334155" stroke-width="6" stroke-linecap="round"/>
+  <path d="M64 63 C64 49 72 41 85 39 C85 53 77 62 64 63 Z"/>
+  <path d="M64 70 C63 59 54 51 41 51 C41 63 50 71 64 70 Z"/>
+  <path d="M47 93 C51 86 57 84 64 84 C71 84 77 86 81 93 Z"/>
+</g>
+<path d="M64 88 V60" stroke="url(#rk-em)" stroke-width="6" stroke-linecap="round"/>
+<path d="M64 63 C64 49 72 41 85 39 C85 53 77 62 64 63 Z" fill="url(#rk-em)"/>
+<path d="M64 70 C63 59 54 51 41 51 C41 63 50 71 64 70 Z" fill="url(#rk-em)"/>
+<path d="M67 59 C70 52 75 47 81 43" stroke="#94a3b8" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M61 66 C58 60 52 56 45 54" stroke="#94a3b8" stroke-width="1.6" fill="none" stroke-linecap="round"/>
+<path d="M47 93 C51 86 57 84 64 84 C71 84 77 86 81 93 Z" fill="url(#rk-em)"/>
+<path d="M22 58 A42 42 0 0 1 106 58 A48 30 0 0 0 22 58 Z" fill="#fff" opacity=".22"/>
+
+</svg>

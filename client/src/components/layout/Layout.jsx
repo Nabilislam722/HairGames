@@ -1,10 +1,18 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Link, useLocation } from "wouter";
-import { Menu, X, House, Gamepad2, Trophy, UserRound, Wallet, ChevronDown, Zap, Ban } from "lucide-react";
+import { Menu, X, House, Gamepad2, Trophy, Gift, UserRound, Wallet, ChevronDown, Zap, Ban, Plus, Loader2, ArrowRight } from "lucide-react";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { useAccount } from "wagmi";
+import { useAccount, useBalance } from "wagmi";
 import { motion, AnimatePresence } from "framer-motion";
 import { CURRENT_SEASON } from "@/lib/season";
+import { GAMES } from "@/lib/games";
+import { getLevelInfo } from "@/lib/levels";
+import { MOCK_DATA, MOCK_POINTS } from "@/lib/mockData";
+import {
+  useGameSession, formatSessionEth, formatTimeLeft, topUpLabel, SESSION_TOP_UPS, SESSION_DEFAULT_TOP_UP, SESSION_DAYS,
+} from "@/lib/gameSession";
+import { AddressAvatar } from "@/components/arena/AddressAvatar";
+import logoUrl from "@/assets/images/hairgames-logo.webp";
 import "@/styles/globals.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -13,10 +21,12 @@ const NAV_LINKS = [
   { href: "/",            label: "Home",        icon: House     },
   { href: "/dashboard",   label: "Dashboard",   icon: Gamepad2  },
   { href: "/leaderboard", label: "Leaderboard", icon: Trophy    },
+  { href: "/rewards",     label: "Rewards",     icon: Gift      },
   { href: "/profile",     label: "Profile",     icon: UserRound },
 ];
 
-const EVENT_LINK = { href: "/eventrank", label: "Event" };
+const EVENT_LINK = { href: "/eventrank", label: "Weekly Event" };
+const LIVE_GAMES = GAMES.filter(g => g.status === "active");
 
 const FOCUS_RING = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/60";
 
@@ -38,9 +48,13 @@ function useHairPoints(address, location) {
     fetch(`${API_BASE}/api/points/get?wallet=${address}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (!cancelled && typeof d?.points === "number") setPoints(d.points);
+        if (cancelled) return;
+        if (typeof d?.points === "number") setPoints(d.points);
+        else if (MOCK_DATA) setPoints(MOCK_POINTS);
       })
-      .catch(() => {});
+      .catch(() => {
+        if (!cancelled && MOCK_DATA) setPoints(MOCK_POINTS);
+      });
     return () => { cancelled = true; };
   }, [address, location]);
   return points;
@@ -94,98 +108,35 @@ function BannedScreen({ ban }) {
 }
 
 /* ─── Pieces ─────────────────────────────────────────────────────────── */
-function Logo({ onClick }) {
+function Logo({ onClick, className = "h-9 lg:h-11" }) {
   return (
-    <Link href="/" onClick={onClick} className={`group flex items-center gap-2.5 shrink-0 justify-self-start rounded-lg ${FOCUS_RING}`}>
-      <span className="w-8 h-8 rounded-lg overflow-hidden ring-1 ring-white/10 group-hover:ring-primary/50 transition">
-        <img src="/logo.png" alt="" className="w-full h-full object-cover" />
-      </span>
-      <span className="font-display font-extrabold text-[17px] tracking-tight text-white leading-none">
-        Hair
-        <span className="relative ml-0.5">
-          <span className="text-primary">GAMES</span>
-          <span
-            className="absolute inset-0 text-white transition-all duration-500 [clip-path:inset(0_100%_0_0)] group-hover:[clip-path:inset(0_0%_0_0)]"
-            aria-hidden
-          >
-            GAMES
-          </span>
-        </span>
-      </span>
+    <Link href="/" onClick={onClick} className={`shrink-0 rounded-md transition-[filter] hover:brightness-110 ${FOCUS_RING}`}>
+      <img src={logoUrl} alt="HairGames" className={`${className} w-auto`} />
     </Link>
   );
 }
 
-function EventLink({ location, onClick, className = "" }) {
-  const active = isActive(location, EVENT_LINK.href);
+// `className` sets the display (e.g. "hidden lg:inline-flex"), so callers can hide it. `compact` says
+// just "Event" until the navbar has room for "Weekly Event".
+function EventLink({ onClick, className = "inline-flex", compact = false }) {
   return (
     <Link
       href={EVENT_LINK.href}
       onClick={onClick}
-      aria-current={active ? "page" : undefined}
-      className={[
-        "inline-flex items-center gap-2 h-10 px-3.5 rounded-xl border text-[13px] font-semibold transition-colors",
-        active
-          ? "bg-orange-400/15 border-orange-400/45 text-orange-200"
-          : "bg-orange-400/6 border-orange-400/20 text-orange-300 hover:bg-orange-400/10 hover:border-orange-400/35",
-        FOCUS_RING,
-        className,
-      ].join(" ")}
+      className={`items-center justify-center gap-2 h-9 px-4 rounded-lg bg-[#7b5cff] hover:bg-[#8a6eff] text-white font-tech text-[12px] font-bold uppercase tracking-[0.08em] shadow-[0_8px_22px_-10px_#7b5cff] transition-colors ${FOCUS_RING} ${className}`}
     >
-      <span className="relative flex w-2 h-2 shrink-0">
-        <span className="absolute inline-flex w-full h-full rounded-full bg-orange-400 opacity-60 motion-safe:animate-ping" />
-        <span className="relative inline-flex w-2 h-2 rounded-full bg-orange-400" />
-      </span>
-      {EVENT_LINK.label}
-      <span className="ml-auto text-[10px] font-bold uppercase tracking-[0.12em] text-orange-300/60">Weekly</span>
+      <span className="w-1.5 h-1.5 rounded-full bg-white motion-safe:animate-pulse" />
+      <span className="whitespace-nowrap"><span className={compact ? "hidden min-[1400px]:inline" : undefined}>Weekly </span>Event</span>
     </Link>
   );
 }
 
-function SeasonBadge({ className = "" }) {
-  return (
-    <span
-      className={`inline-flex items-center h-10 px-3 rounded-xl text-[11px] font-bold uppercase tracking-[0.14em] text-primary bg-primary/10 ring-1 ring-inset ring-primary/25 ${className}`}
-    >
-      Season {CURRENT_SEASON}
-    </span>
-  );
-}
-
-function PointsChip({ points, onClick, className = "inline-flex" }) {
-  return (
-    <Link
-      href="/profile"
-      onClick={onClick}
-      title={`${points.toLocaleString()} Hair Points`}
-      className={`${className} items-center gap-1.5 h-10 px-3 rounded-xl bg-white/4 ring-1 ring-inset ring-white/8 text-[13px] font-semibold text-white hover:bg-white/8 transition-colors tabular-nums ${FOCUS_RING}`}
-    >
-      <Zap className="w-4 h-4 text-primary" fill="currentColor" strokeWidth={0} />
-      {formatPoints(points)}
-      <span className="text-white/45 font-medium">HP</span>
-    </Link>
-  );
-}
-
-// A small gradient dot derived from the address, standing in for an avatar.
-function AddressDot({ address }) {
-  let h = 0;
-  for (const ch of address ?? "") h = (h * 31 + ch.charCodeAt(0)) % 360;
-  return (
-    <span
-      aria-hidden
-      className="w-7 h-7 rounded-lg shrink-0"
-      style={{ background: `linear-gradient(135deg, hsl(${h} 85% 60%), hsl(${(h + 70) % 360} 85% 45%))` }}
-    />
-  );
-}
-
-function WalletButton({ block = false }) {
+function WalletButton({ block = false, points = null }) {
   return (
     <ConnectButton.Custom>
       {({ account, chain, openAccountModal, openChainModal, openConnectModal, mounted }) => {
         const base = [
-          "inline-flex items-center justify-center gap-2 h-10 rounded-xl text-[13px] font-semibold transition-colors",
+          "inline-flex items-center justify-center gap-2 h-10 rounded-lg font-tech text-[13px] font-bold uppercase tracking-[0.06em] transition-colors",
           block ? "w-full" : "",
           FOCUS_RING,
         ].join(" ");
@@ -220,11 +171,16 @@ function WalletButton({ block = false }) {
           <button
             type="button"
             onClick={openAccountModal}
-            className={`${base} pl-1.5 pr-3 bg-white/4 ring-1 ring-inset ring-white/8 text-white hover:bg-white/8`}
+            className={`${base} justify-start pl-1 pr-2.5 text-white hover:bg-white/5 ${block ? "ring-1 ring-inset ring-white/8" : ""}`}
           >
-            <AddressDot address={account.address} />
-            <span className="truncate">{account.displayName}</span>
-            <ChevronDown className="w-3.5 h-3.5 text-white/40 shrink-0" />
+            <span className="w-8 h-8 rounded-lg overflow-hidden shrink-0"><AddressAvatar address={account.address} /></span>
+            <span className={`${block ? "flex" : "hidden xl:flex"} flex-col items-start leading-tight text-left`}>
+              <span className="truncate">{account.displayName}</span>
+              <span className="font-ui normal-case tracking-normal text-[11px] font-medium text-white/40 whitespace-nowrap">
+                {points === null ? "Hemi" : `${getLevelInfo(points).title} · ${formatPoints(points)} HP`}
+              </span>
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-white/40 shrink-0 ml-1" />
           </button>
         );
       }}
@@ -232,40 +188,271 @@ function WalletButton({ block = false }) {
   );
 }
 
-/* ─── Desktop navigation ─────────────────────────────────────────────── */
-function DesktopNav({ location }) {
+/* ─── Balance and game session ───────────────────────────────────────── */
+// The navbar shows the game session's balance with a "+" to start one or add funds. Without game
+// sessions it shows the wallet's ETH balance.
+function BalancePill() {
+  const session = useGameSession();
+  const { address } = useAccount();
+  const { data: wallet } = useBalance({ address, query: { enabled: !session.enabled } });
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e) => !ref.current?.contains(e.target) && setOpen(false);
+    const onKey = (e) => e.key === "Escape" && setOpen(false);
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const pill = "inline-flex items-center h-9 rounded-lg bg-white/5 ring-1 ring-inset ring-white/8 font-tech text-[13px] font-semibold text-white tabular-nums";
+
+  if (!session.enabled) {
+    return (
+      <span className={`${pill} px-3`} title="Wallet balance on Hemi">
+        {formatSessionEth(wallet?.value ?? 0n)}<span className="ml-1.5 text-white/40">ETH</span>
+      </span>
+    );
+  }
+
+  const off = session.status === "off";
   return (
-    <nav aria-label="Main" className="hidden lg:flex items-center gap-2">
-      <div className="flex items-center gap-0.5 p-1 rounded-xl bg-white/4 ring-1 ring-inset ring-white/7">
-        {NAV_LINKS.map(({ href, label, icon: Icon }) => {
-          const active = isActive(location, href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-current={active ? "page" : undefined}
-              className={[
-                "relative flex items-center gap-2 h-8 px-3.5 rounded-lg text-[13px] font-semibold transition-colors",
-                active ? "text-white" : "text-white/55 hover:text-white hover:bg-white/5",
-                FOCUS_RING,
-              ].join(" ")}
-            >
-              {active && (
-                <motion.span
-                  layoutId="nav-active"
-                  className="absolute inset-0 rounded-lg bg-primary/20 ring-1 ring-inset ring-primary/40 shadow-[0_0_20px_-6px_hsl(var(--primary))]"
-                  transition={{ type: "spring", bounce: 0.18, duration: 0.45 }}
-                />
-              )}
-              <Icon className="relative w-4 h-4 hidden xl:block" />
-              <span className="relative">{label}</span>
-            </Link>
-          );
-        })}
+    <div ref={ref} className="relative">
+      <button
+        type="button"
+        onClick={() => setOpen(o => !o)}
+        aria-expanded={open}
+        aria-label="Game session"
+        className={`${pill} gap-2.5 pl-3 pr-1 hover:bg-white/8 transition-colors ${FOCUS_RING}`}
+      >
+        <span className={off ? "text-white/50" : ""}>
+          {off ? "Session" : <>{formatSessionEth(session.balance)}<span className="ml-1.5 text-white/40">ETH</span></>}
+        </span>
+        <span className="relative w-7 h-7 rounded-md bg-[#b8ff3a] text-[#0b0908] flex items-center justify-center shadow-[0_0_16px_-3px_#b8ff3a]">
+          {session.busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-4 h-4" strokeWidth={3} />}
+          {off && !session.busy && (
+            <span className="absolute -top-1 -right-1 flex w-2.5 h-2.5" aria-hidden>
+              <span className="absolute inline-flex w-full h-full rounded-full bg-[#b8ff3a] opacity-75 motion-safe:animate-ping" />
+              <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-[#b8ff3a] ring-2 ring-[#0b0908]" />
+            </span>
+          )}
+        </span>
+      </button>
+      <AnimatePresence>{open && <SessionPopover session={session} />}</AnimatePresence>
+    </div>
+  );
+}
+
+function SessionPopover({ session }) {
+  const [amount, setAmount] = useState(SESSION_DEFAULT_TOP_UP);
+  const [days, setDays] = useState(SESSION_DAYS[0]);
+  const { status, busy } = session;
+  const active = status === "active";
+  const disabled = Boolean(busy);
+  const spin = (name) => busy === name && <Loader2 className="w-3.5 h-3.5 animate-spin" />;
+
+  const state = {
+    active: { label: "Active", color: "text-[#b8ff3a]" },
+    expired: { label: "Ended", color: "text-red-400" },
+    off: { label: "Off", color: "text-white/40" },
+  }[status];
+
+  const detail = active
+    ? `${formatTimeLeft(session.expiresAt - session.now)} left · ≈ ${session.playsLeft} plays`
+    : status === "expired"
+      ? "Renew to keep playing without wallet popups."
+      : "Confirm once, then play every game without wallet popups.";
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: -6 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: -6 }}
+      transition={{ duration: 0.15 }}
+      className="absolute right-0 top-[calc(100%+10px)] z-50 w-[290px] rounded-xl bg-[#14100d] ring-1 ring-white/10 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.85)] p-4 font-ui"
+    >
+      <div className="flex items-center justify-between">
+        <p className="font-tech text-[12px] font-bold uppercase tracking-[0.12em] text-white">Game session</p>
+        <span className={`font-tech text-[11px] font-bold uppercase tracking-[0.12em] ${state.color}`}>{state.label}</span>
       </div>
-      <EventLink location={location} />
+      {(active || session.balance > 0n) && (
+        <p className="mt-3 font-tech text-[26px] font-bold leading-none text-white tabular-nums">
+          {formatSessionEth(session.balance)}<span className="ml-1.5 text-[13px] text-white/40">ETH</span>
+        </p>
+      )}
+      <p className="mt-2 text-[12px] leading-relaxed text-white/50">{detail}</p>
+
+      <div className="mt-4 grid gap-2">
+        <select className="hg-select w-full" value={amount} onChange={e => setAmount(e.target.value)} disabled={disabled} aria-label="Amount">
+          {SESSION_TOP_UPS.map(v => <option key={v} value={v}>{topUpLabel(v)}</option>)}
+        </select>
+        {!active && (
+          <select className="hg-select w-full" value={days} onChange={e => setDays(Number(e.target.value))} disabled={disabled} aria-label="Length">
+            {SESSION_DAYS.map(d => <option key={d} value={d}>{d === 1 ? "1 day" : `${d} days`}</option>)}
+          </select>
+        )}
+      </div>
+
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={() => (active ? session.addFunds(amount) : session.start({ topUpEth: amount, days }))}
+        className={`mt-2 w-full inline-flex items-center justify-center gap-2 h-10 rounded-lg bg-primary text-white font-tech text-[12px] font-bold uppercase tracking-[0.1em] hover:bg-primary/90 disabled:opacity-60 transition-colors ${FOCUS_RING}`}
+      >
+        {spin(active ? "fund" : "start")}
+        {active ? "Add funds" : status === "expired" ? "Renew session" : "Start session"}
+      </button>
+
+      {(active || session.balance > 0n) && (
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={session.end}
+          className={`mt-2 w-full inline-flex items-center justify-center gap-2 h-9 rounded-lg font-tech text-[11px] font-bold uppercase tracking-[0.1em] text-white/55 hover:text-white hover:bg-white/5 disabled:opacity-60 transition-colors ${FOCUS_RING}`}
+        >
+          {spin("end")}
+          {active ? "End session" : "Withdraw"}
+        </button>
+      )}
+
+      {session.error && <p className="mt-3 text-[12px] text-orange-300">{session.error}</p>}
+    </motion.div>
+  );
+}
+
+/* ─── Desktop navigation ─────────────────────────────────────────────── */
+// The Dashboard tab opens the games menu: on hover, or with its chevron for touch and keyboard.
+function DesktopNav({ location, games }) {
+  return (
+    <nav aria-label="Main" className="hidden lg:flex items-stretch self-stretch">
+      {NAV_LINKS.map(({ href, label }) => {
+        const active = isActive(location, href);
+        const opensGames = href === "/dashboard";
+        const link = (
+          <Link
+            key={href}
+            href={href}
+            aria-current={active ? "page" : undefined}
+            className={[
+              "relative flex items-center px-3 min-[1400px]:px-4 font-tech text-[13px] font-bold uppercase tracking-[0.1em] transition-colors",
+              active || (opensGames && games.open) ? "text-white" : "text-white/40 hover:text-white/80",
+              opensGames ? "pr-1" : "",
+              FOCUS_RING,
+            ].join(" ")}
+          >
+            {active && (
+              <motion.span
+                layoutId="nav-bar"
+                className="absolute top-0 inset-x-2 h-[3px] rounded-b bg-primary shadow-[0_0_16px_hsl(var(--primary))]"
+                transition={{ type: "spring", bounce: 0.18, duration: 0.45 }}
+              />
+            )}
+            {label}
+          </Link>
+        );
+        if (!opensGames) return link;
+        return (
+          <div key={href} className="flex items-stretch" onMouseEnter={games.show} onMouseLeave={games.hideSoon}>
+            {link}
+            <button
+              type="button"
+              onClick={games.toggle}
+              aria-label="Games"
+              aria-expanded={games.open}
+              aria-controls="games-menu"
+              className={`self-center w-6 h-6 mr-2 rounded-md flex items-center justify-center text-white/40 hover:text-white hover:bg-white/6 transition ${FOCUS_RING}`}
+            >
+              <ChevronDown className={`w-3.5 h-3.5 transition-transform ${games.open ? "rotate-180 text-white" : ""}`} />
+            </button>
+          </div>
+        );
+      })}
     </nav>
   );
+}
+
+const sentenceCase = (text) => text.charAt(0) + text.slice(1).toLowerCase();
+
+// Every game under the header, opened from the Dashboard tab.
+function GamesMenu({ games }) {
+  return (
+    <AnimatePresence>
+      {games.open && (
+        <motion.div
+          id="games-menu"
+          key="games-menu"
+          className="hidden lg:block absolute inset-x-0 top-full border-b border-white/8 bg-[#0b0908] shadow-[0_30px_60px_-30px_rgba(0,0,0,0.9)]"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          transition={{ duration: 0.18, ease: "easeOut" }}
+          onMouseEnter={games.show}
+          onMouseLeave={games.hideSoon}
+        >
+          <div className="px-[5%] xl:px-[10%] py-7 grid grid-cols-[230px_1fr] gap-10">
+            <div>
+              <p className="font-tech text-[11px] font-bold uppercase tracking-[0.14em] text-white/40">Arcade games</p>
+              <p className="mt-2 font-tech text-[30px] font-bold leading-none text-white">
+                {LIVE_GAMES.length}
+                <span className="ml-2 text-[12px] uppercase tracking-[0.12em] text-[#b8ff3a]">Live</span>
+              </p>
+              <p className="mt-3 text-[13px] leading-relaxed text-white/45">Pick a game and play. Every saved score earns Hair Points.</p>
+              <Link
+                href="/dashboard"
+                onClick={games.hide}
+                className={`mt-5 inline-flex items-center gap-2 h-9 px-4 rounded-lg bg-primary text-white font-tech text-[11px] font-bold uppercase tracking-[0.1em] hover:bg-primary/90 transition-colors ${FOCUS_RING}`}
+              >
+                Open dashboard <ArrowRight className="w-3.5 h-3.5" />
+              </Link>
+            </div>
+            <nav aria-label="Games" className="grid grid-cols-4 gap-2 content-start">
+              {LIVE_GAMES.map(g => (
+                <Link
+                  key={g.id}
+                  href={`/game/${g.id}`}
+                  onClick={games.hide}
+                  className={`group flex items-center gap-3 p-2.5 rounded-xl border border-transparent hover:border-white/10 hover:bg-white/4 transition-colors ${FOCUS_RING}`}
+                >
+                  <img src={g.logo} alt="" className="w-11 h-11 rounded-lg object-cover shrink-0" />
+                  <span className="min-w-0">
+                    <span className="block truncate font-tech text-[13px] font-bold uppercase tracking-[0.06em] text-white/80 group-hover:text-white">{g.short}</span>
+                    <span className="block truncate text-[11px] text-white/40">{g.category} · {sentenceCase(g.difficulty)}</span>
+                  </span>
+                </Link>
+              ))}
+            </nav>
+          </div>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// Open/closed state for the games menu. Leaving the tab or the menu closes it after a short delay,
+// so the pointer can travel from one to the other.
+function useGamesMenu(location) {
+  const [open, setOpen] = useState(false);
+  const timer = useRef(null);
+  const show = () => { clearTimeout(timer.current); setOpen(true); };
+  const hide = () => { clearTimeout(timer.current); setOpen(false); };
+  const hideSoon = () => { clearTimeout(timer.current); timer.current = setTimeout(() => setOpen(false), 160); };
+  const toggle = () => { clearTimeout(timer.current); setOpen(o => !o); };
+
+  useEffect(() => () => clearTimeout(timer.current), []);
+  useEffect(() => { clearTimeout(timer.current); setOpen(false); }, [location]);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e) => e.key === "Escape" && setOpen(false);
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [open]);
+
+  return { open, show, hide, hideSoon, toggle };
 }
 
 /* ─── Mobile menu ────────────────────────────────────────────────────── */
@@ -291,27 +478,33 @@ function MobileMenu({ open, onClose, location, points }) {
           <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
 
           <motion.aside
-            className="absolute top-2 right-2 bottom-2 w-[min(340px,calc(100vw-16px))] flex flex-col rounded-2xl bg-background/95 border border-white/10 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.8)] overflow-hidden"
+            className="absolute top-2 right-2 bottom-2 w-[min(340px,calc(100vw-16px))] flex flex-col rounded-2xl bg-[#0e0b09] border border-white/10 shadow-[0_24px_60px_-12px_rgba(0,0,0,0.8)] overflow-hidden"
             initial={{ x: "105%" }} animate={{ x: 0 }} exit={{ x: "105%" }}
             transition={{ type: "spring", damping: 28, stiffness: 280 }}
           >
             <div className="flex items-center justify-between h-16 px-4 border-b border-white/7">
-              <Logo onClick={onClose} />
+              <Logo onClick={onClose} className="h-8" />
               <button
                 type="button"
                 onClick={onClose}
                 aria-label="Close menu"
-                className={`w-10 h-10 rounded-xl flex items-center justify-center bg-white/4 ring-1 ring-inset ring-white/8 text-white/60 hover:text-white transition-colors ${FOCUS_RING}`}
+                className={`w-10 h-10 rounded-lg flex items-center justify-center bg-white/4 ring-1 ring-inset ring-white/8 text-white/60 hover:text-white transition-colors ${FOCUS_RING}`}
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-5">
-              <div className="flex items-center gap-2">
-                <SeasonBadge />
-                {points !== null && <PointsChip points={points} onClick={onClose} />}
-              </div>
+            <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-6">
+              {points !== null && (
+                <Link
+                  href="/profile"
+                  onClick={onClose}
+                  className={`flex items-center justify-between h-12 px-4 rounded-lg bg-primary text-white font-tech text-[13px] font-bold uppercase tracking-[0.1em] ${FOCUS_RING}`}
+                >
+                  <span className="flex items-center gap-2"><Zap className="w-4 h-4" fill="currentColor" strokeWidth={0} />{formatPoints(points)} HP</span>
+                  <span className="text-white/70">Season {CURRENT_SEASON}</span>
+                </Link>
+              )}
 
               <nav aria-label="Main" className="flex flex-col gap-1">
                 {NAV_LINKS.map(({ href, label, icon: Icon }) => {
@@ -323,30 +516,40 @@ function MobileMenu({ open, onClose, location, points }) {
                       onClick={onClose}
                       aria-current={active ? "page" : undefined}
                       className={[
-                        "flex items-center gap-3 h-12 px-2 rounded-xl text-[15px] font-semibold transition-colors",
-                        active ? "bg-primary/15 text-white ring-1 ring-inset ring-primary/30" : "text-white/65 hover:bg-white/5 hover:text-white",
+                        "flex items-center gap-3 h-11 px-3 rounded-lg font-tech text-[14px] font-bold uppercase tracking-[0.08em] transition-colors",
+                        active ? "bg-white/6 text-white shadow-[inset_3px_0_0_hsl(var(--primary))]" : "text-white/55 hover:bg-white/4 hover:text-white",
                         FOCUS_RING,
                       ].join(" ")}
                     >
-                      <span
-                        className={[
-                          "w-8 h-8 rounded-lg flex items-center justify-center",
-                          active ? "bg-primary text-white" : "bg-white/6 text-white/60",
-                        ].join(" ")}
-                      >
-                        <Icon className="w-4 h-4" />
-                      </span>
+                      <Icon className="w-4 h-4" />
                       {label}
                     </Link>
                   );
                 })}
               </nav>
 
-              <EventLink location={location} onClick={onClose} className="h-12 w-full text-[15px]" />
+              <EventLink onClick={onClose} className="flex h-11 w-full" />
+
+              <div>
+                <p className="px-3 mb-2 font-tech text-[11px] font-bold uppercase tracking-[0.14em] text-white/30">Games</p>
+                <nav aria-label="Games" className="flex flex-col">
+                  {LIVE_GAMES.map(g => (
+                    <Link
+                      key={g.id}
+                      href={`/game/${g.id}`}
+                      onClick={onClose}
+                      className={`flex items-center gap-3 h-10 px-3 rounded-lg text-white/60 hover:text-white hover:bg-white/4 transition-colors ${FOCUS_RING}`}
+                    >
+                      <img src={g.logo} alt="" className="w-5 h-5 rounded-[5px] object-cover" />
+                      <span className="text-[14px] font-semibold">{g.title}</span>
+                    </Link>
+                  ))}
+                </nav>
+              </div>
             </div>
 
             <div className="p-4 border-t border-white/7">
-              <WalletButton block />
+              <WalletButton block points={points} />
             </div>
           </motion.aside>
         </motion.div>
@@ -364,6 +567,7 @@ export function Layout({ children }) {
   const points = useHairPoints(isConnected ? address : null, location);
   const ban = useBanStatus(isConnected ? address : null);
   const isGamePage = location.startsWith("/game/");
+  const games = useGamesMenu(location);
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 12);
@@ -390,47 +594,44 @@ export function Layout({ children }) {
   );
 
   return (
-    <div className="min-h-screen flex flex-col bg-background overflow-x-hidden ">
+    <div className="min-h-screen flex flex-col bg-background overflow-x-hidden">
 
       {/* ── Navbar ── */}
-      <header className="sticky top-0 z-50 px-3 sm:px-4 pt-3 font-ui">
-        <div
-          className={[
-            "mx-auto max-w-7xl h-16 pl-3 pr-2 sm:pl-4 grid grid-cols-[1fr_auto] lg:grid-cols-[1fr_auto_1fr] items-center gap-3",
-            "rounded-2xl border backdrop-blur-xl transition-[background-color,border-color,box-shadow] duration-300",
-            scrolled
-              ? "bg-background/85 border-white/10 shadow-[0_16px_40px_-16px_rgba(0,0,0,0.8)]"
-              : "bg-white/3 border-white/7",
-          ].join(" ")}
-        >
+      <header
+        className={[
+          "sticky top-0 z-50 font-ui border-b backdrop-blur-xl transition-[background-color,border-color] duration-300",
+          scrolled ? "bg-[#0b0908]/92 border-white/8" : "bg-[#0b0908]/70 border-white/5",
+        ].join(" ")}
+      >
+        <div className="h-16 px-[5%] xl:px-[10%] flex items-center gap-4 lg:gap-5 min-[1400px]:gap-8">
           <Logo />
+          <DesktopNav location={location} games={games} />
 
-          <DesktopNav location={location} />
-
-          <div className="flex items-center justify-end gap-2">
-            <SeasonBadge className="hidden xl:inline-flex" />
-            {points !== null && <PointsChip points={points} className="hidden sm:inline-flex" />}
+          <div className="ml-auto flex items-center gap-2.5">
+            <EventLink compact className="hidden lg:inline-flex" />
+            {isConnected && <BalancePill />}
             <div className="hidden lg:block">
-              <WalletButton />
+              <WalletButton points={points} />
             </div>
             <button
               type="button"
               onClick={() => setMobileOpen(true)}
               aria-label="Open menu"
               aria-expanded={mobileOpen}
-              className={`lg:hidden w-10 h-10 rounded-xl flex items-center justify-center bg-white/4 ring-1 ring-inset ring-white/8 text-white/70 hover:text-white hover:bg-white/8 transition-colors ${FOCUS_RING}`}
+              className={`lg:hidden w-10 h-10 rounded-lg flex items-center justify-center bg-white/4 ring-1 ring-inset ring-white/8 text-white/70 hover:text-white hover:bg-white/8 transition-colors ${FOCUS_RING}`}
             >
               <Menu className="w-4 h-4" />
             </button>
           </div>
         </div>
+        <GamesMenu games={games} />
       </header>
 
       <MobileMenu open={mobileOpen} onClose={() => setMobileOpen(false)} location={location} points={points} />
 
       {/* ── Main ── */}
       <main className="flex-1 w-full">
-        <div className="w-full px-4 sm:px-6 xl:px-10 py-8 md:py-10 justify-center flex">
+        <div className="w-full px-[5%] xl:px-[10%] py-8 md:py-10">
           {children}
         </div>
       </main>
@@ -438,16 +639,11 @@ export function Layout({ children }) {
       {/* ── Footer ── */}
       <footer className="border-t border-white/6 bg-background/60 mt-auto">
         <div className="h-px w-full bg-gradient-to-r from-transparent via-primary/30 to-transparent" />
-        <div className="w-full px-6 xl:px-10 py-8">
+        <div className="w-full px-[5%] xl:px-[10%] py-8">
           <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
             <div className="flex flex-col gap-2.5">
-              <Link href="/" className="flex items-center gap-2.5 group w-fit">
-                <div className="w-6 h-6 rounded-md overflow-hidden border border-white/10 group-hover:border-primary/30 transition-colors">
-                  <img src="/logo.png" alt="Hair Games" className="w-full h-full object-cover" />
-                </div>
-                <span className="font-display font-extrabold text-sm text-white/50 tracking-tight group-hover:text-white/80 transition-colors uppercase">
-                  HemiGames
-                </span>
+              <Link href="/" className="w-fit opacity-70 hover:opacity-100 transition-opacity">
+                <img src={logoUrl} alt="HairGames" className="h-7 w-auto" />
               </Link>
               <p className="font-mono text-[9px] uppercase tracking-widest text-white/20 max-w-[180px] leading-relaxed">
                 Decentralized gaming on Hemi Network
@@ -467,7 +663,7 @@ export function Layout({ children }) {
                 onMouseEnter={e => (e.currentTarget.style.color = "rgba(251,146,60,0.75)")}
                 onMouseLeave={e => (e.currentTarget.style.color = "rgba(251,146,60,0.4)")}
               >
-                {EVENT_LINK.label}
+                Event
               </Link>
             </nav>
 

@@ -15,12 +15,15 @@ HairGames/
 │       ├── pages/           Site pages: Home, Dashboard, Profile, Leaderboard, EventRank, NotFound
 │       ├── games/           One folder per game (see below)
 │       ├── components/
+│       │   ├── arena/       Shared page pieces: avatar, heads and toggles, game card, rankings, trend cards, recent plays, segmented bar, stat tile, connect prompt
 │       │   ├── layout/      App shell (navbar, footer)
 │       │   └── ui/          shadcn/ui primitives
 │       ├── hooks/           Shared React hooks
-│       ├── lib/             Shared helpers: web3, chain config, contracts, network retries, season
+│       ├── lib/             Shared helpers: web3, chain config, contracts, network retries, season, the game list,
+│       │                    rank levels, recent plays from the explorer, weekly quests, competitions, game sessions, dev mock data
 │       ├── assets/images/   Site-wide images imported from code
-│       ├── styles/          globals.css (Tailwind entry), dashboard.css
+│       ├── styles/          globals.css (Tailwind entry), hg.css (shared page styles and load-in animation),
+│       │                    plus one file per page that needs more: dashboard.css, home.css, profile.css
 │       └── legacy/          Unused older code kept for reference. Not part of the build.
 ├── backend/                 Express API (port 3000)
 │   ├── server.js            Entry point
@@ -56,7 +59,7 @@ games/<game-name>/
 | `racing` | `/game/race_car` |
 | `fishing` | `/game/fishing_game` |
 
-To add a game, create a folder with that shape, register its page in `client/src/App.jsx`, and add it to `GAMES` in `client/src/pages/Dashboard.jsx`.
+To add a game, create a folder with that shape, register its page in `client/src/App.jsx`, and add it to `GAMES` in `client/src/lib/games.js` (with its contract, so its plays show up on the Dashboard). The navbar and Dashboard both read that list.
 
 Space Huggers, Candy Cascade and Moto Rush are standalone games served from `client/public/` and embedded in an iframe by their page.
 
@@ -250,6 +253,8 @@ Frontend (`client/.env`):
 | `VITE_CANDY_CASCADE_CONTRACT` | CandyCascade contract. Without it, the game runs in local play with nothing saved on chain |
 | `VITE_MOTO_RUSH_CONTRACT` | MotoRush contract. With it, levels and stars are saved on chain and each level can be completed once; without it, Moto Rush is free play with progress kept in the browser |
 | `VITE_VENOM_CONTRACT` | Venom NFT contract (`nft/`). Only Venom holders can ride the #27 Venom in Moto Rush; without it, the Venom stays locked for everyone |
+| `VITE_SESSION_REGISTRY_CONTRACT` | Session registry for game sessions (`client/src/lib/gameSession.js`): players approve a temporary key once and play without wallet popups. It must implement `openSession(key, expiresAt)` (payable, forwards the ETH to the key), `closeSession()` (called by the key) and `sessions(key)`. Without it, the navbar and Dashboard hide game sessions, except with mock data in local dev |
+| `VITE_USE_REAL_DATA` | Local dev only: set to `true` to see real data. Otherwise `npm run dev:client` fills points, recent plays and the game session with mock data (`client/src/lib/mockData.js`) so the UI works without the backend or contracts. Production builds never use mock data |
 
 Backend (`.env` in the directory you start the backend from):
 

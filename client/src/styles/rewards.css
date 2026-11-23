@@ -1,0 +1,250 @@
+/* Rewards page: a centered claim card per token the wallet has an allocation in. Buttons come from
+   hg.css. */
+
+.rw-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+.rw-cards {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 24px;
+  margin-bottom: 80px;
+}
+
+/* Claim card */
+.rwc {
+  display: flex;
+  flex-direction: column;
+  width: min(100%, 460px);
+  padding: 28px;
+}
+
+/* A glow in the token's color behind the top of the card. */
+.rwc::before {
+  content: '';
+  position: absolute;
+  inset: -40% -20% auto;
+  height: 70%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--c, var(--hg-orange)) 18%, transparent), transparent);
+  pointer-events: none;
+}
+
+.rwc > * {
+  position: relative;
+}
+
+.rwc.eligible {
+  border-color: rgba(184, 255, 58, 0.25);
+}
+
+.rwc-top {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.rwc-logo {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  object-fit: contain;
+}
+
+.rwc-kicker {
+  font-family: var(--hg-tech);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--hg-muted);
+  margin: 0;
+}
+
+.rwc-token {
+  font-family: var(--hg-tech);
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  margin: 2px 0 0;
+}
+
+.rwc-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-left: auto;
+  padding: 5px 10px;
+  font-family: var(--hg-tech);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  border-radius: 999px;
+}
+
+.rwc-pill.eligible {
+  color: var(--hg-ink);
+  background: var(--hg-lime);
+}
+
+.rwc-pill.claimed {
+  color: var(--hg-lime);
+  background: rgba(184, 255, 58, 0.08);
+  border: 1px solid rgba(184, 255, 58, 0.25);
+}
+
+.rwc-lbl {
+  font-size: 13px;
+  color: var(--hg-muted);
+  margin: 32px 0 0;
+}
+
+.rwc-amt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-family: var(--hg-tech);
+  font-size: clamp(38px, 9vw, 52px);
+  font-weight: 700;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+  margin: 8px 0 0;
+}
+
+.rwc-amt small {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--hg-muted);
+}
+
+.rwc-rows {
+  margin: 28px 0 0;
+  border-top: 1px solid var(--hg-line);
+}
+
+.rwc-rows > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 12px 0;
+  font-size: 13px;
+  border-bottom: 1px solid var(--hg-line);
+}
+
+.rwc-rows dt {
+  color: var(--hg-muted);
+}
+
+.rwc-rows dd {
+  margin: 0;
+  font-family: var(--hg-tech);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.rwc-err {
+  font-size: 12px;
+  line-height: 1.5;
+  color: var(--hg-red);
+  margin: 16px 0 0;
+}
+
+.rwc-act {
+  margin-top: 28px;
+}
+
+.rwc-btn {
+  width: 100%;
+}
+
+.rwc-foot {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px 18px;
+  min-height: 18px;
+  font-size: 12px;
+  color: var(--hg-muted);
+  text-align: center;
+  margin: 14px 0 0;
+}
+
+/* "View transaction" and "Add HEMI to wallet": quiet text links, one of them a button. */
+.rwc-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font: inherit;
+  color: var(--hg-muted);
+  text-decoration: none;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.rwc-link:hover,
+.rwc-link:focus-visible {
+  color: var(--hg-text);
+}
+
+/* Status card: connect, loading, not eligible */
+.rwc-status {
+  align-items: center;
+  text-align: center;
+  padding: 44px 32px;
+}
+
+.rwc-badge {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  color: var(--hg-orange);
+  background: rgba(255, 107, 26, 0.1);
+  border: 1px solid rgba(255, 107, 26, 0.22);
+}
+
+.rwc-title {
+  font-family: var(--hg-tech);
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  margin: 20px 0 0;
+}
+
+.rwc-text {
+  max-width: 340px;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--hg-muted);
+  margin: 10px 0 0;
+}
+
+.rwc-status .btn {
+  margin-top: 24px;
+}
+
+@media (max-width: 520px) {
+  .rwc {
+    padding: 22px;
+  }
+
+  .rwc-status {
+    padding: 36px 22px;
+  }
+}

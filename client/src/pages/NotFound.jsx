@@ -1,21 +1,23 @@
-import { Card, CardContent } from "@/components/ui/card";
-import { AlertCircle } from "lucide-react";
+import { Link } from "wouter";
+import { ArrowRight } from "lucide-react";
+import "@/styles/hg.css";
 
 export default function NotFound() {
   return (
-    <div className="min-h-screen w-full flex items-center justify-center bg-gray-50">
-      <Card className="w-full max-w-md mx-4">
-        <CardContent className="pt-6">
-          <div className="flex mb-4 gap-2">
-            <AlertCircle className="h-8 w-8 text-red-500" />
-            <h1 className="text-2xl font-bold text-red-500">404 Page Not Found</h1>
-          </div>
-
-          <p className="mt-4 text-sm text-gray-600">
-           404 Page Not Found
-          </p>
-        </CardContent>
-      </Card>
+    <div className="hg">
+      <div className="conn">
+        <p className="ph-title" style={{ fontSize: "clamp(72px, 14vw, 160px)", color: "var(--hg-orange)", textShadow: "0 0 50px rgba(255,107,26,0.45)" }}>
+          404
+        </p>
+        <div className="conn-txt">
+          <h1 className="conn-title">Page not found</h1>
+          <p className="conn-sub">This page doesn't exist or has moved. Head back and pick a game.</p>
+        </div>
+        <div style={{ display: "flex", gap: 10, flexWrap: "wrap", justifyContent: "center" }}>
+          <Link href="/dashboard" className="btn btn-o btn-lg">Go to dashboard <ArrowRight size={13} /></Link>
+          <Link href="/" className="btn btn-glass btn-lg">Home</Link>
+        </div>
+      </div>
     </div>
   );
 }

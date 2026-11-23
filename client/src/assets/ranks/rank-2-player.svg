@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128" role="img" aria-label="Player rank">
+<defs>
+<linearGradient id="pl-ring" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#6ee7b7"/><stop offset="0.55" stop-color="#10b981"/><stop offset="1" stop-color="#047857"/></linearGradient>
+<linearGradient id="pl-core" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#047857"/><stop offset="1" stop-color="#064e3b"/></linearGradient>
+<linearGradient id="pl-em" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#d1fae5"/></linearGradient>
+</defs>
+
+<polygon points="64.00,22.00 103.84,45.00 103.84,91.00 64.00,114.00 24.16,91.00 24.16,45.00" fill="#064e3b" stroke="#064e3b" stroke-width="10" stroke-linejoin="round"/>
+<polygon points="64.00,18.00 103.84,41.00 103.84,87.00 64.00,110.00 24.16,87.00 24.16,41.00" fill="url(#pl-ring)" stroke="url(#pl-ring)" stroke-width="10" stroke-linejoin="round"/>
+<polygon points="64.00,31.00 92.58,47.50 92.58,80.50 64.00,97.00 35.42,80.50 35.42,47.50" fill="url(#pl-core)" stroke="#064e3b" stroke-width="8" stroke-linejoin="round"/>
+<polygon points="64.00,23.00 99.51,43.50 99.51,84.50 64.00,105.00 28.49,84.50 28.49,43.50" fill="none" stroke="#fff" stroke-opacity=".35" stroke-width="1.5" stroke-linejoin="round"/>
+<polygon points="55,49 82,64 55,79" fill="#064e3b" opacity=".5" stroke="#064e3b" stroke-width="7" stroke-linejoin="round" transform="translate(0 3)"/>
+<polygon points="55,49 82,64 55,79" fill="url(#pl-em)" stroke="url(#pl-em)" stroke-width="7" stroke-linejoin="round"/>
+<path d="M22 40 L64 15 L106 40 L106 50 Q64 34 22 50 Z" fill="#fff" opacity=".2" stroke="#fff" stroke-opacity=".0"/>
+
+</svg>

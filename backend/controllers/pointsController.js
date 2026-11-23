@@ -14,6 +14,7 @@ import {
 import { provider, getServerWallet } from "../config/provider.js";
 import { findLevelCleared } from "../services/candyCascade.js";
 import { STAR_HP, findLevelCompleted, multiplierReasons as motoMultiplierReasons } from "../services/motoRush.js";
+import { findMatchCompleted } from "../services/pixelFighter.js";
 import { nft } from "../services/nft.js";
 import { logSuspicious } from "../services/moderation.js";
 import { Award } from "lucide-react";
@@ -208,6 +209,20 @@ export const addPoints = async (req, res) => {
       const session = await MotoSession.findOne({ sessionId: String(completed.sessionId).toLowerCase() });
       motoVenomRide = !!session?.venomBonus;
 
+    } else if (gameId === "pixel_fighter") {
+      // The score in the event is the one the backend's replay produced and signed.
+      const completed = findMatchCompleted(receipt, targetAddress);
+      if (!completed) {
+        return res.status(400).json({ error: 'Transaction did not save a Pixel Fighters match' });
+      }
+      if (completed.player.toLowerCase() !== wallet.toLowerCase()) {
+        logSuspicious(req, wallet, "claimed_foreign_match", "Tried to claim HP for a Pixel Fighters match another wallet played", {
+          txHash, player: completed.player,
+        });
+        return res.status(400).json({ error: 'Match was played by a different wallet' });
+      }
+      onChainScore = Number(completed.score);
+
     } else {
       const SELECTOR_16 = ethers.id("submitGuess(uint16)").slice(0, 10);
       const SELECTOR_256 = ethers.id("submitGuess(uint256)").slice(0, 10);
@@ -223,7 +238,8 @@ export const addPoints = async (req, res) => {
       }
     }
 
-    if (gameId !== "racing_game" && gameId !== "candy_cascade" && gameId !== "moto_rush" && onChainScore !== pointsRequested) {
+    const scoreFromEvent = gameId === "candy_cascade" || gameId === "moto_rush" || gameId === "pixel_fighter";
+    if (gameId !== "racing_game" && !scoreFromEvent && onChainScore !== pointsRequested) {
       logSuspicious(req, wallet, "score_mismatch", "Claimed a different score than the transaction recorded", {
         txHash, gameId, onChainScore, claimed: pointsRequested,
       });
@@ -232,7 +248,7 @@ export const addPoints = async (req, res) => {
 
     const baseHp = gameId === "moto_rush"
       ? onChainScore
-      : Math.min(Math.round(onChainScore * (GAME_HP.SCALE[gameId] ?? 1)), GAME_HP.MAX_PER_PLAY);
+      : Math.min(Math.round(onChainScore * (GAME_HP.SCALE[gameId] ?? 1)), GAME_HP.MAX_BY_GAME[gameId] ?? GAME_HP.MAX_PER_PLAY);
 
     const walletLower = wallet.toLowerCase();
     // Fresh from the NFT index: only NFTs held past the hold period count, so passing one NFT

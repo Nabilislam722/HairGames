@@ -1,0 +1,254 @@
+/* Home only. Shared page styles are in hg.css. */
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.1fr 1fr;
+  align-items: center;
+  gap: 48px;
+  min-height: 540px;
+  padding: clamp(28px, 5vw, 72px);
+  margin-bottom: 44px;
+  border-radius: 24px;
+}
+
+.hero-bg {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+}
+
+.hero-bg img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.16;
+  filter: blur(2px);
+}
+
+.hero-bg::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(55% 75% at 12% 25%, rgba(255, 107, 26, 0.24), transparent 60%),
+    linear-gradient(90deg, #100c09 15%, rgba(16, 12, 9, 0.75) 55%, rgba(16, 12, 9, 0.35));
+}
+
+.hero > :not(.hero-bg) {
+  position: relative;
+  z-index: 1;
+}
+
+.hero-title {
+  font-family: var(--hg-tech);
+  font-size: clamp(46px, 7vw, 100px);
+  font-weight: 700;
+  line-height: 0.95;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  margin: 18px 0 0;
+}
+
+.hero-title em {
+  font-style: normal;
+  color: var(--hg-orange);
+  text-shadow: 0 0 40px rgba(255, 107, 26, 0.45);
+}
+
+.hero-sub {
+  max-width: 480px;
+  font-size: 16px;
+  line-height: 1.7;
+  color: var(--hg-muted);
+  margin: 22px 0 0;
+}
+
+.hero-sub b {
+  font-family: var(--hg-tech);
+  color: var(--hg-lime);
+}
+
+.hero-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 34px;
+}
+
+.hero-art {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  align-items: start;
+  gap: 14px;
+}
+
+.hero-art > :nth-child(even) {
+  margin-top: 36px;
+}
+
+.shot {
+  position: relative;
+  display: block;
+  aspect-ratio: 4 / 3;
+  overflow: hidden;
+  border: 1px solid var(--hg-line-hi);
+  border-radius: 14px;
+  box-shadow: 0 22px 44px -22px rgba(0, 0, 0, 0.85);
+}
+
+.shot img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.shot:hover img {
+  transform: scale(1.06);
+}
+
+.shot::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, transparent 50%, rgba(0, 0, 0, 0.7));
+}
+
+.shot .pill {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 1;
+  color: #fff;
+  background: rgba(11, 9, 8, 0.75);
+  backdrop-filter: blur(6px);
+}
+
+/* Info cards */
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 24px;
+}
+
+.info {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 34px;
+}
+
+.info-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.info-num {
+  font-family: var(--hg-tech);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  color: var(--hg-orange);
+}
+
+.info-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--hg-orange);
+  background: rgba(255, 107, 26, 0.1);
+  border: 1px solid rgba(255, 107, 26, 0.25);
+}
+
+.info-title {
+  font-family: var(--hg-tech);
+  font-size: 26px;
+  font-weight: 700;
+  line-height: 1.1;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.info-title em {
+  font-style: normal;
+  color: var(--hg-orange);
+}
+
+.info-text {
+  font-size: 14px;
+  line-height: 1.7;
+  color: var(--hg-muted);
+  margin: 0;
+}
+
+.info-text b {
+  color: var(--hg-text);
+}
+
+.info .pill {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+/* Closing call to action */
+.cta-band {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 24px;
+  padding: 44px clamp(24px, 4vw, 60px);
+  margin-bottom: 24px;
+  border-radius: 22px;
+  background: linear-gradient(110deg, #ff6b1a, #c2410c 60%, #7c2d12);
+  box-shadow: 0 30px 60px -30px rgba(255, 107, 26, 0.65);
+}
+
+.cta-title {
+  font-family: var(--hg-tech);
+  font-size: clamp(28px, 3.4vw, 42px);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.cta-text {
+  max-width: 440px;
+  font-size: 15px;
+  line-height: 1.6;
+  color: rgba(255, 255, 255, 0.82);
+  margin: 8px 0 0;
+}
+
+.cta-band .btn {
+  color: #fff;
+  background: var(--hg-ink);
+  box-shadow: none;
+}
+
+.cta-band .btn:hover {
+  transform: translateY(-1px);
+}
+
+@media (max-width: 1000px) {
+  .hero {
+    grid-template-columns: 1fr;
+    min-height: 0;
+  }
+}
+
+@media (max-width: 760px) {
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-art > :nth-child(even) {
+    margin-top: 18px;
+  }
+}

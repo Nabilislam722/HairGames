@@ -7,6 +7,7 @@ export const ECOSYSTEM_CONTRACTS = {
   "proof_of_patience": "0x760d91401Afb3499cf1BD0256b30485BDa40728C",
   "candy_cascade":"0xadDfFAdc18554f8711058bdbDeF7fC687091A69b",
   "moto_rush": "0x5568E1d5C919b41fA6eaBE227a3E5cc25d89c3Bd",
+  "pixel_fighter": "0xFBB5427F300E9ac639Aa7A40dDe035A21D229590",
 };
 
 export const VENOM_NFT = "0xD8AeD81836D037598D14B96BBD6Db3ea7e90f615";
@@ -30,10 +31,14 @@ export const GAME_CONFIG = {
 
 export const GAME_HP = {
   MAX_PER_PLAY: 3000,
+  // Games with their own cap. Pixel Fighters pays a fixed amount per finished match: 5,000 on Easy,
+  // 7,000 on Normal, 7,500 on Hard.
+  MAX_BY_GAME: { pixel_fighter: 7500 },
   SCALE: {
     racing_game: 0.2,       // 15,000 at most
     proof_of_patience: 0.2, // 15,000 at most
     candy_cascade: 0.2,     // a 3-star clear scores about 11,000
     space_huggers: 0.3,     // a full level from level 10 on scores about 9,750
+    pixel_fighter: 1,       // the score is the HP: a fixed 5,000 / 7,000 / 7,500 per finished match
   },
 };
