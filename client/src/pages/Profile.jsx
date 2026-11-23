@@ -11,7 +11,6 @@ import { LEVELS, levelIndex, getLevelInfo } from "@/lib/levels";
 import { GAMES } from "@/lib/games";
 import { usePlayerActivity, perDay, EXPLORER_URL } from "@/lib/activity";
 import { useGameSession } from "@/lib/gameSession";
-import { MOCK_DATA, mockProfile } from "@/lib/mockData";
 import { AddressAvatar, shortAddress } from "@/components/arena/AddressAvatar";
 import { SectionHead } from "@/components/arena/Heads";
 import { ConnectPrompt } from "@/components/arena/ConnectPrompt";
@@ -213,13 +212,8 @@ export default function Profile() {
         });
         setLoadError(false);
       } catch (error) {
-        if (MOCK_DATA) {
-          setProfile(mockProfile());
-          setLoadError(false);
-        } else {
-          console.error("Failed syncing profile metadata parameters:", error);
-          setLoadError(true);
-        }
+        console.error("Failed syncing profile metadata parameters:", error);
+        setLoadError(true);
       } finally {
         setLoading(false);
       }

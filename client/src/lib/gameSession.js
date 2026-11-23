@@ -1,21 +1,18 @@
 import {
-  createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore,
+  createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState,
 } from "react";
 import { useAccount, useBalance, useReadContract, useSendTransaction, useWriteContract } from "wagmi";
 import { createPublicClient, createWalletClient, formatEther, http, parseAbi, parseEther } from "viem";
 import { generatePrivateKey, privateKeyToAccount } from "viem/accounts";
 import { estimateL1Fee } from "viem/op-stack";
 import { hemi } from "@/lib/hemi";
-import { MOCK_DATA } from "@/lib/mockData";
 
 // Game sessions: the player approves a temporary key once from their wallet, and games send their
 // transactions with that key, so playing needs no wallet popups. The key is kept in this browser, holds
 // a small ETH balance, and only counts as the player on contracts that check the session registry.
-// Without VITE_SESSION_REGISTRY_CONTRACT the feature is off, except with mock data in local dev, so the
-// UI can be worked on before the contract exists.
+// Without VITE_SESSION_REGISTRY_CONTRACT the feature is off.
 
 export const SESSION_REGISTRY = import.meta.env.VITE_SESSION_REGISTRY_CONTRACT;
-const MOCK = MOCK_DATA && !SESSION_REGISTRY;
 
 export const SESSION_TOP_UPS = ["0.00005", "0.0002", "0.0005", "0.001"];
 export const SESSION_DEFAULT_TOP_UP = "0.0005";
@@ -102,37 +99,6 @@ async function sweep(account, to) {
   await publicClient.waitForTransactionReceipt({ hash });
 }
 
-// Mock session for local dev: starts active, and every action settles after a short fake confirmation.
-const MOCK_CONFIRM_MS = 1500;
-
-function createMockStore() {
-  const store = {
-    state: {
-      expiresAt: Date.now() + (23 * 60 + 12) * 60000,
-      balance: parseEther("0.00041"),
-      busy: null,
-    },
-    listeners: new Set(),
-    set(patch) {
-      store.state = { ...store.state, ...patch };
-      store.listeners.forEach((listener) => listener());
-    },
-    subscribe(listener) {
-      store.listeners.add(listener);
-      return () => store.listeners.delete(listener);
-    },
-  };
-  return store;
-}
-
-const mockStore = MOCK ? createMockStore() : null;
-const noSubscribe = () => () => {};
-
-function mockAction(name, apply) {
-  mockStore.set({ busy: name });
-  setTimeout(() => mockStore.set({ ...apply(mockStore.state), busy: null }), MOCK_CONFIRM_MS);
-}
-
 const SessionContext = createContext(null);
 
 // One session state for the whole app, so the navbar and pages always agree.
@@ -148,7 +114,6 @@ export function useGameSession() {
 
 function useSessionState() {
   const enabled = Boolean(SESSION_REGISTRY);
-  const mock = useSyncExternalStore(mockStore ? mockStore.subscribe : noSubscribe, () => mockStore?.state ?? null);
   const { address } = useAccount();
   const { writeContractAsync } = useWriteContract();
   const { sendTransactionAsync } = useSendTransaction();
@@ -263,26 +228,6 @@ function useSessionState() {
         : writeContractAsync(request),
     [status, account, balance, writeContractAsync],
   );
-
-  if (MOCK) {
-    const mockStatus = mock.expiresAt === 0 ? "off" : now < mock.expiresAt ? "active" : "expired";
-    return {
-      enabled: true,
-      mock: true,
-      status: mockStatus,
-      busy: mock.busy,
-      error: null,
-      balance: mock.balance,
-      playsLeft: Number(mock.balance / PLAY_COST_WEI),
-      expiresAt: mock.expiresAt,
-      now,
-      start: ({ topUpEth, days }) =>
-        mockAction("start", (s) => ({ expiresAt: Date.now() + days * 86400000, balance: s.balance + parseEther(topUpEth) })),
-      addFunds: (eth) => mockAction("fund", (s) => ({ balance: s.balance + parseEther(eth) })),
-      end: () => mockAction("end", () => ({ expiresAt: 0, balance: 0n })),
-      writeContract: writeContractAsync,
-    };
-  }
 
   return {
     enabled,

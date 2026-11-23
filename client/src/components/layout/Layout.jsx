@@ -7,7 +7,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CURRENT_SEASON } from "@/lib/season";
 import { GAMES } from "@/lib/games";
 import { getLevelInfo } from "@/lib/levels";
-import { MOCK_DATA, MOCK_POINTS } from "@/lib/mockData";
 import {
   useGameSession, formatSessionEth, formatTimeLeft, topUpLabel, SESSION_TOP_UPS, SESSION_DEFAULT_TOP_UP, SESSION_DAYS,
 } from "@/lib/gameSession";
@@ -48,13 +47,9 @@ function useHairPoints(address, location) {
     fetch(`${API_BASE}/api/points/get?wallet=${address}`)
       .then((r) => (r.ok ? r.json() : null))
       .then((d) => {
-        if (cancelled) return;
-        if (typeof d?.points === "number") setPoints(d.points);
-        else if (MOCK_DATA) setPoints(MOCK_POINTS);
+        if (!cancelled && typeof d?.points === "number") setPoints(d.points);
       })
-      .catch(() => {
-        if (!cancelled && MOCK_DATA) setPoints(MOCK_POINTS);
-      });
+      .catch(() => {});
     return () => { cancelled = true; };
   }, [address, location]);
   return points;

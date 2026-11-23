@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { CheckCircle2, Zap, ExternalLink, Loader2, ArrowRight, Gamepad2 } from "lucide-react";
+import { CheckCircle2, Zap, ExternalLink, Loader2, ArrowRight } from "lucide-react";
 import { useAccount, useReadContract } from "wagmi";
 import { formatUnits, parseAbi } from "viem";
 import { useState, useEffect, useMemo } from "react";
@@ -7,11 +7,10 @@ import { CURRENT_SEASON } from "@/lib/season";
 import { VOTING_CONTRACT_ADDRESS, VOTING_CONTRACT_ABI } from "@/lib/votingContract";
 import { GAMES } from "@/lib/games";
 import { LEVELS, getLevelInfo } from "@/lib/levels";
-import { usePlayerActivity } from "@/lib/activity";
-import { questProgress } from "@/lib/weeklyQuests";
 import { useGameSession } from "@/lib/gameSession";
-import { MOCK_DATA, MOCK_POINTS, MOCK_MULTIPLIER, MOCK_HAIR, mockProfile } from "@/lib/mockData";
 import { useCompetitions } from "@/lib/competitions";
+import { useDailyTasks, BITCOIN_BLOCK_URL } from "@/lib/dailyTasks";
+import { primeAudio, playClaimSound } from "@/lib/sfx";
 import { AddressAvatar, shortAddress } from "@/components/arena/AddressAvatar";
 import { SectionHead, Segmented, DimNumber } from "@/components/arena/Heads";
 import { GameCard } from "@/components/arena/GameCard";
@@ -20,6 +19,7 @@ import { ConnectPrompt } from "@/components/arena/ConnectPrompt";
 import { SessionBar } from "@/components/arena/SessionBar";
 import { RankBadge } from "@/components/arena/RankBadge";
 import { DailyChallengeCard, HolderTournamentCard } from "@/components/arena/Competitions";
+import { ClaimBurst } from "@/components/arena/ClaimBurst";
 import X_logo from "@/assets/images/x.jpg";
 import Guild_logo from "@/assets/images/hair.png";
 import DISCORD_LOGO from '/discord.jpg';
@@ -153,9 +153,9 @@ function PlayerHeader({ address, points, multiplier, rank }) {
   );
 }
 
-function BonusTask({ quest, step, onAction, onClaim }) {
+function BonusTask({ quest, step, celebrating, onAction, onClaim }) {
   return (
-    <div className={`tkc${step === "completed" ? " done" : ""}`}>
+    <div className={`tkc${step === "completed" ? " done" : ""}${celebrating ? " just-claimed" : ""}`}>
       <div className="tkc-top">
         <span className="tk-ico">{quest.icon}</span>
         <span className="tk-pts">+{quest.points.toLocaleString()} HP</span>
@@ -176,16 +176,16 @@ function BonusTask({ quest, step, onAction, onClaim }) {
           </button>
         )}
         {step === "completed" && (
-          <span className="btn btn-sm btn-claimed"><CheckCircle2 size={12} /> Claimed</span>
+          <span className="btn btn-sm btn-g tk-claimed"><CheckCircle2 size={12} /> Claimed</span>
         )}
+        {celebrating && <ClaimBurst reward={quest.points} />}
       </div>
     </div>
   );
 }
 
-// A quest's game logo; quests for any game show four game logos.
-function QuestIcon({ gameId }) {
-  const game = GAMES.find(g => g.id === gameId);
+// A task's game logo; tasks for any game show four game logos.
+function TaskIcon({ game }) {
   if (game) return <span className="tk-ico" title={game.title}><img src={game.logo} alt="" /></span>;
   return (
     <span className="tk-ico mosaic" title="Any game">
@@ -194,74 +194,149 @@ function QuestIcon({ gameId }) {
   );
 }
 
-function WeeklyQuest({ quest, claimed, claiming, onClaim }) {
-  const complete = quest.done >= quest.goal;
+function DailyTask({ task, claiming, celebrating, error, onClaim }) {
+  const done = task.plays >= task.playCount;
   return (
-    <div className={`tkc${claimed ? " done" : ""}`}>
+    <div className={`tkc${task.claimed ? " done" : ""}${celebrating ? " just-claimed" : ""}`}>
       <div className="tkc-top">
-        <QuestIcon gameId={quest.game} />
-        <span className="tk-pts">+{quest.reward.toLocaleString()} HP</span>
+        <TaskIcon game={task.game} />
+        <span className="tk-pts">+{task.reward.toLocaleString()} HP</span>
       </div>
-      <p className="tk-name">{quest.title}</p>
+      <div>
+        <p className="tk-name">
+          {task.title}
+          {task.boost > 1 && <span className="tk-boost">Boosted</span>}
+        </p>
+        {task.description && <p className="tk-desc">{task.description}</p>}
+      </div>
       <div className="tk-prog">
-        <SegBar value={quest.done} max={quest.goal} segments={quest.goal} label={quest.title} />
-        <span className="tk-count">{quest.done}/{quest.goal}</span>
+        <SegBar value={task.plays} max={task.playCount} segments={Math.min(task.playCount, 10)} label={task.title} />
+        <span className="tk-count">{task.plays}/{task.playCount}</span>
       </div>
+      {error && <p className="tk-err" role="alert">{error}</p>}
       <div className="tkc-act">
-        {claimed ? (
-          <span className="btn btn-sm btn-claimed"><CheckCircle2 size={12} /> Claimed</span>
-        ) : complete ? (
+        {task.claimed ? (
+          <span className="btn btn-sm btn-g tk-claimed"><CheckCircle2 size={12} /> Claimed</span>
+        ) : done ? (
           <button type="button" className="btn btn-sm btn-g" onClick={onClaim} disabled={claiming}>
             {claiming ? <Loader2 size={11} className="spin" /> : <Zap size={11} />} Claim
           </button>
+        ) : task.game ? (
+          <Link href={`/game/${task.game.id}`} className="btn btn-sm btn-g">Play {task.game.title}</Link>
         ) : (
           <span className="btn btn-sm btn-ghost">In progress</span>
         )}
+        {celebrating && <ClaimBurst reward={task.reward} />}
       </div>
     </div>
   );
 }
 
-// Tasks in two groups: this week's quests and the one-time bonus tasks. Weekly rewards have no
-// backend yet, so the weekly group (and its claim, kept in local state) only appears with dev mock data.
-function TasksPanel({ plays, questSteps, onAction, onClaim }) {
-  const weekly = MOCK_DATA ? questProgress(plays) : [];
-  const [tab, setTab] = useState(weekly.length ? "week" : "bonus");
-  const [claimed, setClaimed] = useState({});
-  const [claiming, setClaiming] = useState(null);
+// When today's tasks reset, and the Bitcoin block whose hash drew them.
+function DrawNote({ bitcoin, resetsAt }) {
+  const [now, setNow] = useState(Date.now);
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, []);
+  const mins = Math.max(0, Math.ceil((resetsAt - now) / 60000));
+  return (
+    <p className="tk-seed">
+      New tasks in {Math.floor(mins / 60)}h {mins % 60}m
+      {bitcoin && (
+        <>
+          {" · "}Drawn with Bitcoin block{" "}
+          <a href={`${BITCOIN_BLOCK_URL}${bitcoin.hash.replace(/^0x/, "")}`} target="_blank" rel="noopener noreferrer">
+            #{bitcoin.height.toLocaleString()}
+          </a>
+          {" "}via the Hemi Bitcoin Kit
+        </>
+      )}
+    </p>
+  );
+}
 
-  const claimWeekly = (quest) => {
-    setClaiming(quest.id);
-    setTimeout(() => {
-      setClaimed(c => ({ ...c, [quest.id]: true }));
-      setClaiming(null);
-    }, 900);
-  };
+// Today's tasks (drawn by the backend every UTC day) and the one-time bonus tasks.
+function TasksPanel({ address, questSteps, onAction, onClaim, onPoints }) {
+  const daily = useDailyTasks(address);
+  const [tab, setTab] = useState(null); // null until the player picks one
+  const [celebrating, setCelebrating] = useState(null); // the task whose claim just went through
+  const hasDaily = daily.loading || daily.error || daily.tasks.length > 0;
+  const shown = tab ?? (hasDaily ? "today" : "bonus");
 
-  const openWeekly = weekly.filter(q => !claimed[q.id]);
+  const openDaily = daily.tasks.filter(t => !t.claimed);
   const openBonus = QUESTS.filter(q => questSteps[q.id] !== "completed");
-  const hpToEarn = sum(openWeekly.map(q => q.reward)) + sum(openBonus.map(q => q.points));
+  const hpToEarn = sum(openDaily.map(t => t.reward)) + sum(openBonus.map(q => q.points));
   const tabs = [
-    weekly.length > 0 && { value: "week", label: "This week" },
+    hasDaily && { value: "today", label: "Today" },
     { value: "bonus", label: "Bonus" },
   ].filter(Boolean);
-  const showWeek = tab === "week" && weekly.length > 0;
+
+  // A claim that went through gets the burst and the sound; ClaimBurst's animation runs about 1.2 s.
+  const celebrate = (id) => {
+    playClaimSound();
+    setCelebrating(id);
+    setTimeout(() => setCelebrating(c => (c === id ? null : c)), 1300);
+  };
+
+  const claimDaily = async (task) => {
+    primeAudio();
+    const total = await daily.claim(task.id);
+    if (total != null) {
+      onPoints(total);
+      celebrate(task.id);
+    }
+  };
+
+  const claimBonus = async (quest) => {
+    primeAudio();
+    if (await onClaim(quest)) celebrate(quest.id);
+  };
+
+  let content;
+  if (shown === "bonus") {
+    content = QUESTS.map(q => (
+      <BonusTask
+        key={q.id}
+        quest={q}
+        step={questSteps[q.id]}
+        celebrating={celebrating === q.id}
+        onAction={() => onAction(q)}
+        onClaim={() => claimBonus(q)}
+      />
+    ));
+  } else if (daily.loading) {
+    content = <p className="tk-note">Loading today's tasks…</p>;
+  } else if (daily.error) {
+    content = (
+      <p className="tk-note">
+        {daily.error.message}{" "}
+        <button type="button" className="btn btn-sm btn-ghost" onClick={() => daily.retry()}>Try again</button>
+      </p>
+    );
+  } else {
+    content = daily.tasks.map(t => (
+      <DailyTask
+        key={t.id}
+        task={t}
+        claiming={daily.claiming === t.id}
+        celebrating={celebrating === t.id}
+        error={daily.claimErrors[t.id]}
+        onClaim={() => claimDaily(t)}
+      />
+    ));
+  }
 
   return (
     <section className="tasks">
-      <SectionHead title="Tasks" count={openWeekly.length + openBonus.length}>
+      <SectionHead title="Tasks" count={openDaily.length + openBonus.length}>
         {hpToEarn > 0 && <span className="pill-lime">+{hpToEarn.toLocaleString()} HP to earn</span>}
-        {tabs.length > 1 && <Segmented label="Task group" options={tabs} value={tab} onChange={setTab} />}
+        {tabs.length > 1 && <Segmented label="Task group" options={tabs} value={shown} onChange={setTab} />}
       </SectionHead>
-      <div className="tk-grid hg-stagger" key={showWeek ? "week" : "bonus"}>
-        {showWeek
-          ? weekly.map(q => (
-            <WeeklyQuest key={q.id} quest={q} claimed={!!claimed[q.id]} claiming={claiming === q.id} onClaim={() => claimWeekly(q)} />
-          ))
-          : QUESTS.map(q => (
-            <BonusTask key={q.id} quest={q} step={questSteps[q.id]} onAction={() => onAction(q)} onClaim={() => onClaim(q)} />
-          ))}
+      <div className="tk-grid hg-stagger" key={shown}>
+        {content}
       </div>
+      {shown === "today" && daily.resetsAt && <DrawNote bitcoin={daily.bitcoin} resetsAt={daily.resetsAt} />}
     </section>
   );
 }
@@ -322,7 +397,6 @@ function PartnerCard({ game }) {
 export default function Dashboard() {
   const { address, isConnected } = useAccount();
   const session = useGameSession();
-  const activity = usePlayerActivity(address, GAMES);
   const competitions = useCompetitions(address);
 
   const [points, setPoints] = useState(null);
@@ -356,9 +430,7 @@ export default function Dashboard() {
     functionName: "decimals",
   });
 
-  const hairHeld = MOCK_DATA
-    ? MOCK_HAIR
-    : hairBalanceRaw != null && hairDecimals != null ? Number(formatUnits(hairBalanceRaw, hairDecimals)) : 0;
+  const hairHeld = hairBalanceRaw != null && hairDecimals != null ? Number(formatUnits(hairBalanceRaw, hairDecimals)) : 0;
 
   const holderEligible = useMemo(() => {
     if (hairBalanceRaw == null || hairDecimals == null || !hairPrice) return false;
@@ -399,10 +471,7 @@ export default function Dashboard() {
         setPoints(d.points);
         QUESTS.forEach(q => { if (d.tasks?.includes(q.id)) setStep(q.id, "completed"); });
       })
-      .catch(err => {
-        if (MOCK_DATA) setPoints(MOCK_POINTS);
-        else console.error(err);
-      });
+      .catch(console.error);
 
     fetch(`${API_BASE}/api/profile/${address}`)
       .then(r => r.json())
@@ -410,12 +479,7 @@ export default function Dashboard() {
         if (d.multiplier != null) setMultiplier(d.multiplier);
         if (d.rank != null) setRank(d.rank);
       })
-      .catch(err => {
-        if (MOCK_DATA) {
-          setMultiplier(MOCK_MULTIPLIER);
-          setRank(mockProfile().rank);
-        } else console.error(err);
-      });
+      .catch(console.error);
   }, [address]);
 
   const handleAction = q => {
@@ -434,9 +498,10 @@ export default function Dashboard() {
         body: JSON.stringify({ wallet: address, task: q.id }),
       });
       const d = await r.json();
-      if (r.ok) { setStep(q.id, "completed"); setPoints(d.newTotal); }
+      if (r.ok) { setStep(q.id, "completed"); setPoints(d.newTotal); return true; }
       else setStep(q.id, d.alreadyDone ? "completed" : "claimable");
     } catch { setStep(q.id, "claimable"); }
+    return false;
   };
 
   // wagmi can report connected a render before the address arrives.
@@ -452,7 +517,7 @@ export default function Dashboard() {
 
       {/* Tasks and the game session share a row; without game sessions, Tasks take it all. */}
       <div className={`dash-row no-rise hg-seq${session.enabled ? "" : " solo"}`}>
-        <TasksPanel plays={activity.plays} questSteps={questSteps} onAction={handleAction} onClaim={handleClaim} />
+        <TasksPanel address={address} questSteps={questSteps} onAction={handleAction} onClaim={handleClaim} onPoints={setPoints} />
         <SessionBar />
       </div>
 
@@ -474,10 +539,6 @@ export default function Dashboard() {
           {PARTNER_GAMES.map(g => <PartnerCard key={g.id} game={g} />)}
         </div>
       </section>
-
-      {MOCK_DATA && (
-        <p className="db-mock"><Gamepad2 size={12} /> Local dev: points, quests, competitions and the game session use mock data.</p>
-      )}
     </div>
   );
 }

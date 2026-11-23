@@ -4,7 +4,6 @@ import { Clock, RefreshCw, Loader2 } from "lucide-react";
 import { PageHead, SectionHead } from "@/components/arena/Heads";
 import { Standing, Podium, RankTable } from "@/components/arena/Rankings";
 import { ConnectPrompt } from "@/components/arena/ConnectPrompt";
-import { MOCK_DATA, mockLeaderboard } from "@/lib/mockData";
 import "@/styles/hg.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -106,11 +105,11 @@ export default function EventRank() {
       if (!res.ok) throw new Error();
       setBoard(await res.json());
     } catch {
-      setBoard(MOCK_DATA ? mockLeaderboard(address, { size: 18, top: 96000, myPoints: 41250 }) : []);
+      setBoard([]);
     } finally {
       setLoading(false);
     }
-  }, [address]);
+  }, []);
 
   useEffect(() => { fetchBoard(); }, [fetchBoard]);
 

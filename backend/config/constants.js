@@ -11,6 +11,10 @@ export const ECOSYSTEM_CONTRACTS = {
 };
 
 export const VENOM_NFT = "0xD8AeD81836D037598D14B96BBD6Db3ea7e90f615";
+
+// Hemi Bitcoin Kit (hBK): reads Bitcoin data on Hemi. The daily task draw is seeded with its latest block hash.
+export const HEMI_BITCOIN_KIT = "0x7007dd1C09527B92AEcd8Ae6570B73d09E0B8F12";
+export const DAILY_TASKS = { COUNT: 4 }; // tasks drawn each UTC day
 export const MOTO_RUSH = { VENOM_BONUS: 0.2, MAX_MULTIPLIER: 1.7 };
 
 export const GENERIC_GAME_ABI = [

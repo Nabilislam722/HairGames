@@ -3,7 +3,6 @@ import { usePublicClient, useReadContracts, useWatchAsset, useWriteContract } fr
 import { formatUnits, parseAbi } from "viem";
 import { hemi } from "@/lib/hemi";
 import { useHemiNetwork } from "@/lib/useHemiNetwork";
-import { MOCK_DATA, mockAllocations } from "@/lib/mockData";
 
 /*
  * Rewards: tokens the team allocates to a wallet, which the player claims on Hemi. Weekly event
@@ -17,10 +16,8 @@ import { MOCK_DATA, mockAllocations } from "@/lib/mockData";
  *   claim()             sends allocated - claimed to msg.sender
  *
  *   VITE_HEMI_REWARDS_CONTRACT  the HEMI claim contract
- *   VITE_HAIR_REWARDS_CONTRACT  the HAIR claim contract
  *
- * A token without a contract address isn't shown. In dev without either address, mock allocations
- * stand in and claiming them is simulated.
+ * A token without a contract address isn't shown.
  */
 
 export const REWARD_TOKENS = {
@@ -33,15 +30,6 @@ export const REWARD_TOKENS = {
     color: "#ff3d00",
     contract: import.meta.env.VITE_HEMI_REWARDS_CONTRACT || "",
   },
-  HAIR: {
-    symbol: "HAIR",
-    name: "HAIR reward",
-    address: "0x5B774f563C902FA7b203FB7029ed6eD4Ce274705",
-    decimals: 18,
-    logo: "/hair.png",
-    color: "#ff6b1a",
-    contract: import.meta.env.VITE_HAIR_REWARDS_CONTRACT || "",
-  },
 };
 
 export const CLAIM_ABI = parseAbi([
@@ -50,14 +38,10 @@ export const CLAIM_ABI = parseAbi([
   "function claim()",
 ]);
 
-const TOKENS = Object.values(REWARD_TOKENS);
-const LIVE_TOKENS = TOKENS.filter((t) => t.contract);
-const MOCK = MOCK_DATA && LIVE_TOKENS.length === 0;
+const LIVE_TOKENS = Object.values(REWARD_TOKENS).filter((t) => t.contract);
 
-/** Whether any claim is set up yet (always in dev, with mock allocations). */
-export const CLAIMING_OPEN = MOCK || LIVE_TOKENS.length > 0;
-
-const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+/** Whether any claim is set up yet. */
+export const CLAIMING_OPEN = LIVE_TOKENS.length > 0;
 
 /** A token amount in base units as a readable number, like 25,000 or 1,250.5. */
 export function formatAmount(units, symbol) {
@@ -81,21 +65,19 @@ function claimError(e) {
  * progress per token: { phase: "confirm" | "pending" | "error", hash?, error? }.
  */
 export function useRewards(address) {
-  const [mock, setMock] = useState(null); // symbol → { allocated, claimed }, dev only
   const [steps, setSteps] = useState({});
-  const [claimedHere, setClaimedHere] = useState({}); // symbol → tx hash ("" for a simulated claim)
+  const [claimedHere, setClaimedHere] = useState({}); // symbol → tx hash
   const currentAddress = useRef(address);
   currentAddress.current = address;
 
   // A new wallet starts from a clean slate.
   useEffect(() => {
-    setMock(MOCK && address ? mockAllocations() : null);
     setSteps({});
     setClaimedHere({});
   }, [address]);
 
   const reads = useReadContracts({
-    contracts: MOCK || !address
+    contracts: !address
       ? []
       : LIVE_TOKENS.flatMap((t) => ["allocated", "claimed"].map((functionName) => ({
           address: t.contract,
@@ -104,20 +86,16 @@ export function useRewards(address) {
           args: [address],
           chainId: hemi.id,
         }))),
-    query: { enabled: !MOCK && !!address && LIVE_TOKENS.length > 0, refetchInterval: 30000 },
+    query: { enabled: !!address && LIVE_TOKENS.length > 0, refetchInterval: 30000 },
   });
   const refetch = reads.refetch;
 
-  const rewards = useMemo(() => (MOCK ? TOKENS : LIVE_TOKENS).map((token, i) => {
+  const rewards = useMemo(() => LIVE_TOKENS.map((token, i) => {
     let allocated = 0n;
     let claimed = 0n;
-    if (MOCK) {
-      ({ allocated = 0n, claimed = 0n } = mock?.[token.symbol] ?? {});
-    } else {
-      const [a, c] = [reads.data?.[i * 2], reads.data?.[i * 2 + 1]];
-      if (a?.status === "success") allocated = a.result;
-      if (c?.status === "success") claimed = c.result;
-    }
+    const [a, c] = [reads.data?.[i * 2], reads.data?.[i * 2 + 1]];
+    if (a?.status === "success") allocated = a.result;
+    if (c?.status === "success") claimed = c.result;
     const claimable = allocated > claimed ? allocated - claimed : 0n;
     const here = claimedHere[token.symbol];
     return {
@@ -128,12 +106,12 @@ export function useRewards(address) {
       state: claimable > 0n ? "eligible" : allocated > 0n ? "claimed" : "none",
       claimTx: here || null,
     };
-  }), [mock, reads.data, claimedHere]);
+  }), [reads.data, claimedHere]);
 
   let status = "ready";
   if (!address) status = "idle";
-  else if (MOCK ? !mock : reads.isLoading) status = "loading";
-  else if (!MOCK && (reads.isError || reads.data?.some((d) => d.status === "failure"))) status = "error";
+  else if (reads.isLoading) status = "loading";
+  else if (reads.isError || reads.data?.some((d) => d.status === "failure")) status = "error";
 
   const publicClient = usePublicClient({ chainId: hemi.id });
   const { writeContractAsync } = useWriteContract();
@@ -155,29 +133,21 @@ export function useRewards(address) {
 
     setStep({ phase: "confirm" });
     try {
-      let hash = "";
-      if (MOCK) {
-        await sleep(900);
-        setStep({ phase: "pending" });
-        await sleep(1400);
-        setMock((m) => m && { ...m, [symbol]: { ...m[symbol], claimed: m[symbol].allocated } });
-      } else {
-        await ensureHemi();
-        hash = await writeContractAsync({ address: token.contract, abi: CLAIM_ABI, functionName: "claim", chainId: hemi.id });
-        setStep({ phase: "pending", hash });
-        const receipt = await publicClient.waitForTransactionReceipt({ hash });
-        if (receipt.status !== "success") {
-          throw new Error("The claim transaction failed on chain. Your reward is still here, so you can try again.");
-        }
-        await refetch();
+      await ensureHemi();
+      const hash = await writeContractAsync({ address: token.contract, abi: CLAIM_ABI, functionName: "claim", chainId: hemi.id });
+      setStep({ phase: "pending", hash });
+      const receipt = await publicClient.waitForTransactionReceipt({ hash });
+      if (receipt.status !== "success") {
+        throw new Error("The claim transaction failed on chain. Your reward is still here, so you can try again.");
       }
+      await refetch();
       if (currentAddress.current !== wallet) return;
       setClaimedHere((c) => ({ ...c, [symbol]: hash }));
       setStep(null);
     } catch (e) {
       setStep({ phase: "error", error: claimError(e) });
       // It may have been claimed already, e.g. from another tab.
-      if (!MOCK) refetch();
+      refetch();
     }
   }, [address, ensureHemi, writeContractAsync, publicClient, refetch]);
 

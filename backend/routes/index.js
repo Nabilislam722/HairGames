@@ -13,6 +13,7 @@ import {
     verifyPoints,
     addPoints,
     getPoints,
+    getPointsHistory,
     claimTask,
 } from "../controllers/pointsController.js";
 
@@ -30,6 +31,11 @@ import {
     startPixelSession,
     verifyPixelMatch,
 } from "../controllers/pixelFighterController.js";
+
+import {
+    getDailyTasks,
+    claimDailyTask,
+} from "../controllers/dailyTasksController.js";
 
 import { getBanStatus, rejectBanned } from "../services/moderation.js";
 
@@ -77,7 +83,10 @@ router.post("/pixel-fighter/verify", rejectBanned, verifyPixelMatch);
 router.post("/points/verify", rejectBanned, verifyPoints);
 router.post("/points/add", rejectBanned, addPoints);
 router.get("/points/get", getPoints);
+router.get("/points/history", getPointsHistory);
 router.post("/points/claim", rejectBanned, claimTask);
+router.get("/tasks/daily", getDailyTasks);
+router.post("/tasks/daily/claim", rejectBanned, claimDailyTask);
 // router.post("/points/vote", addVotePoints);
 
 // Leaderboards & Events 

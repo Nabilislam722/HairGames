@@ -1,26 +1,38 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { MOCK_DATA, mockActivity } from "@/lib/mockData";
 
 // A player's recent plays, read from the Hemi explorer: the transactions their wallet sent to a game
-// contract. A start (startGame, startLevel, startRun, playGame) counts as a play; the rest save a result.
+// contract. A start (startGame, startLevel, startRun, startMatch, playGame) counts as a play and a submit
+// saves a result; anything else, like the owner's claimFees, isn't a play.
 
 export const EXPLORER_URL = "https://explorer.hemi.xyz";
 export const ACTIVITY_DAYS = 14;
+
+const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 
 const DAY = 86400000;
 const MAX_PAGES = 5; // 50 transactions a page; a wallet that also trades elsewhere needs a few
 
 const STATUS = { ok: "ok", error: "failed" };
 
+// "start", "save", or null for a call that isn't a play. A method the explorer couldn't decode (none, or
+// a bare selector) counts as a save.
+function playKind(method) {
+  if (!method || /^0x/i.test(method)) return "save";
+  if (/^(start|play)/i.test(method)) return "start";
+  if (/^submit/i.test(method)) return "save";
+  return null;
+}
+
 export function toPlays(items, gamesByContract) {
   return items.flatMap((tx) => {
     const game = gamesByContract.get(tx.to?.hash?.toLowerCase());
-    if (!game) return [];
+    const kind = playKind(tx.method);
+    if (!game || !kind) return [];
     return [{
       hash: tx.hash,
       game,
-      kind: /^(start|play)/i.test(tx.method ?? "") ? "start" : "save",
+      kind,
       status: STATUS[tx.status] ?? "pending",
       cost: BigInt(tx.value ?? "0") + BigInt(tx.fee?.value ?? "0"),
       at: Date.parse(tx.timestamp),
@@ -56,18 +68,25 @@ async function fetchSentTransactions(address) {
   return items;
 }
 
-// hpByDay needs a backend endpoint that doesn't exist yet, so it's null outside mock data.
+// What the wallet's games paid out in HP over the activity window, as [{ at, hp }].
+async function fetchPayouts(address) {
+  const res = await fetch(`${API_BASE}/api/points/history?wallet=${address}&days=${ACTIVITY_DAYS}`);
+  if (!res.ok) throw new Error(`Points history answered ${res.status}`);
+  return (await res.json()).payouts;
+}
+
+// hpByDay is the HP the wallet's games paid per local day, from the backend's payout ledger (null until
+// it loads). Task rewards aren't in the ledger, so they don't show in it.
 export function usePlayerActivity(address, games) {
   const gamesByContract = useMemo(
     () => new Map(games.filter(g => g.contract).map(g => [g.contract.toLowerCase(), g])),
     [games],
   );
-  const mock = useMemo(() => (MOCK_DATA && address ? mockActivity(address, games) : null), [address, games]);
 
   const query = useQuery({
     queryKey: ["player-activity", address?.toLowerCase()],
     queryFn: () => fetchSentTransactions(address),
-    enabled: !MOCK_DATA && !!address,
+    enabled: !!address,
     staleTime: 60000,
     refetchInterval: 60000,
     retry: 1,
@@ -77,6 +96,15 @@ export function usePlayerActivity(address, games) {
     [query.data, gamesByContract],
   );
 
-  if (mock) return { plays: mock.plays, hpByDay: mock.hpByDay, loading: false, error: null, retry: () => {} };
-  return { plays, hpByDay: null, loading: query.isLoading, error: query.error, retry: query.refetch };
+  const payouts = useQuery({
+    queryKey: ["hp-payouts", address?.toLowerCase()],
+    queryFn: () => fetchPayouts(address),
+    enabled: !!address,
+    staleTime: 60000,
+    refetchInterval: 60000,
+    retry: 1,
+  });
+  const hpByDay = useMemo(() => (payouts.data ? perDay(payouts.data, p => p.hp) : null), [payouts.data]);
+
+  return { plays, hpByDay, loading: query.isLoading, error: query.error, retry: query.refetch };
 }

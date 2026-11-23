@@ -4,7 +4,6 @@ import { Trophy, RefreshCw, Loader2 } from "lucide-react";
 import { PageHead, SectionHead } from "@/components/arena/Heads";
 import { Standing, Podium, RankTable } from "@/components/arena/Rankings";
 import { ConnectPrompt } from "@/components/arena/ConnectPrompt";
-import { MOCK_DATA, mockLeaderboard } from "@/lib/mockData";
 import "@/styles/hg.css";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
@@ -21,12 +20,11 @@ export default function Leaderboard() {
       const data = await res.json();
       setLeaderboard(data);
     } catch (err) {
-      if (MOCK_DATA) setLeaderboard(mockLeaderboard(address));
-      else console.error("Failed to fetch leaderboard:", err);
+      console.error("Failed to fetch leaderboard:", err);
     } finally {
       setLoading(false);
     }
-  }, [address]);
+  }, []);
 
   useEffect(() => { fetchLeaderboard(); }, [fetchLeaderboard]);
 

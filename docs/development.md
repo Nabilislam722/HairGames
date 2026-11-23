@@ -20,7 +20,7 @@ HairGames/
 │       │   └── ui/          shadcn/ui primitives
 │       ├── hooks/           Shared React hooks
 │       ├── lib/             Shared helpers: web3, chain config, contracts, network retries, season, the game list,
-│       │                    rank levels, recent plays from the explorer, weekly quests, competitions, game sessions, dev mock data
+│       │                    rank levels, recent plays from the explorer, daily tasks, competitions, game sessions
 │       ├── assets/images/   Site-wide images imported from code
 │       ├── styles/          globals.css (Tailwind entry), hg.css (shared page styles and load-in animation),
 │       │                    plus one file per page that needs more: dashboard.css, home.css, profile.css
@@ -28,10 +28,10 @@ HairGames/
 ├── backend/                 Express API (port 3000)
 │   ├── server.js            Entry point
 │   ├── config/              Database, RPC provider, contract addresses
-│   ├── controllers/         Request handlers (auth, games, points, stats, Candy Cascade, Moto Rush)
+│   ├── controllers/         Request handlers (auth, games, points, stats, daily tasks, Candy Cascade, Moto Rush)
 │   ├── models/              Mongoose models
 │   ├── routes/              Route definitions, mounted under /api
-│   └── services/            NFT indexer, Candy Cascade and Moto Rush replay and signing
+│   └── services/            NFT indexer, daily task draw, Candy Cascade and Moto Rush replay and signing
 ├── contract/                Hardhat project: Solidity game contracts, deploy scripts and tests
 └── docs/                    Guides like this one
 ```
@@ -180,6 +180,62 @@ In `contract/.env`, set `SIGNER_ADDRESS` to the address of the backend's `SERVER
 
 The candy bundle in `client/public/candy-cascade` is built from `client/src/games/candy-cascade/game`; a change to how it shows points goes in both.
 
+## Daily tasks
+
+The Dashboard's Tasks panel opens on **Today**: tasks drawn every UTC day from the ones you add in MongoDB. The one-time tasks (follow on X, join Discord and so on) are under **Bonus**.
+
+### Adding a task
+
+Insert a document into the `dailytasks` collection:
+
+```js
+db.dailytasks.insertOne({
+  title: "Play 3 Pixel Fighters matches",
+  description: "Our newest game. Win or lose, every match counts.",
+  reward: 1500,
+  game: "pixel_fighter",
+  playCount: 3,
+  boost: 3,
+})
+```
+
+| Field | Meaning |
+| --- | --- |
+| `title` | Shown on the task card. Required |
+| `description` | Shown under the title. Optional |
+| `reward` | HP paid when the task is claimed. Required |
+| `game` | The game whose plays count: a `gameId` from `ECOSYSTEM_CONTRACTS` in `backend/config/constants.js`, or `"any"` (the default) for every game |
+| `playCount` | Plays needed in the day. Required |
+| `boost` | Draw weight, 1 by default: a task with boost 3 is three times as likely to be drawn as one with boost 1, and shows a Boosted badge. Use it to promote a new game |
+| `active` | `false` keeps the task out of future draws. A task without the field counts as active |
+
+The `gameId`s are `moto_rush`, `candy_cascade`, `pixel_fighter`, `proof_of_patience`, `fruit_ninja`, `default_legacy` (Void Striker), `space_huggers`, `racing_game` (Need for Hair) and `fishing_party`. A task with an unknown game, or without a title, reward or play count, is skipped.
+
+Edits show on the Dashboard within a minute, and claims use the current reward and play count. Which tasks were drawn stays fixed for the day:
+
+- **New task:** goes into the next day's draw.
+- **Deleted task:** drops off today's list.
+- **Task set to `active: false`:** stays for the rest of today.
+- **Task edited into something unusable** (say, its reward removed): keeps the copy saved with the draw.
+
+### The draw
+
+On the first request after 00:00 UTC, `backend/services/dailyTasks.js`:
+
+1. Reads the latest Bitcoin block from the Hemi Bitcoin Kit (hBK) on Hemi with `getLastHeader()` (`HEMI_BITCOIN_KIT` in `backend/config/constants.js`).
+2. Seeds the draw with `keccak256(blockHash, day)`, packed.
+3. Picks `DAILY_TASKS.COUNT` (4) of the active tasks, without repeats, weighted by `boost`.
+4. Saves the day in `dailytaskdraws`: the block's height and hash, every task that could have been drawn (`candidates`), and a copy of the drawn tasks as a record.
+
+The Dashboard links the block on mempool.space, and anyone can redo the draw from what's saved with `drawSeed` and `drawTasks`. If hBK can't be read, the day isn't drawn yet, and the Today tab shows the error with a Try again button.
+
+### Progress and claiming
+
+- **A play counts once its HP is credited:** every game save that `/api/points/add` accepts is a play, even one that pays 0 HP. Only plays from the current UTC day count.
+- **`GET /api/tasks/daily?wallet=0x…`** returns today's tasks with the wallet's plays and claims. **`POST /api/tasks/daily/claim`** pays one task once its plays are done.
+- **Each task can be claimed once a day** (`dailytaskclaims`). The HP goes to the wallet's lifetime points, like bonus tasks, and doesn't count toward the weekly event.
+- **Tasks left unclaimed at the reset are gone.**
+
 ## NFT multiplier indexer
 
 NFTs from the collections in `CollectionConfig` raise a player's HP multiplier (+`multiplier - 1` per NFT, capped at 1.5×). `backend/services/nftIndexer.js` keeps track of who owns them:
@@ -253,8 +309,7 @@ Frontend (`client/.env`):
 | `VITE_CANDY_CASCADE_CONTRACT` | CandyCascade contract. Without it, the game runs in local play with nothing saved on chain |
 | `VITE_MOTO_RUSH_CONTRACT` | MotoRush contract. With it, levels and stars are saved on chain and each level can be completed once; without it, Moto Rush is free play with progress kept in the browser |
 | `VITE_VENOM_CONTRACT` | Venom NFT contract (`nft/`). Only Venom holders can ride the #27 Venom in Moto Rush; without it, the Venom stays locked for everyone |
-| `VITE_SESSION_REGISTRY_CONTRACT` | Session registry for game sessions (`client/src/lib/gameSession.js`): players approve a temporary key once and play without wallet popups. It must implement `openSession(key, expiresAt)` (payable, forwards the ETH to the key), `closeSession()` (called by the key) and `sessions(key)`. Without it, the navbar and Dashboard hide game sessions, except with mock data in local dev |
-| `VITE_USE_REAL_DATA` | Local dev only: set to `true` to see real data. Otherwise `npm run dev:client` fills points, recent plays and the game session with mock data (`client/src/lib/mockData.js`) so the UI works without the backend or contracts. Production builds never use mock data |
+| `VITE_SESSION_REGISTRY_CONTRACT` | Session registry for game sessions (`client/src/lib/gameSession.js`): players approve a temporary key once and play without wallet popups. It must implement `openSession(key, expiresAt)` (payable, forwards the ETH to the key), `closeSession()` (called by the key) and `sessions(key)`. Without it, the navbar and Dashboard hide game sessions |
 
 Backend (`.env` in the directory you start the backend from):
 
