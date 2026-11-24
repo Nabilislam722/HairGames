@@ -8,7 +8,9 @@ const dailyTaskSchema = new mongoose.Schema({
   description: { type: String, default: "" },
   reward: { type: Number, required: true, min: 1 }, // HP paid when the task is claimed
   game: { type: String, default: "any" }, // a gameId from ECOSYSTEM_CONTRACTS, or "any" for any game
-  playCount: { type: Number, required: true, min: 1 }, // plays of that game needed in the day
+  // The goal: exactly one of these two.
+  playCount: { type: Number, min: 1 }, // plays of that game needed in the day
+  playMinutes: { type: Number, min: 1 }, // minutes of verified play needed in the day (games on the hub)
   boost: { type: Number, default: 1, min: 1 }, // draw weight: 3 is three times as likely; above 1 shows as Boosted
   active: { type: Boolean, default: true }, // false keeps it out of the next draws
 }, { timestamps: true, versionKey: false });

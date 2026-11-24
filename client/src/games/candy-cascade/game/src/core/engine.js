@@ -3,9 +3,9 @@ import { Special, createPiece, isColorless, isStriped } from './pieces.js';
 
 // Tuned for a typical winning score around 10,000 and the highest around 15,000. The flat clear
 // bonus lifts every win equally, which keeps short score levels close to big blocker boards;
-// blockers and special blasts are cheap because big boards have lots of both. Score goals in
-// level-data.js use these points (the clear bonus never counts toward them). After changing
-// them, run `npm run stars`.
+// blockers and special blasts are cheap because big boards have lots of both. Stars don't depend
+// on points (see starsFor), but score goals in level-data.js do (the clear bonus never counts
+// toward them): after changing points, run `npm run balance` to retune those levels' moves.
 export const POINTS = Object.freeze({
   candy: 10, // per candy in a match, times the cascade number
   make: { [Special.STRIPE_H]: 20, [Special.STRIPE_V]: 20, [Special.BOMB]: 30, [Special.RAINBOW]: 40 },
@@ -83,6 +83,7 @@ export class Engine {
     this.busy = false;
     this.over = false;
     this.result = null;
+    this.movesLeftAtWin = null; // set when the goals are met, before the finale spends the rest
     this.stats = { swaps: 0, specials: 0, bestCascade: 0, shuffles: 0 };
     this.chocolateIdle = 0;
     // Every accepted player action, in order: [r, c, r, c] for a swap, [r, c] for a tap. With the
@@ -106,8 +107,16 @@ export class Engine {
     return this.goals.every((g) => g.left <= 0);
   }
 
-  starsFor(score) {
-    return this.level.stars.reduce((n, threshold) => n + (score >= threshold ? 1 : 0), 0);
+  // Stars come from the moves left when the goals are met: 1 for clearing the level, plus 1 for each
+  // threshold in level.starMoves ([for 2 stars, for 3 stars]) that many moves left reaches.
+  starsFor(movesLeft) {
+    return 1 + (this.level.starMoves ?? []).filter((needed) => movesLeft >= needed).length;
+  }
+
+  // The stars a win can still earn: what the moves left give if the move being played finishes the
+  // goals, or, between moves, after one more move. Fixed once the goals are met.
+  starsInReach() {
+    return this.starsFor(this.movesLeftAtWin ?? (this.busy ? this.moves : this.moves - 1));
   }
 
   context(swapCells = null) {
@@ -152,7 +161,7 @@ export class Engine {
       await this.afterMove(ctx);
       return true;
     } finally {
-      this.busy = false;
+      this.endTurn();
     }
   }
 
@@ -170,8 +179,14 @@ export class Engine {
       await this.afterMove(ctx);
       return true;
     } finally {
-      this.busy = false;
+      this.endTurn();
     }
+  }
+
+  // A move (or a refused swap) is over: the 'turn' hook tells the HUD it's the player's turn again.
+  endTurn() {
+    this.busy = false;
+    if (!this.over) this.emit('turn');
   }
 
   spendMove() {
@@ -481,13 +496,11 @@ export class Engine {
 
   // ---------------------------------------------------------------- bookkeeping
 
-  // A level's score stops at its cap (level.maxScore, which is also its 3-star score), so holding
-  // back the last goal to keep scoring with the remaining moves can't pay past it.
+  // There's no cap: holding back the last goal to keep scoring costs stars, since they come from
+  // the moves left at the win.
   addScore(points) {
     if (!points) return;
-    const cap = this.level.maxScore ?? Infinity;
-    if (this.score >= cap) return;
-    this.score = Math.min(cap, this.score + points);
+    this.score += points;
     for (const goal of this.goals) if (goal.type === 'score') goal.left = Math.max(0, goal.target - this.score);
     this.emit('score', this.score, points);
   }
@@ -569,6 +582,7 @@ export class Engine {
   // special goes off.
   async win() {
     this.over = true;
+    this.movesLeftAtWin = this.moves;
     this.emit('complete');
     this.addScore(POINTS.clear);
     await this.anim.levelComplete();
@@ -600,13 +614,13 @@ export class Engine {
       await this.finishStep(ctx);
       await this.resolve(ctx);
     }
-    this.result = { win: true, score: this.score, stars: Math.max(1, this.starsFor(this.score)) };
+    this.result = { win: true, score: this.score, stars: this.starsFor(this.movesLeftAtWin), movesLeft: this.movesLeftAtWin };
     this.emit('win', this.result);
   }
 
   async lose() {
     this.over = true;
-    this.result = { win: false, score: this.score, stars: 0 };
+    this.result = { win: false, score: this.score, stars: 0, movesLeft: 0 };
     this.emit('lose', this.result);
   }
 }

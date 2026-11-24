@@ -1,7 +1,8 @@
-// When the game runs inside HairGames, the page hosts it: it supplies the player's on-chain
-// progress, gets a server seed for every level attempt and saves wins on chain. Opened on its own,
-// there is no host and the game keeps progress locally. Messages only go to, and are only accepted
-// from, a parent window on the same origin.
+// When the game runs inside HairGames, the page hosts it: it supplies the player's progress, starts
+// every level attempt on chain (getting a server seed for it), proves play with checkpoints while the
+// level is open, and saves every finished attempt, won or lost. Opened on its own, there is no host
+// and the game keeps progress locally. Messages only go to, and are only accepted from, a parent
+// window on the same origin.
 
 /* global __CANDY_RULES__ */
 export const RULES = typeof __CANDY_RULES__ === 'string' ? __CANDY_RULES__ : 'dev';
@@ -49,7 +50,9 @@ export function connectHost() {
     ready: () => post({ type: 'ready', rules: RULES }),
     // Resolves to { sessionId, seed } for a new attempt at levelId.
     startLevel: (levelId) => request('start', { levelId }),
-    // Resolves once the win is verified and saved on chain, with the new progress.
-    submitWin: ({ sessionId, levelId, moves }) => request('won', { sessionId, levelId, moves, rules: RULES }),
+    // The moves so far, after every move: the host's checkpoints carry a hash of them.
+    reportMoves: (sessionId, moves) => post({ type: 'moves', sessionId, moves }),
+    // Resolves once the finished attempt (won or lost) is verified and saved, with the new progress.
+    submitResult: ({ sessionId, levelId, moves, win }) => request('result', { sessionId, levelId, moves, win, rules: RULES }),
   };
 }

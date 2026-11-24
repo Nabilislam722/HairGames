@@ -3,7 +3,7 @@ import { EPISODES, EPISODE_SIZE, LEVELS, episodeOf } from './core/levels.js';
 import { createRng } from './core/rng.js';
 import { connectHost } from './host.js';
 import { Hud } from './ui/hud.js';
-import { formatPoints, goalIcon, goalLabel, goalTargets } from './ui/goals.js';
+import { formatNumber, goalIcon, goalLabel, goalTargets } from './ui/goals.js';
 import { renderMap } from './ui/map.js';
 import { loadProgress, saveProgress, totalStars } from './ui/progress.js';
 import { Sound } from './view/audio.js';
@@ -16,14 +16,19 @@ const LOSE_LINES = ['So close!', 'Almost had it!', 'One more try?'];
 
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-// "5h 12m", "12m" or "a minute".
-const formatWait = (ms) => {
-  const minutes = Math.max(1, Math.ceil(ms / 60_000));
-  const hours = Math.floor(minutes / 60);
-  if (!hours) return minutes === 1 ? 'a minute' : `${minutes}m`;
-  return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
-};
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (ch) => `&#${ch.charCodeAt(0)};`);
+const STAR_IMG = '<img src="assets/candies/star.png" alt="">';
+
+// A level's star targets: the moves that must be left when the goals are met.
+function starTargets(level) {
+  const [two, three] = level.starMoves;
+  const row = (stars, need) =>
+    `<p><span class="modal-star-icons" role="img" aria-label="${stars} stars">${STAR_IMG.repeat(stars)}</span><span>Finish with <strong>${need}</strong> moves left</span></p>`;
+  // On stopwatch levels the top stars can ask for more moves than the level starts with.
+  const explained = /stopwatch/i.test(level.tip ?? '');
+  const note = level.bonusChance && three >= level.moves && !explained ? '<p class="modal-star-note">Stopwatch candies give you extra moves.</p>' : '';
+  return `<div class="modal-stars">${row(2, two)}${row(3, three)}${note}</div>`;
+}
 
 export class App {
   constructor(root, { images, snapshot = {} }) {
@@ -53,7 +58,8 @@ export class App {
 
     this.stage.boardArea = () => this.boardArea();
     this.stage.hudPoint = () => this.hud.movesPoint();
-    this.hud.onStar = (i, point) => this.meterStar(i, point);
+    this.hud.onStar = (i, point) => this.starBack(i, point);
+    this.hud.onStarLost = (i, point) => this.starLost(i, point);
     new ResizeObserver(() => (this.stage.dirty = true)).observe(this.hudEl);
     window.addEventListener('resize', () => {
       if (this.root.dataset.screen === 'map') this.renderMap(false);
@@ -68,10 +74,9 @@ export class App {
     }
   }
 
-  // On-chain progress from the host replaces the game state; settings stay as they are.
-  // `cooldowns` maps recently cleared levels to when they can be replayed (ms).
-  applyHostProgress({ unlocked, stars, best, cooldowns = {} }) {
-    Object.assign(this.progress, { unlocked: Math.max(1, unlocked), stars: { ...stars }, best: { ...best }, cooldowns: { ...cooldowns } });
+  // Progress from the host replaces the game state; settings stay as they are.
+  applyHostProgress({ unlocked, stars, best }) {
+    Object.assign(this.progress, { unlocked: Math.max(1, unlocked), stars: { ...stars }, best: { ...best } });
     if (this.root.dataset.screen === 'map') this.renderMap(false);
   }
 
@@ -229,15 +234,11 @@ export class App {
     }
   }
 
-  // Inside HairGames, players are steered to new levels instead of replaying old ones: a level with
-  // all 3 stars is finished (the contract won't start it again), and a cleared level can only be
-  // replayed once its cooldown from the last clear has passed (the host sends those times). On its
-  // own the game allows replays freely.
-  // The level's intro, or the mastered or cooldown screen.
+  // Inside HairGames a level with all 3 stars is finished (the server won't start it again), so
+  // players move on to new levels; any other cleared level can be replayed for more stars. On its own
+  // the game allows replays freely.
   openLevel(level) {
-    const replayAt = this.cooldownUntil(level);
     if (this.isMastered(level)) this.showMastered(level);
-    else if (replayAt) this.showCooldown(level, replayAt);
     else this.levelIntro(level);
   }
 
@@ -245,39 +246,15 @@ export class App {
     return !!this.host && (this.progress.stars[level.id] ?? 0) >= 3;
   }
 
-  // When a recently cleared level can be played again (ms), or null if it can be played now.
-  cooldownUntil(level) {
-    const replayAt = this.host ? this.progress.cooldowns?.[level.id] : null;
-    return replayAt && replayAt > Date.now() ? replayAt : null;
-  }
-
-  // The newest unlocked level, if it can be played right now.
+  // The newest unlocked level, if it isn't finished.
   newestPlayable() {
     const newest = LEVELS.find((l) => l.id === this.progress.unlocked);
-    return newest && !this.isMastered(newest) && !this.cooldownUntil(newest) ? newest : null;
+    return newest && !this.isMastered(newest) ? newest : null;
   }
 
   playNewest(target) {
     this.openMap(target.id);
     setTimeout(() => this.root.dataset.screen === 'map' && this.levelIntro(target), 650);
-  }
-
-  showCooldown(level, replayAt) {
-    const target = this.newestPlayable();
-    this.openModal(
-      'intro',
-      `<h2 class="ribbon" id="modal-title">Level ${level.id}</h2>
-      <div class="modal-body">
-        <p class="modal-sub">${escapeHtml(level.name)}</p>
-        <p class="modal-text">You cleared this level recently. You can play it again in <strong>${formatWait(replayAt - Date.now())}</strong>.</p>
-        <p class="modal-text">${target ? 'New levels pay the most Hair Points. Keep climbing!' : 'Come back soon!'}</p>
-        <div class="modal-actions">
-          <button class="btn btn-quiet" type="button" data-action="close">Back</button>
-          ${target ? `<button class="btn btn-candy" type="button" data-action="newest">Play level ${target.id}</button>` : ''}
-        </div>
-      </div>`,
-      { close: () => this.closeModal(), newest: () => this.playNewest(target) },
-    );
   }
 
   showMastered(level) {
@@ -305,7 +282,7 @@ export class App {
     const goals = goalTargets(level);
     const goalItems = goals
       .map(
-        (g) => `<li class="modal-goal"><img src="${goalIcon(g)}" alt=""><strong>${g.type === 'score' ? formatPoints(g.target) : g.target}</strong><span>${escapeHtml(goalLabel(g))}</span></li>`,
+        (g) => `<li class="modal-goal"><img src="${goalIcon(g)}" alt=""><strong>${g.type === 'score' ? formatNumber(g.target) : g.target}</strong><span>${escapeHtml(goalLabel(g))}</span></li>`,
       )
       .join('');
     const challenge = level.challenge
@@ -320,6 +297,7 @@ export class App {
         <ul class="modal-goals" aria-label="Goals">${goalItems}</ul>
         ${level.tip ? `<p class="modal-text">${escapeHtml(level.tip)}</p>` : ''}
         <p class="modal-moves"><img src="assets/items/stopwatch.png" alt="">${level.moves} moves</p>
+        ${starTargets(level)}
         <div class="modal-actions">
           <button class="btn btn-quiet" type="button" data-action="close">Back</button>
           <button class="btn btn-candy" type="button" data-action="start">Play</button>
@@ -414,14 +392,22 @@ export class App {
             onArrive: () => {
               if (this.session !== session) return;
               this.hud.setMoves(engine.moves);
+              this.hud.setStars(engine.starsInReach());
               this.hud.bumpMovesIcon();
               this.stage.fx.sparkles(to.x, to.y, 8, 24, { size: 0.6 });
             },
           });
         } else {
           this.hud.setMoves(moves, delta !== 0);
+          this.hud.setStars(engine.starsInReach());
         }
       }),
+      // A move is over without meeting the goals: finishing now takes one more move.
+      turn: live(() => {
+        this.hud.setStars(engine.starsInReach());
+        this.host?.reportMoves(session.sessionId, engine.moveLog);
+      }),
+      complete: live(() => this.hud.setStars(engine.starsInReach())),
       goal: live((index, goal, cell, detail) => this.goalProgress(session, index, goal, cell, detail)),
       win: live((result) => this.finish(session, result)),
       lose: live((result) => this.finish(session, result)),
@@ -467,10 +453,17 @@ export class App {
     });
   }
 
-  meterStar(i, point) {
+  // A star came back in reach (a stopwatch bonus).
+  starBack(i, point) {
     this.stage.fx.sparkles(point.x, point.y, 8, 16, { size: 0.7 });
     this.stage.fx.ring(point.x, point.y, 4, 34, '#fff3b0', 0.45, 6);
     this.sound.play('star', { step: i });
+  }
+
+  // A star went out of reach: the moves left fell to its mark.
+  starLost(i, point) {
+    this.stage.fx.ring(point.x, point.y, 4, 26, '#c9b6d6', 0.35, 4);
+    this.sound.play('nope');
   }
 
   async finish(session, result) {
@@ -483,24 +476,25 @@ export class App {
       if (level.id === LEVELS.length) p.unlocked = LEVELS.length;
       saveProgress(p);
     }
+    if (this.host) this.saveResult(session, result);
     await sleep(result.win ? 650 : 750);
     if (this.session !== session) return;
     if (result.win) this.showWin(session, result);
     else this.showLose(session);
-    if (result.win && this.host) this.saveWin(session);
   }
 
-  // The host verifies the moves, saves the result on chain and sends back the new progress. It
-  // shows its own progress and error screens over the game, so failures need nothing here: the
-  // level just stays as it was on chain.
-  async saveWin(session) {
+  // The host verifies the moves, saves the attempt on chain (a loss too: it's play, and counts toward
+  // daily tasks) and sends back the new progress. It shows its own progress and error screens over
+  // the game, so failures need nothing here: the level just stays as it was.
+  async saveResult(session, result) {
     try {
-      const { progress } = await this.host.submitWin({
+      const { progress } = await this.host.submitResult({
         sessionId: session.sessionId,
         levelId: session.level.id,
         moves: session.engine.moveLog,
+        win: result.win,
       });
-      this.applyHostProgress(progress);
+      if (progress) this.applyHostProgress(progress);
     } catch {
       // Shown by the host.
     }
@@ -510,8 +504,10 @@ export class App {
     const { level } = session;
     const next = LEVELS.find((l) => l.id === level.id + 1);
     const newBest = result.score > session.prevBest;
-    // Inside HairGames a saved win starts the level's replay cooldown (or finishes it at 3 stars).
-    const canReplay = !this.host;
+    // Inside HairGames 3 stars finish a level; below that it can be replayed for more.
+    const canReplay = !this.host || result.stars < 3;
+    const left = `Finished with <strong>${result.movesLeft}</strong> ${result.movesLeft === 1 ? 'move' : 'moves'} left`;
+    const nextStar = result.stars < 3 ? ` · ${result.stars + 1} stars need ${level.starMoves[result.stars - 1]}` : '';
     const stars = [0, 1, 2]
       .map((i) => `<div class="result-star"><img class="star-off" src="assets/candies/star.png" alt=""><img class="on" src="assets/candies/star.png" alt=""></div>`)
       .join('');
@@ -522,7 +518,8 @@ export class App {
         <p class="modal-sub">${pick(WIN_LINES)}</p>
         <div class="result-stars" role="img" aria-label="${result.stars} of 3 stars">${stars}</div>
         <p class="result-score" id="result-score">0</p>
-        <p class="result-best${newBest ? ' new' : ''}">${newBest ? 'New best score!' : `Best ${formatPoints(session.prevBest)}`}</p>
+        <p class="result-best${newBest ? ' new' : ''}">${newBest ? 'New best score!' : `Best ${formatNumber(session.prevBest)}`}</p>
+        <p class="result-moves">${left}${nextStar}</p>
         <div class="modal-actions">
           ${canReplay ? '<button class="btn btn-quiet" type="button" data-action="replay">Replay</button>' : ''}
           <button class="btn btn-mint" type="button" data-action="next">${next ? 'Next level' : 'Level map'}</button>
@@ -542,7 +539,7 @@ export class App {
     const start = performance.now();
     const count = (now) => {
       const k = Math.min(1, (now - start) / 1200);
-      scoreEl.textContent = formatPoints(result.score * (1 - (1 - k) ** 3));
+      scoreEl.textContent = formatNumber(result.score * (1 - (1 - k) ** 3));
       if (k < 1 && scoreEl.isConnected) requestAnimationFrame(count);
     };
     requestAnimationFrame(count);
@@ -569,7 +566,7 @@ export class App {
     const items = engine.goals
       .map((g) => {
         const met = g.left <= 0;
-        const value = met ? 'Done' : g.type === 'score' ? formatPoints(g.left) : g.left;
+        const value = met ? 'Done' : g.type === 'score' ? formatNumber(g.left) : g.left;
         const caption = met ? escapeHtml(goalLabel(g)) : g.type === 'score' ? 'points to go' : `${escapeHtml(goalLabel(g))} left`;
         return `<li class="modal-goal${met ? ' met' : ''}"><img src="${goalIcon(g)}" alt=""><strong>${value}</strong><span>${caption}</span></li>`;
       })

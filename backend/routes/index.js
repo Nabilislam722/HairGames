@@ -18,24 +18,25 @@ import {
 } from "../controllers/pointsController.js";
 
 import {
-    startCandySession,
-    verifyCandyLevel,
-} from "../controllers/candyCascadeController.js";
-
-import {
-    startMotoSession,
-    verifyMotoRide,
-} from "../controllers/motoRushController.js";
-
-import {
-    startPixelSession,
-    verifyPixelMatch,
-} from "../controllers/pixelFighterController.js";
-
-import {
     getDailyTasks,
     claimDailyTask,
 } from "../controllers/dailyTasksController.js";
+
+import {
+    getHubConfig,
+    startHubMotoSession,
+    verifyHubMotoRide,
+    getHubMotoProgress,
+    startHubPixelSession,
+    verifyHubPixelMatch,
+    getHubPixelStats,
+    startHubCandySession,
+    verifyHubCandyLevel,
+    getHubCandyProgress,
+    reportHubSave,
+    getHubPlaytime,
+    getHubRuns,
+} from "../controllers/hubController.js";
 
 import { getBanStatus, rejectBanned } from "../services/moderation.js";
 
@@ -72,12 +73,30 @@ router.post("/race/signature", rejectBanned, generateRaceSignature);
 router.post("/fishing/signature", rejectBanned, generateFishingSignature);
 router.post("/fruitninja/signature", rejectBanned, generateFruitNinjaSignature);
 router.post("/proof-of-patience/signature", rejectBanned, generateProofOfPatienceSignature);
-router.post("/candy-cascade/session", rejectBanned, startCandySession);
-router.post("/candy-cascade/verify", rejectBanned, verifyCandyLevel);
-router.post("/moto-rush/session", rejectBanned, startMotoSession);
-router.post("/moto-rush/verify", rejectBanned, verifyMotoRide);
-router.post("/pixel-fighter/session", rejectBanned, startPixelSession);
-router.post("/pixel-fighter/verify", rejectBanned, verifyPixelMatch);
+
+// Candy Cascade, Moto Rush and Pixel Fighters moved to the hub (below). Their old per-game contracts paid
+// HP per play; these routes no longer sign for them, so a page still open from before is told to reload.
+const movedToHub = (req, res) =>
+    res.status(410).json({ error: "This game now saves through game sessions. Reload the page to keep playing." });
+for (const game of ["candy-cascade", "moto-rush", "pixel-fighter"]) {
+    router.post(`/${game}/session`, movedToHub);
+    router.post(`/${game}/verify`, movedToHub);
+}
+
+// Games on HairGames Hub V2 (session keys, checkpoints, HP from daily tasks)
+router.get("/hub/config", getHubConfig);
+router.post("/hub/moto-rush/session", rejectBanned, startHubMotoSession);
+router.post("/hub/moto-rush/verify", rejectBanned, verifyHubMotoRide);
+router.get("/hub/moto-rush/progress", getHubMotoProgress);
+router.post("/hub/pixel-fighter/session", rejectBanned, startHubPixelSession);
+router.post("/hub/pixel-fighter/verify", rejectBanned, verifyHubPixelMatch);
+router.get("/hub/pixel-fighter/stats", getHubPixelStats);
+router.post("/hub/candy-cascade/session", rejectBanned, startHubCandySession);
+router.post("/hub/candy-cascade/verify", rejectBanned, verifyHubCandyLevel);
+router.get("/hub/candy-cascade/progress", getHubCandyProgress);
+router.post("/hub/saved", rejectBanned, reportHubSave);
+router.get("/hub/playtime", getHubPlaytime);
+router.get("/hub/runs", getHubRuns);
 
 // Points Management
 router.post("/points/verify", rejectBanned, verifyPoints);

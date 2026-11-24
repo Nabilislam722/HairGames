@@ -72,49 +72,82 @@ Space Huggers, Candy Cascade and Moto Rush are standalone games served from `cli
 
 ## Candy Cascade
 
-The game's source lives in its own repo, [candy-Cascade](https://github.com/Nabilislam722/candy-Cascade). A copy of its source is kept in `client/src/games/candy-cascade/game/` (the backend replays moves with it), and the built game is in `client/public/candy-cascade/`.
+The game's source lives in its own repo, [candy-Cascade](https://github.com/Nabilislam722/candy-Cascade). A copy of its source is kept in `client/src/games/candy-cascade/game/` (the backend replays moves with it, and it matches the repo file for file), and the built game is in `client/public/candy-cascade/`.
 
-### On-chain saves and anti-cheat
+### Stars
 
-Progress (highest cleared level, best score and stars per level) lives in the `CandyCascade` contract, not in the browser.
+Stars come from the **moves left when the goals are met**, not from score:
 
-1. Every attempt starts on chain: the player sends `startLevel(levelId)`, which opens a numbered run. A new start replaces any open run, so losing or quitting never leaves a player stuck.
-2. As soon as the wallet sends the start, the page asks `POST /api/candy-cascade/session` for the board. The server checks the start transaction (sender, contract, level), even while it is still pending, and picks the random seed. Each start transaction gets exactly one seed.
-3. The game records every move. When the level is won, the page sends the moves to `POST /api/candy-cascade/verify`.
-4. The server replays the moves with the game's own engine and signs only the score and stars the replay produced. It never uses a score from the client. It also checks that the start was mined and is still the open run, and binds the signature to that run.
-5. The player submits `submitLevel(...)`. The contract checks the signature against the open run, then closes it, so one start can save at most one win. It also checks the level order and the fee.
-6. `POST /api/points/add` reads the `LevelCleared` event and credits HP for **improvement over the previous best** on that level, scaled like every other game's score (see [HP per play](#hp-per-play)). Replays that don't beat it earn nothing.
+- **1 star:** clear the level.
+- **2 and 3 stars:** finish with at least `starMoves[0]` and `starMoves[1]` moves left. Each level has its own marks, shown on its intro ("Finish with 6 moves left").
+- **Stopwatch candies** add moves, so on their levels the top stars can ask for more moves than the level starts with.
 
-A level with all **3 stars is finished**. The contract won't start it again and the backend won't issue a board for it, so players move on to new levels instead of farming old ones. Levels with 1 or 2 stars can be replayed to earn the rest.
+The HUD shows the three stars with the moves each needs. A star dims as soon as it's out of reach and lights again if a stopwatch brings it back. After a win, the result screen says how many moves were left and what the next star needed. Score still counts (best score per level) but has no cap: holding back the last goal to keep scoring only costs stars.
 
-On phones, the page sends every request through `fetchWithRetry` (`client/src/lib/network.js`: 12 s timeout, 3 tries) and pings `/api/ping` every 15 s while the game is open. If a board request fails after the start went out, "Try again" reuses that start instead of asking for a new transaction.
+### Difficulty
 
-The backend loads the engine from `client/src/games/candy-cascade/game/src/core`, the same files the game is built from. A rules fingerprint is built into the game and computed again by the backend. If they differ, the backend refuses to sign and players are told to reload.
+Difficulty rises in steps of 5 levels along `DIFFICULTY_CURVE` in `src/core/levels.js`. Each point on it sets:
+
+- **How its levels play:** the goal size (`targetScale`, from 1× to 1.4× for score and collect goals) and the refill assist (`cascadeChance`, from 0.35 to none by level 301). With a strong assist the board plays itself, so it fades out.
+- **What `npm run balance` aims for:** it plays every level 1,000 times as two players:
+  - the balancing bot, which aims at the goals;
+  - a casual player, half the bot's moves and half random ones.
+
+  It gives each level the fewest moves with which both reach their win rate, between 10 and 50 moves. It then sets the star marks so the bot earns 2 and 3 stars in the curve's share of its wins.
+
+Every 10th level is a challenge, balanced to lower win rates. Measured with `npm run balance`:
+
+| Levels | Bot wins | Casual wins | Bot gets 3 stars | Challenges: bot / casual wins |
+| --- | --- | --- | --- | --- |
+| 1–20 | 97% | 89% | 39% | 83% / 69% |
+| 21–100 | 91% | 79% | 30% | 73% / 51% |
+| 101–300 | 84% | 66% | 23% | 65% / 43% |
+| 301–500 | 80% | 60% | 20% | 62% / 39% |
+
+The bot never plans ahead, so these numbers show how hard levels feel relative to each other, not exact odds for people.
+
+### Saving on the hub
+
+Candy Cascade plays on HairGames Hub V2 (see [Hub backend](#hub-backend)). Without `VITE_GAME_HUB_CONTRACT`, the page runs it on its own, with progress in the browser.
+
+1. **Start:** every attempt starts with `startRun(2, level)`, sent by the session key or the wallet. `POST /api/hub/candy-cascade/session` checks it: the level must be unlocked, without 3 stars yet. The server also picks the board's seed, once per start.
+2. **Play:** after every move, the game tells the page its moves so far, and the page's checkpoints carry a hash of them.
+3. **Verify:** every finished attempt, won or lost, goes to `POST /api/hub/candy-cascade/verify`. The server replays the moves with the game's own engine and signs what the replay produced:
+   - the score;
+   - `details`: the level, stars (0 for a loss), moves left and moves played.
+
+   It never uses a result from the client.
+4. **Save:** the page saves the result with `submitRun` and reports it.
+   - **A loss is saved too:** it counts as a play, and its time as playtime, but it changes no progress.
+   - **Timing:** a level has no clock in its replay, so it counts at most 15 seconds of playtime per move. Its result can't be saved sooner than 0.5 seconds per move after its start (`CANDY_SECONDS_PER_MOVE`).
+
+**Progress** is kept by the backend (`hubprogresses`) and read with `GET /api/hub/candy-cascade/progress`: the highest unlocked level, plus the best stars and score per level. Levels open in order. A level with 3 stars is finished, and any other can be played again for more.
+
+**Rules fingerprint.** The backend loads the engine from `client/src/games/candy-cascade/game/src/core`, the same files the game is built from. The build bakes in a hash of those files, and the backend computes it again. If they differ, the backend refuses to sign and the player is told to reload.
+
+The old `CandyCascade` contract, which paid HP per level, is retired. `/api/candy-cascade/session` and `/verify` answer 410 with "reload the page", and the levels, stars and scores saved there aren't carried over.
 
 ### Changing the game
 
-1. Edit it in the [candy-Cascade](https://github.com/Nabilislam722/candy-Cascade) repo. After changing points or levels, run `npm run stars` to retune star scores.
+1. Edit it in the candy-Cascade repo. After changing levels, points or the difficulty curve, run `npm run balance`. It rewrites the moves and star marks in `src/core/level-data.js`; add `-- --dry` to only see the numbers, or give a range (`-- 40 60`).
 2. Run `npm test`, then `npm run build`.
 3. Copy `dist/index.html` and `dist/assets/` into `client/public/candy-cascade/`.
-4. Copy the changed `src/` files into `client/src/games/candy-cascade/game/src/`, and restart the backend.
+4. Copy `src/`, `index.html` and `styles.css` into `client/src/games/candy-cascade/game/`, then restart the backend.
 5. Deploy the client and the backend together.
+
+`npm run simulate` prints win and star rates for the levels as they are.
 
 ### Adding levels
 
 The game has 500 levels in 25 episodes.
 
-1. In the game repo, raise `TOTAL_LEVELS` in `tools/generate-levels.mjs`, run `npm run levels -- <first new> <last>`, then `npm run stars -- <first new> <last>`. Existing levels stay untouched.
-2. Extend `EPISODES` and `DIFFICULTY_CURVE` in `src/core/levels.js`.
+1. In the game repo, raise `TOTAL_LEVELS` in `tools/generate-levels.mjs`, run `npm run levels -- <first new> <last>`, then `npm run balance -- <first new> <last>`. Existing levels stay untouched.
+2. Extend `EPISODES` (and `DIFFICULTY_CURVE`, to go past level 500) in `src/core/levels.js`.
 3. Raise `LEVEL_COUNT` in `backend/services/candyCascade.js`.
-4. Have the contract owner call `setLevelCount(n)`. No redeploy is needed.
-
-### Deploying the contract
-
-In `contract/.env`, set `SIGNER_ADDRESS` to the address of the backend's `SERVER_PRIVATE_KEY`, then run `npm run deploy:candy` in `contract/`. The fee is set in `scripts/deploy-candy-cascade.js`.
 
 ## Moto Rush
 
-The game is plain JavaScript in `client/public/moto-rush/`, with no build step. `client/src/games/moto-rush/MotoRushPage.jsx` loads it in an iframe and handles the wallet, the transactions and the result box. The page and the game talk through `postMessage`.
+The game is plain JavaScript in `client/public/moto-rush/`, with no build step. `client/src/games/moto-rush/MotoRushPage.jsx` loads it in an iframe and runs its starts and saves on the hub (see [Playing on the hub](#playing-on-the-hub)). The page and the game talk through `postMessage`.
 
 | File | What it does |
 | --- | --- |
@@ -127,22 +160,22 @@ The game is plain JavaScript in `client/public/moto-rush/`, with no build step. 
 
 **Levels.** The first 9 levels are built by hand. The rest come from a seeded generator, so every player gets the same tracks, and they move to the next world every 5 levels: jungle, desert, ice, meadow, cave. A level's `stars` holds the finish times for 3 and 2 stars. Finishing at all earns 1 star, and every landed flip takes 1 second off the time. Add `#autopilot` to the game's URL to let the built-in driver ride every level.
 
-**Bikes.** Four bikes unlock with total stars: at 0, 5, 12 and 20. The #27 Venom is only for holders of the Venom NFT (`nft/venom/`). It's the fastest bike and gets one revive per run. A ride on it adds 0.2 to the HP multiplier, up to 1.7× (`MOTO_RUSH` in `backend/config/constants.js`). The server checks the bike when it verifies a ride.
+**Bikes.** Four bikes unlock with total stars: at 0, 5, 12 and 20. The #27 Venom is only for holders of the Venom NFT (`nft/venom/`). It's the fastest bike and gets one revive per run. The server checks the bike when it verifies a ride. (A Venom ride used to add 0.2 to that level's HP multiplier, up to 1.7× (`MOTO_RUSH` in `backend/config/constants.js`), but hub levels pay no HP.)
 
-### On-chain saves and anti-cheat
+### Saving on the hub
 
-Progress (the levels completed, with time and stars) lives in the `MotoRush` contract. Without `VITE_MOTO_RUSH_CONTRACT`, the page runs the game as free play: progress stays in the browser and no HP is paid.
+Moto Rush plays on HairGames Hub V2 (see [Hub backend](#hub-backend)). Without `VITE_GAME_HUB_CONTRACT`, the page runs the game as free play, with progress in the browser.
 
-1. Every attempt starts on chain: the player sends `startLevel(levelId)`, which opens a numbered run on their next level. Levels unlock in order. A new start replaces any open run, so crashing or quitting never leaves a player stuck.
-2. The page sends the start transaction to `POST /api/moto-rush/session`. The server checks it (sender, contract, level), even while it is still pending, checks that the level is the player's next one, and returns a session id. Each start transaction gets one session.
-3. The game records the controls (gas, brake, lean back, lean forward) for every physics step, 120 a second. At the finish, the page sends them to `POST /api/moto-rush/verify` with the bike and the step of any revive.
-4. The server checks that the player may ride that bike, replays the ride with the game's own physics, and signs only a ride that reached the finish, with the time and stars the replay produced. It never uses a time from the client. It also checks that the start was mined and is still the open run, and binds the signature to that run.
-5. The player submits `submitLevel(...)`. The contract checks the signature against the open run, closes it and locks the level. It also refuses a finish time shorter than the time since the run was opened, so the page waits for the chain's clock (`submitAfter`) before asking the wallet.
-6. `POST /api/points/add` reads the `LevelCompleted` event and pays by stars (see [HP per play](#hp-per-play)), plus the Venom bonus if the ride used it.
+1. **Start:** every attempt starts with `startRun(1, level)`, sent by the session key or the wallet. `POST /api/hub/moto-rush/session` checks the start, even while it's pending, and that the level is the player's next one. Levels unlock in order.
+2. **Record:** the game records the controls (gas, brake, lean back, lean forward) for every physics step, 120 a second. At the finish, the page sends them to `POST /api/hub/moto-rush/verify` with the bike and the step of any revive.
+3. **Verify:** the server checks the player may ride that bike: the Venom needs the NFT, and other bikes need their stars. It replays the ride with the game's own physics and signs only a ride that reached the finish, with the time and stars the replay produced. The result can't be saved sooner than the ride's start plus its length.
+4. **Save:** the page saves it with `submitRun` and reports it. Progress (levels completed, with time and stars) is kept by the backend and read with `GET /api/hub/moto-rush/progress`.
 
-Each level can be completed **once**, whatever its stars. The contract won't start it again, so its HP is paid once.
+Each level can be completed **once**. Levels pay no HP: daily tasks pay for plays and playtime.
 
-The backend loads the physics from `client/public/moto-rush/` (`MOTO_RUSH_DIR` to change it). The game and the backend both hash `js/detmath.js`, `vendor/planck.min.js`, `js/levels.js` and `js/sim.js`. If the hashes differ, the backend refuses to sign and the player is told to reload and ride the level again.
+The backend loads the physics from `client/public/moto-rush/` (`MOTO_RUSH_DIR` to change it). The game and the backend both hash `js/detmath.js`, `vendor/planck.min.js`, `js/levels.js` and `js/sim.js`. If the hashes differ, the backend refuses to sign, and the player is told to reload and ride the level again.
+
+The old `MotoRush` contract is retired: `/api/moto-rush/session` and `/verify` answer 410, and its progress isn't carried over.
 
 ### Changing the game
 
@@ -151,34 +184,33 @@ The backend loads the physics from `client/public/moto-rush/` (`MOTO_RUSH_DIR` t
 
 ### Adding levels
 
-1. In `js/levels.js`, raise `TOTAL` and give each new level an entry in `GEN_FIX` (the generator re-roll that rides cleanly), `GEN_TIMES` (the starter bike's autopilot time, which sets the 2-star time) and `GEN_THREE` (the 3-star time). A level without them gets 60 and 80 seconds.
+1. In `js/levels.js`, raise `TOTAL` and give each new level an entry in:
+   - `GEN_FIX`: the generator re-roll that rides cleanly;
+   - `GEN_TIMES`: the starter bike's autopilot time, which sets the 2-star time;
+   - `GEN_THREE`: the 3-star time.
+
+   A level without them gets 60 and 80 seconds.
 2. Raise `LEVEL_COUNT` in `backend/services/motoRush.js`.
-3. Have the contract owner call `setLevelCount(n)`. No redeploy is needed.
-
-### Deploying the contract
-
-In `contract/.env`, set `SIGNER_ADDRESS` to the address of the backend's `SERVER_PRIVATE_KEY`, and optionally `MOTO_SUBMISSION_FEE_ETH` (default `0.000008`). Run `npm run deploy:moto` in `contract/`. Then put the new address in `ECOSYSTEM_CONTRACTS.moto_rush` in `backend/config/constants.js`, and in `VITE_MOTO_RUSH_CONTRACT` in `client/.env`.
 
 ## HP per play
 
-`POST /api/points/add` turns the score in a confirmed transaction into HP, then applies the player's NFT multiplier:
+Games on HairGames Hub V2 (Moto Rush, Candy Cascade and Pixel Fighters) pay no HP per play: [daily tasks](#daily-tasks) pay for their plays and playtime.
 
-- **Moto Rush** pays by stars: 10,000 HP for 3, 7,000 for 2 and 5,000 for 1 (`STAR_HP` in `backend/services/motoRush.js`). A ride on the #27 Venom raises its multiplier to as much as 1.7× (see [Moto Rush](#moto-rush)).
-- **Every other game** pays at most 3,000 HP a play (`GAME_HP` in `backend/config/constants.js`), and the score a game shows is the HP the play earns:
-  - Games whose score the server checks or works out keep it on chain unchanged; the server multiplies it by the game's scale, and the game shows it already scaled (`client/src/lib/hp.js`, and `formatPoints` in Candy Cascade's `ui/goals.js`).
+For the other games, `POST /api/points/add` turns the score in a confirmed transaction into HP, then applies the player's NFT multiplier:
+
+- **Each game** pays at most 3,000 HP a play (`GAME_HP` in `backend/config/constants.js`), and the score a game shows is the HP the play earns:
+  - Games whose score the server checks or works out keep it on chain unchanged; the server multiplies it by the game's scale, and the game shows it already scaled (`client/src/lib/hp.js`).
   - Games whose score comes straight from the browser keep their points small in the game itself and stop the score at 3,000.
 
 | Game (`gameId`) | How | A top run |
 |---|---|---|
 | Need for Hair (`racing_game`) | scale 0.2 | 15,000 on chain, 3,000 HP |
 | Proof of Patience (`proof_of_patience`) | scale 0.2 | 15,000 on chain, 3,000 HP |
-| Candy Cascade (`candy_cascade`) | scale 0.2, paid on improvement over your best | about 11,000 on chain for a 3-star clear, 2,200 HP |
 | Space Huggers (`space_huggers`) | scale 0.3 | about 9,750 on chain for a full level from level 10 on, 2,925 HP |
 | Max Prø Fishing (`fishing_party`) | points in the game, stops at 3,000 | 3,000 |
 | Max Fruit Slicer (`fruit_ninja`) | points in the game, stops at 3,000 | 3,000 |
 | Void Striker (`default_legacy`) | points in the game, stops at 3,000 | 3,000 |
 
-The candy bundle in `client/public/candy-cascade` is built from `client/src/games/candy-cascade/game`; a change to how it shows points goes in both.
 
 ## Daily tasks
 
@@ -205,13 +237,14 @@ db.dailytasks.insertOne({
 | `description` | Shown under the title. Optional |
 | `reward` | HP paid when the task is claimed. Required |
 | `game` | The game whose plays count: a `gameId` from `ECOSYSTEM_CONTRACTS` in `backend/config/constants.js`, or `"any"` (the default) for every game |
-| `playCount` | Plays needed in the day. Required |
+| `playCount` | Plays needed in the day. Give this or `playMinutes`, not both |
+| `playMinutes` | Minutes of verified play needed in the day. Only hub games have verified playtime, so `game` must be one of `HUB.LIVE` (`moto_rush`, `pixel_fighter`, `candy_cascade`) or `"any"` (the minutes of every hub game together). See [Playtime](#playtime) |
 | `boost` | Draw weight, 1 by default: a task with boost 3 is three times as likely to be drawn as one with boost 1, and shows a Boosted badge. Use it to promote a new game |
 | `active` | `false` keeps the task out of future draws. A task without the field counts as active |
 
-The `gameId`s are `moto_rush`, `candy_cascade`, `pixel_fighter`, `proof_of_patience`, `fruit_ninja`, `default_legacy` (Void Striker), `space_huggers`, `racing_game` (Need for Hair) and `fishing_party`. A task with an unknown game, or without a title, reward or play count, is skipped.
+The `gameId`s are `moto_rush`, `candy_cascade`, `pixel_fighter`, `proof_of_patience`, `fruit_ninja`, `default_legacy` (Void Striker), `space_huggers`, `racing_game` (Need for Hair) and `fishing_party`. A task is skipped if it has an unknown game, no title or reward, or not exactly one goal (`playCount` or `playMinutes`, a whole number from 1), or if it's a minutes task for a game that isn't on the hub.
 
-Edits show on the Dashboard within a minute, and claims use the current reward and play count. Which tasks were drawn stays fixed for the day:
+Edits show on the Dashboard within a minute, and claims use the current reward and goal. Which tasks were drawn stays fixed for the day:
 
 - **New task:** goes into the next day's draw.
 - **Deleted task:** drops off today's list.
@@ -231,10 +264,158 @@ The Dashboard links the block on mempool.space, and anyone can redo the draw fro
 
 ### Progress and claiming
 
-- **A play counts once its HP is credited:** every game save that `/api/points/add` accepts is a play, even one that pays 0 HP. Only plays from the current UTC day count.
-- **`GET /api/tasks/daily?wallet=0x…`** returns today's tasks with the wallet's plays and claims. **`POST /api/tasks/daily/claim`** pays one task once its plays are done.
-- **Each task can be claimed once a day** (`dailytaskclaims`). The HP goes to the wallet's lifetime points, like bonus tasks, and doesn't count toward the weekly event.
+- **A play is a saved game:**
+  - on the older per-game contracts, a save that `/api/points/add` accepts, even one that pays 0 HP;
+  - on the hub, a saved run (`RunSaved`), which pays no HP by itself.
+- **Minutes are verified hub playtime** (see [Playtime](#playtime)), rounded down to whole minutes.
+- **Only the current UTC day counts.**
+- **`GET /api/tasks/daily?wallet=0x…`** returns today's tasks. Each has a `unit` (`"plays"` or `"minutes"`), a `goal`, the wallet's `progress` (capped at the goal) and whether it's `claimed`. `playCount` and `plays` repeat the goal and progress for the current Dashboard.
+- **`POST /api/tasks/daily/claim`** pays a task once its goal is reached:
+  - The HP is the task's `reward` times the wallet's NFT multiplier, including any NFT bonus for the task's game (`nft.walletMultiplier`).
+  - It goes to the wallet's lifetime points and counts toward the weekly event.
+  - The claim in `dailytaskclaims` keeps the HP paid, the `baseReward` and the `multiplier`, and shows in the HP chart's history.
+- **Each task can be claimed once a day.**
 - **Tasks left unclaimed at the reset are gone.**
+
+## HairGames Hub V2 and game sessions
+
+Two contracts in `contract/contracts/`, `HairGamesSessionRegistry` (in `SessionRegistry.sol`) and `HairGamesHubV2`, replace the per-game contracts for new play, so players can play without a wallet popup for every transaction. Both are deployed on Hemi mainnet: the hub at `0x1758E07a53dec67624994785Be89294f7d513860` and the registry at `0x7c46c9B8DD81eb8388F39763C1737De2AEDAd681`. Moto Rush, Candy Cascade and Pixel Fighters play on them (see [Hub backend](#hub-backend) and [Playing on the hub](#playing-on-the-hub)).
+
+Both are compiled with Solidity 0.8.39, the latest stable release, with 1,000,000 optimizer runs for cheap calls. This is a per-file override in `hardhat.config.js`:
+
+- **Compiler pipeline:** the legacy pipeline, not via-IR, measured to give the cheapest checkpoint and the cheapest hour of play.
+- **EVM target:** `cancun`, the newest level Hemi is confirmed to run. Newer compilers default to later EVM versions, so the target is set explicitly.
+- **Other contracts:** stay on 0.8.24 with their own settings, so the contracts already deployed still match their verified bytecode.
+
+### HairGamesSessionRegistry
+
+A wallet appoints a **session key**: a key kept in the player's browser, holding a small ETH balance for gas and fees. Until the session ends, the key plays as the wallet on contracts that ask the registry. Token and NFT contracts never ask it, so the key can't touch the player's tokens or NFTs.
+
+- **`openSession(key, expiresAt, r, vs)`** opens or renews a session (at most 30 days), and forwards any ETH sent with it to the key; renewing with ETH tops the key up. The key signs its consent (EIP-712 `SessionConsent(owner, key, expiresAt)`, sent as a compact EIP-2098 signature), so nobody can tie a key they don't hold to their own wallet, not even by copying a player's pending transaction.
+- **ETH sent to a key stays in the key.** No contract can take it back, so the site has the key send what's left to the wallet when the session ends. It's only lost if the browser loses the key.
+- **A key belongs to one wallet for good.** Only that wallet can renew it.
+- **Ending a session:** the key can call `closeSession()`, the wallet can call `revokeSession(key)` for one key, or `revokeAll()` for every key at once (after losing a device).
+- **A live session key can't open sessions itself**, so sessions never chain.
+- **`playerFor(caller)`** answers who a call plays for: the wallet behind a live session key, otherwise the caller.
+- **No owner, admin or upgrade path:** nobody can change who a key plays for.
+
+### HairGamesHubV2
+
+One contract for every game. The game rules (level order, stars, replays, NFT-only items) stay in the backend, which signs only results it has checked. The hub checks who the player is, the fees and the signature, and records everything as events.
+
+Games are numbered in the order they're listed (1, 2, 3…), because a small number fits in the same storage slot as a run. `gameOf(name)` and `gameName(game)` translate between numbers and the backend's ids, which are `bytes32` short strings (`ethers.encodeBytes32String("moto_rush")`).
+
+- **`startRun(game, params)`** opens a run for the player (the wallet, or the wallet a session key plays for), about 62,000 gas. `params` is the game's start data, such as a level or difficulty, read by the backend from `RunStarted`.
+- **`checkpoint(runId, stateHash)`** records that a run is still being played. It's a bare event: no checks, no storage and no fee, about 24,000 gas, close to the 21,000 every transaction costs. A checkpoint changes nothing on chain, so the **backend** must check each one before counting playtime:
+  - the `sender` was the run's player, or a session key playing for them at that block (the hub indexer does this);
+  - `stateHash` (16 bytes) matches the run's replay. The indexer stores it with each checkpoint but doesn't check it yet; that comes with the games' checkpoint loop. Until then, the playtime cap (the replayed length plus a minute) limits what extra checkpoints can add.
+- **`submitRun(runId, score, details, notBefore, deadline, r, vs)`** saves a result, about 41,000 gas. It needs the signer's compact signature over EIP-712 `Result(runId, player, game, score, detailsHash, notBefore, deadline)`.
+  - `details` is the game's result data, defined per game by the backend.
+  - The result can't be saved before `notBefore` (the general form of "finished too fast") or after `deadline`.
+  - Each run is saved once, and only by its own player. A saved run is deleted, which earns a gas refund.
+- **The registry is fixed at deployment,** so no admin can change who a session key plays for.
+- **Fees are capped at `MAX_FEE` (0.001 ETH)**, because session keys pay them without asking the player each time. Fees are exact, and plain ETH can't be sent to the hub.
+- **Roles instead of one owner:**
+  - **Admin:** sets the signer and backup signer and manages roles. Moving it to a new wallet takes two steps and a waiting period.
+  - **Game managers:** list games and set fees.
+  - **Pausers:** pause one game, or starts and saves everywhere (`setPaused`).
+  - **Treasurers:** withdraw fees.
+- **Growing without upgrades:**
+  - A new game is `addGame(name, startFee, submitFee)`.
+  - To rotate the backend key without downtime: `setBackupSigner(newKey)`, switch the backend to the new key, then `setSigner(newKey)` and `setBackupSigner(address(0))`.
+  - A later version can be deployed next to this one.
+
+### Deploying
+
+Set `SIGNER_ADDRESS` in `contract/.env`, then run `npm run deploy:hub` in `contract/` (`scripts/deploy-hub-v2.js`). The script deploys both contracts, lists every game with today's fee per saved result (starting a run is free), and prints:
+
+- each game's number;
+- the addresses for the backend and `client/.env`;
+- the `hardhat verify` commands;
+- how to move the admin role to a safer wallet, such as a multisig.
+
+The deployer starts with every role.
+
+### Hub backend
+
+The live hub games are `HUB.LIVE` in `backend/config/constants.js`: Moto Rush, Pixel Fighters and Candy Cascade. `HUB` also holds the contract addresses, the block the indexer starts from, and the game numbers, which must match the deployed hub's.
+
+**A run, step by step** (`backend/controllers/hubController.js`):
+
+1. The game sends `startRun(game, params)` to the hub, usually from the player's session key. For Moto Rush and Candy Cascade, `params` is the level; for Pixel Fighters, it's the CPU level (0 easy, 1 normal, 2 hard).
+2. **`POST /api/hub/<game>/session`** `{ wallet, startTxHash }` (Pixel Fighters also sends `p1`, the player's fighter) checks that transaction, even while it's pending:
+   - It must call `startRun` on the hub for this game.
+   - Its sender must be the wallet, or a session key the registry says plays for it.
+   - A Moto Rush level must be the wallet's next one. A Candy Cascade level must be unlocked and without 3 stars yet.
+   - Pixel Fighters also gets its CPU fighter and seed here, and Candy Cascade its board's seed.
+   - A start can open one session only. Using another wallet's start returns 409 and is logged as suspicious.
+3. **`POST /api/hub/<game>/verify`** replays the recorded inputs with the game's own engine, as the older contracts did:
+   - For Moto Rush, it also checks the bike: the Venom needs the NFT, and other bikes need their stars from hub progress.
+   - A ride or match that fails the replay or doesn't finish is rejected for good. A Candy Cascade level is saved won or lost.
+   - Once the start is mined, it signs the replayed result for that run, with `notBefore` set to the run's start plus the replayed length (for Candy Cascade, which has no clock, 0.5 seconds per move). `deadline` is 30 minutes after `notBefore` or after now, whichever is later. Asking again returns the same result with a fresh signature.
+4. The game sends `submitRun` with that signature, then reports the transaction to **`POST /api/hub/saved`** `{ wallet, txHash }`, so progress moves on at once.
+
+Hub games pay no HP per play; daily tasks pay HP for plays and playtime.
+
+**Result data.** `details` is ABI-encoded per game (`DETAILS` in `backend/services/hub.js`):
+
+- **Moto Rush:** `(uint16 level, uint32 timeMs, uint8 stars, uint8 bike)`. The score is the time in ms.
+- **Pixel Fighters:** `(uint8 difficulty, bool won, uint32 durationMs)`.
+- **Candy Cascade:** `(uint16 level, uint8 stars, uint8 movesLeft, uint16 moves)`, with stars 0 for a lost level. The score is the game's score.
+
+**The hub indexer** (`backend/services/hubIndexer.js`, started by `server.js`) works like the NFT indexer:
+
+- It reads the hub's and the registry's logs together, in chain order, 2 blocks behind the head, with its cursor in `indexerstates` (`key: "hub"`).
+- It keeps each session key's live intervals (`sessionkeys`), from `SessionOpened`, `SessionClosed` and `AllSessionsRevoked`.
+- It stores runs (`hubruns`) with their start and save transactions, valid checkpoints and saves. A checkpoint counts only if it falls between the run's start and save, and its sender was the player or a key live for the player at that block.
+- It applies every save (`backend/services/hubRuns.js`). A save is applied once, whether `/api/hub/saved` or the indexer gets to it first, so reading the same logs twice changes nothing.
+
+**Progress** lives in the backend's database, starting fresh on the hub, not on chain:
+
+- **Moto Rush:** levels completed in order, plus stars and times, in `hubprogresses` (`GET /api/hub/moto-rush/progress?wallet=`).
+- **Pixel Fighters:** matches, wins, best and total score, from saved runs (`GET /api/hub/pixel-fighter/stats?wallet=`).
+- **Candy Cascade:** the best stars and score per level, in `hubprogresses` (`GET /api/hub/candy-cascade/progress?wallet=`; see [Candy Cascade](#saving-on-the-hub)).
+
+**`GET /api/hub/runs?wallet=0x…&days=14`** lists a wallet's recent runs (game, start and save transactions, times, result) for the site's Recent plays.
+
+The old per-game routes, `/api/candy-cascade/*`, `/api/moto-rush/*` and `/api/pixel-fighter/*` (`session` and `verify`), answer 410 with "reload the page": their contracts paid HP per play.
+
+#### Playtime
+
+Only saved runs earn playtime. The points in time are the run's start, its valid checkpoints and its save:
+
+- **Gaps:** each gap between two points counts if it's 30 seconds or less (`PLAYTIME.MAX_GAP_S`). A longer pause isn't play.
+- **Cap:** a run never earns more than its replayed length plus 60 seconds (`PLAYTIME.SLACK_S`). A Candy Cascade level counts 15 seconds per move as its length.
+- **Days:** time is split by UTC day, toward the day each gap ends in, and stored on the run as `activeByDay`.
+
+So a game should send a checkpoint about every 10 seconds; without checkpoints, only a run shorter than 30 seconds earns playtime. **`GET /api/hub/playtime?wallet=0x…&day=YYYY-MM-DD`** returns saved runs and seconds per game for a day (today by default), and `GET /api/hub/config` returns the addresses, game numbers and live games.
+
+### Playing on the hub
+
+The site's side is `client/src/lib/gameSession.js` (session keys) and `client/src/lib/hub.js` (runs), used by the Moto Rush, Candy Cascade and Pixel Fighters pages.
+
+**Game sessions.** On the Dashboard (or in the navbar), the player starts a session:
+
+- **Opening:** the site makes a key in the browser, the key signs its consent (`SessionConsent`), and the wallet confirms one `openSession` with the top-up. That's the only popup.
+- **While it lasts:** the key sends every start, checkpoint and save, so games play without popups. The game pages show "No popups · balance" in their header, with a switch to play with the wallet instead. When the key runs low, the header offers to add funds.
+- **Ending:** the key closes the session itself and sends what's left back to the wallet. A session that ended on its own (it expired, or was revoked from another device) is swept back the next time the site opens.
+
+**A run** (`useHubRun` in `lib/hub.js`):
+
+1. `startRun`, then the game's `/session`.
+2. Once the start is mined: a checkpoint right away, then one every 10 seconds, session key only (with the wallet, each one would be a popup). Each carries a hash of the game's state (Candy Cascade's moves; Moto Rush and Pixel Fighters send none yet).
+3. When the game ends: `/verify`, a wait until the chain's clock passes `notBefore`, `submitRun`, then `/api/hub/saved`.
+
+With the session key, the save shows as a small pill over the game. With the wallet, or on an error, it opens up with each step and Retry/Skip. The key's transactions go out one at a time, with nonces counted in the browser, so checkpoints never collide with a save. If the key can't cover a save, the wallet sends it.
+
+**Recent plays** (Profile) merges two sources:
+
+- the wallet's own transactions to the older games' contracts (from the explorer);
+- the hub runs from `/api/hub/runs`.
+
+The ETH-spent chart counts the wallet's game transactions and what it put on session keys.
+
+**Pixel Fighters difficulty** is in the pixel-fighter repo, `shared/src/hairgames/replay.ts`: `CPU_DAMAGE` per CPU level, and `PLAYER_REACH`. With the Normal AI standing in for a player, the player wins roughly 90% on Easy, 60% on Normal and 30% on Hard; measure with `npx tsx scripts/hg-difficulty.ts`. Rebuild with `npm run build:hairgames`, then deploy the client and the backend together.
 
 ## NFT multiplier indexer
 
@@ -251,7 +432,7 @@ NFTs from the collections in `CollectionConfig` raise a player's HP multiplier (
 
 ## Tests
 
-- Contracts and the NFT indexer: `npm test` in `contract/` (runs against a local Hardhat chain, including an end-to-end Candy Cascade test that replays real games).
+- Contracts: `npx hardhat test test/PixelFighter.test.cjs test/SessionRegistry.test.cjs test/HairGamesHubV2.test.cjs` in `contract/`, against a local Hardhat chain. Name the files: `npm test` with no files fails to load the test matchers.
 - Candy Cascade rules: `npm test` in the [candy-Cascade](https://github.com/Nabilislam722/candy-Cascade) repo.
 
 ## Bans and suspicious activity
@@ -306,10 +487,12 @@ Frontend (`client/.env`):
 | --- | --- |
 | `VITE_API_URL` | Backend base URL (defaults to `http://localhost:3000`) |
 | `VITE_VOTING_CONTRACT_ADDRESS` | Voting contract used on the dashboard |
-| `VITE_CANDY_CASCADE_CONTRACT` | CandyCascade contract. Without it, the game runs in local play with nothing saved on chain |
-| `VITE_MOTO_RUSH_CONTRACT` | MotoRush contract. With it, levels and stars are saved on chain and each level can be completed once; without it, Moto Rush is free play with progress kept in the browser |
+| `VITE_GAME_HUB_CONTRACT` | HairGamesHubV2. Moto Rush, Candy Cascade and Pixel Fighters start and save their runs on it; without it they run as free play with progress in the browser |
+| `VITE_CANDY_CASCADE_CONTRACT` | The retired CandyCascade contract, only to recognise old plays in Recent plays |
+| `VITE_MOTO_RUSH_CONTRACT` | The retired MotoRush contract, only to recognise old plays in Recent plays |
 | `VITE_VENOM_CONTRACT` | Venom NFT contract (`nft/`). Only Venom holders can ride the #27 Venom in Moto Rush; without it, the Venom stays locked for everyone |
-| `VITE_SESSION_REGISTRY_CONTRACT` | Session registry for game sessions (`client/src/lib/gameSession.js`): players approve a temporary key once and play without wallet popups. It must implement `openSession(key, expiresAt)` (payable, forwards the ETH to the key), `closeSession()` (called by the key) and `sessions(key)`. Without it, the navbar and Dashboard hide game sessions |
+| `VITE_SESSION_REGISTRY_CONTRACT` | HairGamesSessionRegistry, for game sessions (`client/src/lib/gameSession.js`): players approve a temporary key once and play without wallet popups. Without it, the navbar and Dashboard hide game sessions and games ask the wallet every time |
+| `VITE_HEMI_RPC_URL` | Optional: another Hemi RPC for the site (default `https://rpc.hemi.network/rpc`), e.g. a local test chain |
 
 Backend (`.env` in the directory you start the backend from):
 
@@ -325,13 +508,17 @@ Backend (`.env` in the directory you start the backend from):
 | `CANDY_CASCADE_CORE_DIR` | Optional: where the backend loads the Candy Cascade engine from (default: the game source in `client/`) |
 | `MOTO_RUSH_DIR` | Optional: where the backend loads the Moto Rush physics from to replay rides (default: `client/public/moto-rush`) |
 | `NFT_HOLD_HOURS` | Hours a newly received NFT is held before it counts toward the multiplier (default `24`) |
+| `HUB_ADDRESS`, `SESSION_REGISTRY_ADDRESS` | Optional: HairGamesHubV2 and the session registry (default: the mainnet contracts in `HUB` in `backend/config/constants.js`) |
+| `HUB_START_BLOCK` | Optional: the block the hub indexer starts from on a fresh database (default `5803557`, the hub's deployment) |
+| `HEMI_RPC_URL`, `HEMI_CHAIN_ID` | Optional: the chain the backend reads and signs for (default Hemi mainnet, `https://rpc.hemi.network/rpc`, `43111`). Used to test against a local Hardhat chain |
 
 Contracts (`contract/.env`):
 
 | Variable | Purpose |
 | --- | --- |
 | `DEPLOYER_PRIVATE_KEY` | Deploys contracts to Hemi (Hardhat also expects a valid key when running tests) |
-| `SIGNER_ADDRESS` | Address of the backend's `SERVER_PRIVATE_KEY`, set as the trusted signer when deploying CandyCascade and MotoRush |
+| `SIGNER_ADDRESS` | Address of the backend's `SERVER_PRIVATE_KEY`, set as the trusted signer when deploying CandyCascade, MotoRush and HairGamesHubV2 |
 | `MOTO_SUBMISSION_FEE_ETH` | Optional: the fee to save a Moto Rush level, in ETH (default `0.000008`) |
+| `HUB_ADMIN_DELAY_SECONDS` | Optional: how long a new HairGamesHubV2 admin waits before accepting the role (default `86400`, one day) |
 
 Never commit `.env` files. They are already in `.gitignore`.

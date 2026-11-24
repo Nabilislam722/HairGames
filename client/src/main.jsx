@@ -17,7 +17,7 @@ const config = getDefaultConfig({
   projectId: "656b7d9e9b85101192392ace313ecef8",
   chains: [hemi],
   transports: {
-    [hemi.id]: http("https://rpc.hemi.network/rpc"),
+    [hemi.id]: http(hemi.rpcUrls.default.http[0]),
   },
 });
 

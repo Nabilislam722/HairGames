@@ -2,6 +2,7 @@ import { ethers } from "ethers";
 import UserProfile from "../models/UserProfile.js";
 import EventProfile from "../models/EventProfile.js";
 import ProcessedTx from "../models/ProcessedTx.js";
+import DailyTaskClaim from "../models/DailyTaskClaim.js";
 import MotoSession from "../models/MotoSession.js";
 import {
   ECOSYSTEM_CONTRACTS,
@@ -335,25 +336,28 @@ export const getPoints = async (req, res) => {
 
 /**
  * GET /api/points/history?wallet=0x...&days=14
- * What the wallet's games paid out in the last `days` days (14 by default, at most 31), newest first,
- * from the payout ledger. The client groups them by its own local day.
+ * What the wallet earned in the last `days` days (14 by default, at most 31), newest first: game payouts
+ * from the payout ledger, and daily task rewards (where hub games pay their HP). The client groups them by
+ * its own local day.
  */
 export const getPointsHistory = async (req, res) => {
   const { wallet } = req.query;
   if (!ethers.isAddress(wallet)) return res.status(400).json({ error: "Wallet required" });
   const days = Math.min(Math.max(Math.floor(Number(req.query.days)) || 14, 1), 31);
   const since = new Date(Date.now() - days * 86400000);
+  const walletLower = wallet.toLowerCase();
 
   try {
-    const payouts = await ProcessedTx.find(
-      { wallet: wallet.toLowerCase(), createdAt: { $gte: since } },
-      { hp: 1, createdAt: 1, _id: 0 }
-    ).sort({ createdAt: -1 }).limit(5000).lean();
-    res.json({
-      wallet: wallet.toLowerCase(),
-      since: since.getTime(),
-      payouts: payouts.map(p => ({ at: p.createdAt.getTime(), hp: p.hp })),
-    });
+    const [games, tasks] = await Promise.all([
+      ProcessedTx.find({ wallet: walletLower, createdAt: { $gte: since } }, { hp: 1, createdAt: 1, _id: 0 })
+        .sort({ createdAt: -1 }).limit(5000).lean(),
+      DailyTaskClaim.find({ wallet: walletLower, createdAt: { $gte: since } }, { reward: 1, createdAt: 1, _id: 0 }).lean(),
+    ]);
+    const payouts = [
+      ...games.map(p => ({ at: p.createdAt.getTime(), hp: p.hp })),
+      ...tasks.map(c => ({ at: c.createdAt.getTime(), hp: c.reward })),
+    ].sort((a, b) => b.at - a.at);
+    res.json({ wallet: walletLower, since: since.getTime(), payouts });
   } catch (error) {
     console.error("getPointsHistory error:", error);
     res.status(500).json({ error: "Internal server error" });

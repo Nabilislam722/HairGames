@@ -10,7 +10,8 @@ const drawnTaskSchema = new mongoose.Schema({
   description: { type: String, default: "" },
   reward: { type: Number, required: true },
   game: { type: String, required: true },
-  playCount: { type: Number, required: true },
+  playCount: { type: Number }, // the goal: plays, or
+  playMinutes: { type: Number }, // minutes of verified play
   boost: { type: Number, required: true },
 }, { _id: false });
 

@@ -3,9 +3,9 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { GAMES } from "@/lib/games";
 
 // Daily tasks: the backend draws a few of the tasks in MongoDB every UTC day, seeded with the latest
-// Bitcoin block hash read through the Hemi Bitcoin Kit, and counts each wallet's plays from the game
-// saves it has credited. Each task: { id, title, description, reward, game (from GAMES, or null for any
-// game), playCount, boost, plays, claimed }.
+// Bitcoin block hash read through the Hemi Bitcoin Kit, and counts each wallet's plays (saved games) and
+// minutes of verified play on the hub. Each task: { id, title, description, reward, game (from GAMES, or
+// null for any game), unit ("plays" or "minutes"), goal, progress, boost, claimed }.
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3000";
 export const BITCOIN_BLOCK_URL = "https://mempool.space/block/";
@@ -70,6 +70,10 @@ export function useDailyTasks(address) {
   const tasks = (data?.tasks ?? []).map(t => ({
     ...t,
     game: t.contract ? gamesByContract.get(t.contract.toLowerCase()) ?? null : null,
+    // An older backend only sends playCount and plays.
+    unit: t.unit ?? "plays",
+    goal: t.goal ?? t.playCount,
+    progress: t.progress ?? t.plays,
   }));
   return {
     tasks,

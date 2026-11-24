@@ -1,17 +1,4 @@
-import { formatPoints, goalIcon, goalLabel } from './goals.js';
-
-// Star markers sit evenly along the meter; the fill moves piecewise between thresholds.
-const MARKS = [0.28, 0.6, 0.9];
-
-function meterFraction(score, stars) {
-  const at = [0, ...MARKS];
-  const thresholds = [0, ...stars];
-  if (score >= stars[2]) return 1;
-  for (let i = 1; i < 4; i++) {
-    if (score < thresholds[i]) return at[i - 1] + ((at[i] - at[i - 1]) * (score - thresholds[i - 1])) / (thresholds[i] - thresholds[i - 1]);
-  }
-  return 1;
-}
+import { formatNumber, goalIcon, goalLabel } from './goals.js';
 
 const CHECK = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
@@ -21,7 +8,7 @@ function restartAnimation(el, className) {
   el.classList.add(className);
 }
 
-// The DOM heads-up display: moves, goals and the score meter, all animated.
+// The DOM heads-up display: moves, goals, score and the stars still in reach, all animated.
 export class Hud {
   constructor(root) {
     this.root = root;
@@ -32,14 +19,15 @@ export class Hud {
       moves: root.querySelector('#moves'),
       goals: root.querySelector('#goal-list'),
       score: root.querySelector('#score'),
-      fill: root.querySelector('#meter-fill'),
-      stars: [...root.querySelectorAll('.meter-star')],
+      starRow: root.querySelector('#star-marks'),
+      stars: [...root.querySelectorAll('.star-mark')],
     };
     this.shownScore = 0;
     this.targetScore = 0;
-    this.lit = 0;
+    this.inReach = 3;
     this.goalShown = [];
-    this.onStar = null;
+    this.onStar = null; // (index, point) when a star comes back in reach
+    this.onStarLost = null; // (index, point) when one goes out of reach
     this.raf = 0;
   }
 
@@ -49,13 +37,15 @@ export class Hud {
     this.el.name.textContent = level.name;
     this.shownScore = 0;
     this.targetScore = 0;
-    this.lit = 0;
     this.el.score.textContent = '0';
-    this.el.fill.style.width = '0%';
+    // Stars 2 and 3 show the moves that must be left when the goals are met.
     this.el.stars.forEach((star, i) => {
-      star.classList.remove('lit');
-      star.style.left = `${MARKS[i] * 100}%`;
+      const need = i === 0 ? null : level.starMoves[i - 1];
+      const badge = star.querySelector('.star-need');
+      if (badge) badge.textContent = String(need);
+      star.title = i === 0 ? '1 star: clear the level' : `${i + 1} stars: finish with ${need} or more moves left`;
     });
+    this.setStars(engine.starsInReach(), false);
     this.setMoves(engine.moves, false);
     this.el.goals.replaceChildren();
     this.goalShown = engine.goals.map((goal) => goal.left);
@@ -83,9 +73,9 @@ export class Hud {
     const shown = this.goalShown[index];
     const count = li.querySelector('.goal-count');
     if (goal.type === 'score') {
-      count.textContent = formatPoints(goal.target);
+      count.textContent = formatNumber(goal.target);
       li.classList.toggle('done', goal.left <= 0);
-      li.setAttribute('aria-label', `Reach ${formatPoints(goal.target)} points`);
+      li.setAttribute('aria-label', `Reach ${formatNumber(goal.target)} points`);
       return;
     }
     count.textContent = String(Math.max(0, shown));
@@ -112,29 +102,35 @@ export class Hud {
     if (bump) restartAnimation(this.el.moves, 'bump');
   }
 
+  // Lights the stars a win can still earn. With `animate`, a star that drops out of reach (or comes
+  // back, after a stopwatch bonus) gets an animation and its callback.
+  setStars(count, animate = true) {
+    const before = this.inReach;
+    this.inReach = count;
+    this.el.stars.forEach((star, i) => {
+      const lit = i < count;
+      star.classList.toggle('lit', lit);
+      if (!animate || lit === i < before) return;
+      restartAnimation(star, lit ? 'regained' : 'lost');
+      (lit ? this.onStar : this.onStarLost)?.(i, this.center(star));
+    });
+    this.el.starRow.setAttribute('aria-label', `${count} ${count === 1 ? 'star' : 'stars'} in reach`);
+  }
+
   setScore(score) {
     this.targetScore = score;
-    if (!this.raf) {
-      let last = performance.now();
-      const step = (now) => {
-        const dt = Math.min(0.05, (now - last) / 1000);
-        last = now;
-        const gap = this.targetScore - this.shownScore;
-        this.shownScore += gap * Math.min(1, dt * 9) + Math.sign(gap) * Math.min(Math.abs(gap), dt * 60);
-        if (Math.abs(this.targetScore - this.shownScore) < 1) this.shownScore = this.targetScore;
-        this.el.score.textContent = formatPoints(this.shownScore);
-        this.raf = this.shownScore === this.targetScore ? 0 : requestAnimationFrame(step);
-      };
-      this.raf = requestAnimationFrame(step);
-    }
-    const stars = this.level.stars;
-    this.el.fill.style.width = `${meterFraction(score, stars) * 100}%`;
-    while (this.lit < 3 && score >= stars[this.lit]) {
-      const star = this.el.stars[this.lit];
-      star.classList.add('lit');
-      this.onStar?.(this.lit, this.center(star));
-      this.lit++;
-    }
+    if (this.raf) return;
+    let last = performance.now();
+    const step = (now) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      const gap = this.targetScore - this.shownScore;
+      this.shownScore += gap * Math.min(1, dt * 9) + Math.sign(gap) * Math.min(Math.abs(gap), dt * 60);
+      if (Math.abs(this.targetScore - this.shownScore) < 1) this.shownScore = this.targetScore;
+      this.el.score.textContent = formatNumber(this.shownScore);
+      this.raf = this.shownScore === this.targetScore ? 0 : requestAnimationFrame(step);
+    };
+    this.raf = requestAnimationFrame(step);
   }
 
   center(el) {

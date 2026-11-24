@@ -4,6 +4,7 @@ import dotenv from "dotenv";
 import connectDB from "./config/db.js";
 import routes from "./routes/index.js";
 import { nft } from "./services/nft.js";
+import { hubIndexer } from "./services/hubIndexer.js";
 
 dotenv.config();
 
@@ -20,7 +21,8 @@ app.use(express.json());
 // Connect to DB, Start Services, and Start Server
 connectDB().then(() => {
   nft.start();
-  
+  hubIndexer.start();
+
   app.use("/api", routes);
 
   const PORT = process.env.PORT || 3000;

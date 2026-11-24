@@ -12,6 +12,27 @@ export const ECOSYSTEM_CONTRACTS = {
 
 export const VENOM_NFT = "0xD8AeD81836D037598D14B96BBD6Db3ea7e90f615";
 
+// HairGames Hub V2 and its session registry (contract/contracts). Games are numbered in the order the
+// deploy script listed them. Games in LIVE play on the hub; the rest still use their own contracts above.
+// The env overrides are for tests against a local chain.
+export const HUB = {
+  ADDRESS: process.env.HUB_ADDRESS || "0x1758E07a53dec67624994785Be89294f7d513860",
+  REGISTRY: process.env.SESSION_REGISTRY_ADDRESS || "0x7c46c9B8DD81eb8388F39763C1737De2AEDAd681",
+  START_BLOCK: Number(process.env.HUB_START_BLOCK ?? 5803557), // the registry's deployment block
+  GAMES: {
+    moto_rush: 1,
+    candy_cascade: 2,
+    pixel_fighter: 3,
+    proof_of_patience: 4,
+    fruit_ninja: 5,
+    default_legacy: 6,
+    space_huggers: 7,
+    racing_game: 8,
+    fishing_party: 9,
+  },
+  LIVE: ["moto_rush", "pixel_fighter", "candy_cascade"],
+};
+
 // Hemi Bitcoin Kit (hBK): reads Bitcoin data on Hemi. The daily task draw is seeded with its latest block hash.
 export const HEMI_BITCOIN_KIT = "0x7007dd1C09527B92AEcd8Ae6570B73d09E0B8F12";
 export const DAILY_TASKS = { COUNT: 4 }; // tasks drawn each UTC day

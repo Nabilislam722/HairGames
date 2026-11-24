@@ -1768,7 +1768,7 @@ function roundEndFlow(state, events) {
 var DIFFICULTIES = ["easy", "normal", "hard"];
 var HG_ROUNDS = { roundSeconds: 60, roundsToWin: 2 };
 var PLAYER_REACH = 24;
-var CPU_DAMAGE = { easy: 0.7, normal: 0.7, hard: 0.55 };
+var CPU_DAMAGE = { easy: 1.5, normal: 0.95, hard: 0.8 };
 function hgRules(difficulty) {
   return { ...HG_ROUNDS, reach: [PLAYER_REACH, 0], damage: [1, CPU_DAMAGE[difficulty]] };
 }
@@ -1873,4 +1873,4 @@ export {
 };
 
 // Fingerprint of this engine; the game build carries the same value.
-export const RULES_ID = "20fa8d7f5a4beab9";
+export const RULES_ID = "788375cd98458974";

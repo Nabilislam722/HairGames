@@ -275,7 +275,7 @@ export default function Profile() {
   const playsThisWeek = sum(playsByDay.slice(7));
   const playsLastWeek = sum(playsByDay.slice(0, 7));
   const playsChange = playsLastWeek ? ((playsThisWeek - playsLastWeek) / playsLastWeek) * 100 : null;
-  const spendByDay = perDay(activity.plays, p => Number(formatEther(p.cost)));
+  const spendByDay = perDay(activity.costs, c => Number(formatEther(c.cost)));
 
   return (
     <div className="hg">

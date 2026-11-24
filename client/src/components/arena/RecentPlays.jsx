@@ -63,7 +63,7 @@ export function RecentPlays({ activity, address }) {
           <span className="pt-game" role="cell"><img src={p.game.logo} alt="" /><span>{p.game.title}</span></span>
           <span className="hide-md" role="cell"><em className="tag">{PLAY_KIND[p.kind]}</em></span>
           <span role="cell"><em className={`st ${status.className}`}>{status.label} <StatusIcon size={11} strokeWidth={3} /></em></span>
-          <span className="tbl-num hide-sm" role="cell">{ethText(p.cost)} ETH</span>
+          <span className="tbl-num hide-sm" role="cell">{p.cost == null ? "—" : `${ethText(p.cost)} ETH`}</span>
           <span className="pt-when hide-md" role="cell">{timeAgo(p.at)}</span>
           <a className="pt-link end hide-sm" role="cell" href={`${EXPLORER_URL}/tx/${p.hash}`} target="_blank" rel="noopener noreferrer">
             View <ArrowUpRight size={11} />

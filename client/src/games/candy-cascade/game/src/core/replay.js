@@ -1,6 +1,6 @@
 // Replays a recorded level so a server can recompute the result from the moves alone. The engine
 // draws every random choice from the seeded generator, and refused swaps never touch it, so the
-// same seed plus the same accepted moves always reproduce the same game, score and stars.
+// same seed plus the same accepted moves always reproduce the same game, score, moves left and stars.
 import { Engine } from './engine.js';
 import { LEVELS } from './levels.js';
 import { createRng } from './rng.js';
@@ -11,7 +11,8 @@ export const MAX_RECORDED_MOVES = 400;
 const fail = (reason) => ({ valid: false, reason });
 
 // moves: [[r, c, r, c] | [r, c], ...] as recorded in engine.moveLog.
-// Resolves to { valid: true, win, score, stars } or { valid: false, reason }.
+// Resolves to { valid: true, win, score, stars, movesLeft, moves } or { valid: false, reason }:
+// movesLeft is what the win left (0 for a loss), moves the number of actions played.
 export async function replayLevel(levelId, seed, moves) {
   const level = LEVELS.find((l) => l.id === levelId);
   if (!level) return fail('unknown level');
@@ -37,5 +38,6 @@ export async function replayLevel(levelId, seed, moves) {
     if (!accepted) return fail('illegal move');
   }
   if (!engine.over || !engine.result) return fail('level not finished');
-  return { valid: true, win: engine.result.win, score: engine.result.score, stars: engine.result.stars };
+  const { win, score, stars, movesLeft } = engine.result;
+  return { valid: true, win, score, stars, movesLeft, moves: moves.length };
 }

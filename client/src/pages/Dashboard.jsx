@@ -195,7 +195,8 @@ function TaskIcon({ game }) {
 }
 
 function DailyTask({ task, claiming, celebrating, error, onClaim }) {
-  const done = task.plays >= task.playCount;
+  const done = task.progress >= task.goal;
+  const minutes = task.unit === "minutes";
   return (
     <div className={`tkc${task.claimed ? " done" : ""}${celebrating ? " just-claimed" : ""}`}>
       <div className="tkc-top">
@@ -210,8 +211,10 @@ function DailyTask({ task, claiming, celebrating, error, onClaim }) {
         {task.description && <p className="tk-desc">{task.description}</p>}
       </div>
       <div className="tk-prog">
-        <SegBar value={task.plays} max={task.playCount} segments={Math.min(task.playCount, 10)} label={task.title} />
-        <span className="tk-count">{task.plays}/{task.playCount}</span>
+        <SegBar value={task.progress} max={task.goal} segments={Math.min(task.goal, 10)} label={task.title} />
+        <span className="tk-count" title={minutes ? "Minutes of play saved today" : "Games saved today"}>
+          {task.progress}/{task.goal}{minutes ? " min" : ""}
+        </span>
       </div>
       {error && <p className="tk-err" role="alert">{error}</p>}
       <div className="tkc-act">
